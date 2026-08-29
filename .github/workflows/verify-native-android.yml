@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: native-android-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test-native:
     runs-on: ubuntu-latest
@@ -24,3 +27,9 @@ jobs:
         run: gradle :app-native:testDebugUnitTest --stacktrace
       - name: Build native APK
         run: gradle :app-native:assembleDebug --stacktrace
+      - name: Rename APK
+        run: cp app-native/build/outputs/apk/debug/app-native-debug.apk Gestion-Presence-FST-Native-2026-2027.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Android-Native
+          path: Gestion-Presence-FST-Native-2026-2027.apk
