@@ -32,6 +32,24 @@ jobs:
       - name: Publish Windows x64 single file
         if: success()
         run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish/windows-x64
+      - name: Smoke-test Windows executable startup
+        if: success()
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'publish/windows-x64/Gestion-Presence-FST.exe'
+          $start = Get-Date
+          $process = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          if ($process.HasExited) {
+            Write-Host "Executable exited during startup with code $($process.ExitCode)."
+            Write-Host 'Recent Application log entries:'
+            Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=$start.AddSeconds(-2)} -ErrorAction SilentlyContinue |
+              Select-Object -First 20 TimeCreated, ProviderName, Id, LevelDisplayName, Message |
+              Format-List
+            exit 1
+          }
+          Stop-Process -Id $process.Id -Force
+          Write-Host 'Executable remained active for 8 seconds.'
       - name: Upload Windows executable
         if: success()
         uses: actions/upload-artifact@v4
