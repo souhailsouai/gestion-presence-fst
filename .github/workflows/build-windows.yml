@@ -1,0 +1,47 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main, build-cross-platform-test, build-cross-platform ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate canonical shared HTML
+        shell: pwsh
+        run: |
+          python scripts/build_shared_html.py
+          if (!(Test-Path web/index.html)) { throw 'Canonical HTML missing' }
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore Windows project
+        run: dotnet restore windows/GestionPresenceFST/GestionPresenceFST.csproj
+      - name: Publish Windows application
+        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -o publish/windows /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+      - name: Verify Windows package
+        shell: pwsh
+        run: |
+          if (!(Test-Path publish/windows/Gestion-Presence-FST.exe)) { throw 'EXE missing' }
+          if (!(Test-Path publish/windows/web/index.html)) { throw 'Embedded HTML missing' }
+          $source = (Get-FileHash web/index.html -Algorithm SHA256).Hash
+          $packaged = (Get-FileHash publish/windows/web/index.html -Algorithm SHA256).Hash
+          if ($source -ne $packaged) { throw 'Packaged HTML differs from canonical HTML' }
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Windows
+          path: publish/windows/**
+          if-no-files-found: error
