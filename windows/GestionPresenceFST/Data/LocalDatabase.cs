@@ -50,6 +50,37 @@ public sealed class LocalDatabase : IAsyncDisposable
             );
             create index if not exists ix_local_records_account_entity
               on local_records(account_id, entity);
+
+            create table if not exists sync_queue(
+              id integer primary key autoincrement,
+              account_id text not null,
+              entity text not null check(entity in ('classes','students','sessions','attendance')),
+              record_id text not null,
+              operation text not null check(operation in ('insert','update','delete')),
+              payload_json text not null,
+              base_updated_at text null,
+              retry_count integer not null default 0,
+              last_error text null,
+              retryable integer not null default 1,
+              created_at text not null
+            );
+            create index if not exists ix_sync_queue_account
+              on sync_queue(account_id, id);
+
+            create table if not exists sync_conflicts(
+              id integer primary key autoincrement,
+              account_id text not null,
+              entity text not null check(entity in ('classes','students','sessions','attendance')),
+              record_id text not null,
+              local_json text not null,
+              remote_json text null,
+              base_updated_at text null,
+              reason text not null,
+              resolved integer not null default 0,
+              created_at text not null
+            );
+            create index if not exists ix_sync_conflicts_account_open
+              on sync_conflicts(account_id, resolved, id);
             """;
         await command.ExecuteNonQueryAsync(ct);
         await transaction.CommitAsync(ct);
