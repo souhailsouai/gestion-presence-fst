@@ -10,6 +10,5 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3537.50" />
-    <Content Include="..\..\web\index.html" Link="web\index.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
