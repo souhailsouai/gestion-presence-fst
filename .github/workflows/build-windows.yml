@@ -20,17 +20,21 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path web | Out-Null
           Copy-Item gestion_presence_tp_theme_institutionnel.html web/index.html -Force
-          $b64 = Get-Content scripts/web-superadmin.patch.gz.b64 -Raw
-          $clean = ($b64 -replace '[^A-Za-z0-9+/=]', '')
+          $part1 = Get-Content scripts/web-superadmin.patch.part1 -Raw
+          $part2 = Get-Content scripts/web-superadmin.patch.part2 -Raw
+          if ($part1.Length -ne 6272) { throw "Unexpected part1 length: $($part1.Length)" }
+          if ($part2.Length -ne 6272) { throw "Unexpected part2 length: $($part2.Length)" }
+          $b64 = $part1 + $part2
+          if ($b64.Length -ne 12544) { throw "Unexpected patch length: $($b64.Length)" }
           $gzPath = Join-Path $env:RUNNER_TEMP 'web-superadmin.patch.gz'
           $patchPath = Join-Path $env:RUNNER_TEMP 'web-superadmin.patch'
-          [IO.File]::WriteAllBytes($gzPath, [Convert]::FromBase64String($clean))
+          [IO.File]::WriteAllBytes($gzPath, [Convert]::FromBase64String($b64))
           $input = [IO.File]::OpenRead($gzPath)
           $gzip = [IO.Compression.GzipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
           $output = [IO.File]::Create($patchPath)
           $gzip.CopyTo($output)
           $output.Dispose(); $gzip.Dispose(); $input.Dispose()
-          git apply --whitespace=nowarn $patchPath
+          git apply -p0 --whitespace=nowarn $patchPath
       - name: Restore tests
         run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
       - name: Run tests
