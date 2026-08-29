@@ -1,5 +1,5 @@
+using System;
 using System.Windows;
-using Microsoft.Web.WebView2.Core;
 
 namespace GestionPresenceFST;
 
@@ -18,39 +18,16 @@ public partial class MainWindow : Window
             await Browser.EnsureCoreWebView2Async();
             Browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             Browser.CoreWebView2.Settings.IsZoomControlEnabled = false;
-            Browser.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
-            Browser.CoreWebView2.ProcessFailed += OnProcessFailed;
-            NavigateOnline();
+            var htmlPath = EmbeddedAppHost.WriteLocalHtml();
+            Browser.Source = new Uri(htmlPath);
         }
         catch
         {
-            ShowOfflinePanel();
+            MessageBox.Show(
+                "Impossible d'ouvrir l'application. Vérifiez que Microsoft Edge WebView2 Runtime est installé.",
+                "Gestion Présence FST",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
-    }
-
-    private void NavigateOnline()
-    {
-        OfflinePanel.Visibility = Visibility.Collapsed;
-        Browser.Source = OnlineHostState.ProductionUrl;
-    }
-
-    private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
-    {
-        OfflinePanel.Visibility = e.IsSuccess ? Visibility.Collapsed : Visibility.Visible;
-    }
-
-    private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
-    {
-        ShowOfflinePanel();
-    }
-
-    private void ShowOfflinePanel()
-    {
-        OfflinePanel.Visibility = Visibility.Visible;
-    }
-
-    private void Retry_Click(object sender, RoutedEventArgs e)
-    {
-        NavigateOnline();
     }
 }
