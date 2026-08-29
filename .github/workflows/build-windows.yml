@@ -29,19 +29,17 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Restore Windows project
         run: dotnet restore windows/GestionPresenceFST/GestionPresenceFST.csproj
-      - name: Publish Windows application
-        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -o publish/windows /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+      - name: Publish standalone Windows application
+        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -o publish/windows /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:DebugType=None /p:DebugSymbols=false
       - name: Verify Windows package
         shell: pwsh
         run: |
           if (!(Test-Path publish/windows/Gestion-Presence-FST.exe)) { throw 'EXE missing' }
-          if (!(Test-Path publish/windows/web/index.html)) { throw 'Embedded HTML missing' }
-          $source = (Get-FileHash web/index.html -Algorithm SHA256).Hash
-          $packaged = (Get-FileHash publish/windows/web/index.html -Algorithm SHA256).Hash
-          if ($source -ne $packaged) { throw 'Packaged HTML differs from canonical HTML' }
-      - name: Upload Windows application
+          if (Test-Path publish/windows/web/index.html) { throw 'HTML must be embedded inside the EXE' }
+          if ((Get-Item publish/windows/Gestion-Presence-FST.exe).Length -lt 1000000) { throw 'EXE is unexpectedly small' }
+      - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
           name: Gestion-Presence-FST-Windows
-          path: publish/windows/**
+          path: publish/windows/Gestion-Presence-FST.exe
           if-no-files-found: error
