@@ -1,57 +1,172 @@
 package tn.utm.fst.gestionpresence.nativeapp.ui
 
-import android.content.Context
-import android.graphics.Paint
-import android.graphics.pdf.PdfDocument
-import android.net.Uri
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
-import tn.utm.fst.gestionpresence.nativeapp.data.*
-import java.io.File
-import java.io.FileOutputStream
-import java.time.LocalDate
+import tn.utm.fst.gestionpresence.nativeapp.data.NativeRepository
 
-private val Navy=Color(0xFF062B5B); private val Gold=Color(0xFFD59B19)
-@Composable fun AppRoot(){val ctx=LocalContext.current;remember{NativeRepository.init(ctx);true};var logged by remember{mutableStateOf(NativeRepository.hasSession())};MaterialTheme(colorScheme=lightColorScheme(primary=Navy,secondary=Gold)){if(!logged)LoginScreen{logged=true}else MainApp{NativeRepository.logout(ctx);logged=false}}}
+private val Navy = Color(0xFF062B5B)
+private val Gold = Color(0xFFD59B19)
 
-@Composable private fun LoginScreen(onLogin:()->Unit){val ctx=LocalContext.current;val scope=rememberCoroutineScope();var id by remember{mutableStateOf("")};var pass by remember{mutableStateOf("")};var mode by remember{mutableStateOf("teacher")};var busy by remember{mutableStateOf(false)};var error by remember{mutableStateOf("")};Surface(Modifier.fillMaxSize()){Column(Modifier.fillMaxSize().padding(28.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.School,null,tint=Navy,modifier=Modifier.size(72.dp));Text("Faculté des Sciences de Tunis",style=MaterialTheme.typography.headlineSmall,color=Navy);Text("Université de Tunis El Manar");Spacer(Modifier.height(8.dp));Text("Gestion de Présence — 2026/2027",color=Gold);Spacer(Modifier.height(28.dp));SingleChoiceSegmentedButtonRow{SegmentedButton(mode=="teacher",{mode="teacher"},shape=SegmentedButtonDefaults.itemShape(0,2)){Text("Enseignant")};SegmentedButton(mode=="admin",{mode="admin"},shape=SegmentedButtonDefaults.itemShape(1,2)){Text("Admin")}};Spacer(Modifier.height(16.dp));OutlinedTextField(id,{id=it},label={Text("Identifiant")},singleLine=true,modifier=Modifier.fillMaxWidth());Spacer(Modifier.height(10.dp));OutlinedTextField(pass,{pass=it},label={Text("Mot de passe / PIN")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth());if(error.isNotBlank())Text(error,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(top=8.dp));Button({scope.launch{busy=true;error="";NativeRepository.login(ctx,id.trim(),pass,mode).onSuccess{onLogin()}.onFailure{error=it.message?:"Connexion impossible"};busy=false}},enabled=!busy&&id.isNotBlank()&&pass.isNotBlank(),modifier=Modifier.fillMaxWidth().padding(top=18.dp)){if(busy)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp)else Text("Se connecter")};Text("Les données déjà synchronisées restent disponibles hors ligne.",style=MaterialTheme.typography.bodySmall,modifier=Modifier.padding(top=16.dp))}}}
+@Composable
+fun AppRoot() {
+    val context = LocalContext.current
+    remember { NativeRepository.init(context); true }
+    var loggedIn by remember { mutableStateOf(NativeRepository.hasSession()) }
+    MaterialTheme(colorScheme = lightColorScheme(primary = Navy, secondary = Gold)) {
+        if (loggedIn) {
+            Dashboard(onLogout = {
+                NativeRepository.logout(context)
+                loggedIn = false
+            })
+        } else {
+            LoginScreen(onLogin = { loggedIn = true })
+        }
+    }
+}
 
-enum class Tab(val label:String){HOME("Accueil"),CLASSES("Classes"),STUDENTS("Étudiants"),SESSIONS("Séances"),ATTENDANCE("Présences"),REPORTS("Rapports"),ADMIN("Administration")}
-@Composable private fun MainApp(logout:()->Unit){val scope=rememberCoroutineScope();val classes by NativeRepository.classes.collectAsState(initial=emptyList());val students by NativeRepository.students.collectAsState(initial=emptyList());val sessions by NativeRepository.sessions.collectAsState(initial=emptyList());val attendance by NativeRepository.attendance.collectAsState(initial=emptyList());val sync by NativeRepository.syncState.collectAsState();var tab by remember{mutableStateOf(Tab.HOME)};val tabs=if(NativeRepository.role=="admin"&&NativeRepository.activeMode=="admin")Tab.entries.toList() else Tab.entries.filter{it!=Tab.ADMIN};Scaffold(topBar={TopAppBar(title={Column{Text("Gestion Présence FST");Text("${NativeRepository.fullName} • $sync",style=MaterialTheme.typography.labelSmall)}},actions={IconButton({scope.launch{NativeRepository.sync()}}){Icon(Icons.Default.Sync,"Synchroniser")};IconButton(logout){Icon(Icons.Default.Logout,"Déconnexion")}})},bottomBar={NavigationBar{tabs.take(5).forEach{t->NavigationBarItem(tab==t,{tab=t},{Icon(when(t){Tab.HOME->Icons.Default.Home;Tab.CLASSES->Icons.Default.Class;Tab.STUDENTS->Icons.Default.People;Tab.SESSIONS->Icons.Default.Event;else->Icons.Default.CheckCircle},null)},{Text(t.label)})}}}){p->Box(Modifier.padding(p).fillMaxSize()){when(tab){Tab.HOME->Home(classes,students,sessions,attendance){tab=it};Tab.CLASSES->ClassesScreen(classes);Tab.STUDENTS->StudentsScreen(classes,students);Tab.SESSIONS->SessionsScreen(classes,sessions);Tab.ATTENDANCE->AttendanceScreen(classes,students,sessions,attendance);Tab.REPORTS->ReportsScreen(classes,students,sessions,attendance);Tab.ADMIN->AdminScreen();}}}}
+@Composable
+private fun LoginScreen(onLogin: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var identifier by remember { mutableStateOf("") }
+    var credential by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf("teacher") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
 
-@Composable private fun Home(c:List<ClassEntity>,s:List<StudentEntity>,se:List<SessionEntity>,a:List<AttendanceEntity>,go:(Tab)->Unit){LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){item{Text("Année universitaire 2026/2027",style=MaterialTheme.typography.titleLarge,color=Navy)};item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Stat("Classes",c.size);Stat("Étudiants",s.size);Stat("Séances",se.size)}};item{Button({go(Tab.ATTENDANCE)},modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.CheckCircle,null);Spacer(Modifier.width(8.dp));Text("Saisir les présences et notes")}};item{OutlinedButton({go(Tab.REPORTS)},modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.PictureAsPdf,null);Spacer(Modifier.width(8.dp));Text("Rapports PDF")}};item{Text("Dernières séances",style=MaterialTheme.typography.titleMedium)};items(se.take(8)){x->ListItem(headlineContent={Text(c.firstOrNull{it.id==x.classId}?.name?:"Classe")},supportingContent={Text("${x.sessionDate} • ${x.startTime}-${x.endTime}")})}}}}
-@Composable private fun RowScope.Stat(label:String,n:Int){Card(Modifier.weight(1f)){Column(Modifier.padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally){Text(n.toString(),style=MaterialTheme.typography.headlineMedium,color=Navy);Text(label,style=MaterialTheme.typography.labelSmall)}}}
+    Surface(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().padding(28.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("FST", style = MaterialTheme.typography.displayMedium, color = Navy)
+            Text("Faculté des Sciences de Tunis", style = MaterialTheme.typography.titleLarge)
+            Text("Université de Tunis El Manar")
+            Text("Gestion de Présence — 2026/2027", color = Gold)
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(mode == "teacher", { mode = "teacher" }, label = { Text("Enseignant") })
+                FilterChip(mode == "admin", { mode = "admin" }, label = { Text("Administrateur") })
+            }
+            OutlinedTextField(identifier, { identifier = it }, label = { Text("Identifiant") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                credential,
+                { credential = it },
+                label = { Text("Mot de passe / PIN") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        error = ""
+                        NativeRepository.login(context, identifier.trim(), credential, mode)
+                            .onSuccess { onLogin() }
+                            .onFailure { error = it.message ?: "Connexion impossible" }
+                        busy = false
+                    }
+                },
+                enabled = !busy && identifier.isNotBlank() && credential.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            ) { Text(if (busy) "Connexion…" else "Se connecter") }
+        }
+    }
+}
 
-@Composable private fun ClassesScreen(items:List<ClassEntity>){val scope=rememberCoroutineScope();var show by remember{mutableStateOf(false)};LazyColumn(Modifier.fillMaxSize().padding(16.dp)){item{ScreenHeader("Classes & groupes"){show=true}};items(items){x->Card(Modifier.fillMaxWidth().padding(vertical=5.dp)){ListItem(headlineContent={Text(x.name)},supportingContent={Text("${x.track}${x.classNumber} • Groupe ${x.groupNumber} • ${x.module}")})}}};item{Text("Organisation prévue : MPI1 à MPI5 et PC1, groupes 1 à 4.",style=MaterialTheme.typography.bodySmall,modifier=Modifier.padding(8.dp))}};if(show)ClassDialog({show=false}){n,m,t,no,g->scope.launch{NativeRepository.addClass(n,m,t,no,g);NativeRepository.sync()};show=false}}
-@Composable private fun ClassDialog(close:()->Unit,save:(String,String,String,Int,Int)->Unit){var name by remember{mutableStateOf("")};var module by remember{mutableStateOf("")};var track by remember{mutableStateOf("MPI")};var no by remember{mutableStateOf("1")};var group by remember{mutableStateOf("1")};AlertDialog(close,{},{title={Text("Nouvelle classe / groupe")},text={Column{OutlinedTextField(name,{name=it},label={Text("Nom")});OutlinedTextField(module,{module=it},label={Text("Module")});Row{FilterChip(track=="MPI",{track="MPI"},{Text("MPI")});Spacer(Modifier.width(8.dp));FilterChip(track=="PC",{track="PC"},{Text("PC")})};OutlinedTextField(no,{no=it.filter(Char::isDigit)},label={Text("N° classe")});OutlinedTextField(group,{group=it.filter(Char::isDigit)},label={Text("Groupe 1–4")})}},confirmButton={Button({save(name,module,track,no.toIntOrNull()?:1,(group.toIntOrNull()?:1).coerceIn(1,4))},enabled=name.isNotBlank()){Text("Enregistrer")}},dismissButton={TextButton(close){Text("Annuler")}})}
+@Composable
+private fun Dashboard(onLogout: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val classes by NativeRepository.classes.collectAsState(initial = emptyList())
+    val students by NativeRepository.students.collectAsState(initial = emptyList())
+    val sessions by NativeRepository.sessions.collectAsState(initial = emptyList())
+    val syncState by NativeRepository.syncState.collectAsState()
 
-@Composable private fun StudentsScreen(classes:List<ClassEntity>,items:List<StudentEntity>){val scope=rememberCoroutineScope();var show by remember{mutableStateOf(false)};LazyColumn(Modifier.fillMaxSize().padding(16.dp)){item{ScreenHeader("Étudiants"){show=true}};items(items){x->ListItem(headlineContent={Text("${x.lastName} ${x.firstName}")},supportingContent={Text("${classes.firstOrNull{it.id==x.classId}?.name?:"Classe"}${if(x.email.isNotBlank())" • ${x.email}" else ""}")})}};if(show&&classes.isNotEmpty())StudentDialog(classes,{show=false}){cid,l,f,e->scope.launch{NativeRepository.addStudent(cid,l,f,e);NativeRepository.sync()};show=false}}
-@Composable private fun StudentDialog(c:List<ClassEntity>,close:()->Unit,save:(String,String,String,String)->Unit){var cid by remember{mutableStateOf(c.first().id)};var l by remember{mutableStateOf("")};var f by remember{mutableStateOf("")};var e by remember{mutableStateOf("")};AlertDialog(close,{},{title={Text("Nouvel étudiant")},text={Column{ClassChooser(c,cid){cid=it};OutlinedTextField(l,{l=it},label={Text("Nom")});OutlinedTextField(f,{f=it},label={Text("Prénom")});OutlinedTextField(e,{e=it},label={Text("Email (optionnel)")})}},confirmButton={Button({save(cid,l,f,e)},enabled=l.isNotBlank()&&f.isNotBlank()){Text("Ajouter")}},dismissButton={TextButton(close){Text("Annuler")}})}
+    LazyColumn(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Text("Gestion Présence FST", style = MaterialTheme.typography.headlineSmall, color = Navy)
+            Text("${NativeRepository.fullName} • $syncState")
+            Text("Année universitaire 2026/2027", color = Gold)
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatCard("Classes", classes.size, Modifier.weight(1f))
+                StatCard("Étudiants", students.size, Modifier.weight(1f))
+                StatCard("Séances", sessions.size, Modifier.weight(1f))
+            }
+        }
+        item {
+            Button(onClick = { scope.launch { NativeRepository.sync() } }, modifier = Modifier.fillMaxWidth()) {
+                Text("Synchroniser")
+            }
+        }
+        item {
+            OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Changer de compte") }
+        }
+        item { Text("Classes et groupes", style = MaterialTheme.typography.titleLarge) }
+        items(classes) { clazz ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(clazz.name, style = MaterialTheme.typography.titleMedium)
+                    Text("${clazz.track}${clazz.classNumber} • Groupe ${clazz.groupNumber} • ${clazz.module}")
+                }
+            }
+        }
+        item { Text("Séances récentes", style = MaterialTheme.typography.titleLarge) }
+        items(sessions.take(10)) { session ->
+            val className = classes.firstOrNull { it.id == session.classId }?.name ?: "Classe"
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(className)
+                    Text("${session.sessionDate} • ${session.startTime}-${session.endTime}")
+                }
+            }
+        }
+    }
+}
 
-@Composable private fun SessionsScreen(classes:List<ClassEntity>,items:List<SessionEntity>){val scope=rememberCoroutineScope();var show by remember{mutableStateOf(false)};LazyColumn(Modifier.fillMaxSize().padding(16.dp)){item{ScreenHeader("Séances"){show=true}};items(items){x->ListItem(headlineContent={Text(classes.firstOrNull{it.id==x.classId}?.name?:"Classe")},supportingContent={Text("${x.sessionDate} • ${x.startTime}–${x.endTime}")})}};if(show&&classes.isNotEmpty())SessionDialog(classes,{show=false}){cid,d,s,e->scope.launch{NativeRepository.addSession(cid,d,s,e);NativeRepository.sync()};show=false}}
-@Composable private fun SessionDialog(c:List<ClassEntity>,close:()->Unit,save:(String,String,String,String)->Unit){var cid by remember{mutableStateOf(c.first().id)};var d by remember{mutableStateOf(LocalDate.now().toString())};var s by remember{mutableStateOf("08:00")};var e by remember{mutableStateOf("10:00")};AlertDialog(close,{},{title={Text("Nouvelle séance")},text={Column{ClassChooser(c,cid){cid=it};OutlinedTextField(d,{d=it},label={Text("Date AAAA-MM-JJ")});OutlinedTextField(s,{s=it},label={Text("Début")});OutlinedTextField(e,{e=it},label={Text("Fin")})}},confirmButton={Button({save(cid,d,s,e)}){Text("Créer")}},dismissButton={TextButton(close){Text("Annuler")}})}
-
-@Composable private fun AttendanceScreen(classes:List<ClassEntity>,students:List<StudentEntity>,sessions:List<SessionEntity>,records:List<AttendanceEntity>){val scope=rememberCoroutineScope();var sid by remember{mutableStateOf(sessions.firstOrNull()?.id?:"")};val ses=sessions.firstOrNull{it.id==sid};val list=students.filter{it.classId==ses?.classId};Column(Modifier.fillMaxSize().padding(12.dp)){Text("Présences & notes /20",style=MaterialTheme.typography.titleLarge);SessionChooser(sessions,classes,sid){sid=it};LazyColumn{items(list){st->val rec=records.firstOrNull{it.sessionId==sid&&it.studentId==st.id};AttendanceRow(st,rec){status,comment,grade->scope.launch{NativeRepository.saveAttendance(sid,st.id,status,comment,grade)}}};item{Button({scope.launch{NativeRepository.sync()}},modifier=Modifier.fillMaxWidth().padding(vertical=12.dp)){Text("Enregistrer et synchroniser")}}}}}
-@Composable private fun AttendanceRow(st:StudentEntity,rec:AttendanceEntity?,save:(String,String,Double?)->Unit){var status by remember(rec){mutableStateOf(rec?.status?:"present")};var comment by remember(rec){mutableStateOf(rec?.comment?:"")};var grade by remember(rec){mutableStateOf(rec?.grade?.toString()?:"")};Card(Modifier.fillMaxWidth().padding(vertical=5.dp)){Column(Modifier.padding(12.dp)){Text("${st.lastName} ${st.firstName}",style=MaterialTheme.typography.titleMedium);Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){listOf("present" to "Présent","absent" to "Absent","retard" to "Retard","justifie" to "Justifié").forEach{(v,l)->FilterChip(status==v,{status=v;save(status,comment,grade.toDoubleOrNull())},{Text(l)})}};Row{OutlinedTextField(grade,{v->if(v.isBlank()||(v.toDoubleOrNull()?.let{it in 0.0..20.0}==true)){grade=v;save(status,comment,v.toDoubleOrNull())}},label={Text("Note /20")},modifier=Modifier.width(120.dp));Spacer(Modifier.width(8.dp));OutlinedTextField(comment,{comment=it;save(status,comment,grade.toDoubleOrNull())},label={Text("Observation")},modifier=Modifier.weight(1f))}}}}
-
-@Composable private fun ReportsScreen(c:List<ClassEntity>,s:List<StudentEntity>,se:List<SessionEntity>,a:List<AttendanceEntity>){val ctx=LocalContext.current;var sid by remember{mutableStateOf(se.firstOrNull()?.id?:"")};Column(Modifier.fillMaxSize().padding(16.dp)){Text("Rapports PDF",style=MaterialTheme.typography.titleLarge);SessionChooser(se,c,sid){sid=it};Spacer(Modifier.height(12.dp));Button({val session=se.firstOrNull{it.id==sid}?:return@Button;val cl=c.firstOrNull{it.id==session.classId};val uri=createPdf(ctx,cl,session,s.filter{it.classId==session.classId},a.filter{it.sessionId==sid});sharePdf(ctx,uri)},enabled=sid.isNotBlank(),modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.PictureAsPdf,null);Spacer(Modifier.width(8.dp));Text("Générer / partager le PDF")};Text("Le PDF est généré directement sur l'appareil et fonctionne hors ligne.",modifier=Modifier.padding(top=12.dp))}}
-@Composable private fun AdminScreen(){Column(Modifier.fillMaxSize().padding(16.dp)){Text("Administration",style=MaterialTheme.typography.titleLarge);Text("Mode administrateur actif");Spacer(Modifier.height(12.dp));Text("La gestion sensible des comptes enseignants reste validée par le serveur Supabase. Les données pédagogiques peuvent être préparées hors ligne puis synchronisées.")}}
-
-@Composable private fun ScreenHeader(title:String,add:()->Unit){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(title,style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f));FilledIconButton(add){Icon(Icons.Default.Add,"Ajouter")}}}
-@Composable private fun ClassChooser(c:List<ClassEntity>,selected:String,on:(String)->Unit){var open by remember{mutableStateOf(false)};Box{OutlinedButton({open=true}){Text(c.firstOrNull{it.id==selected}?.name?:"Classe")};DropdownMenu(open,{open=false}){c.forEach{x->DropdownMenuItem({Text(x.name)},{on(x.id);open=false})}}}}
-@Composable private fun SessionChooser(s:List<SessionEntity>,c:List<ClassEntity>,selected:String,on:(String)->Unit){var open by remember{mutableStateOf(false)};Box(Modifier.padding(vertical=8.dp)){OutlinedButton({open=true},modifier=Modifier.fillMaxWidth()){val x=s.firstOrNull{it.id==selected};Text(if(x==null)"Sélectionner une séance" else "${c.firstOrNull{it.id==x.classId}?.name} • ${x.sessionDate}")};DropdownMenu(open,{open=false}){s.forEach{x->DropdownMenuItem({Text("${c.firstOrNull{it.id==x.classId}?.name} • ${x.sessionDate}")},{on(x.id);open=false})}}}}
-
-private fun createPdf(ctx:Context,cl:ClassEntity?,se:SessionEntity,students:List<StudentEntity>,records:List<AttendanceEntity>):Uri{val pdf=PdfDocument();val paint=Paint().apply{textSize=11f};var pageNo=1;var page=pdf.startPage(PdfDocument.PageInfo.Builder(595,842,pageNo).create());var y=42f;fun line(text:String){if(y>800){pdf.finishPage(page);pageNo++;page=pdf.startPage(PdfDocument.PageInfo.Builder(595,842,pageNo).create());y=42f};page.canvas.drawText(text,35f,y,paint);y+=18f};paint.isFakeBoldText=true;line("Faculté des Sciences de Tunis — Université de Tunis El Manar");line("Rapport de séance — 2026/2027");paint.isFakeBoldText=false;line("Enseignant : ${NativeRepository.fullName}");line("Classe : ${cl?.name?:""} — Groupe ${cl?.groupNumber?:""} — Module : ${cl?.module?:""}");line("Date : ${se.sessionDate}   Horaire : ${se.startTime}-${se.endTime}");line(" ");students.forEachIndexed{i,st->val r=records.firstOrNull{it.studentId==st.id};line("${i+1}. ${st.lastName} ${st.firstName} | ${r?.status?:"non saisi"} | Note: ${r?.grade?.toString()?:"-"}/20 | ${r?.comment?:""}")};val present=records.count{it.status=="present"};val absent=records.count{it.status=="absent"};line(" ");line("Statistiques : présents $present / ${students.size} — absents $absent");pdf.finishPage(page);val dir=File(ctx.cacheDir,"reports").apply{mkdirs()};val file=File(dir,"rapport-${se.sessionDate}-${se.id.take(6)}.pdf");FileOutputStream(file).use{pdf.writeTo(it)};pdf.close();return FileProvider.getUriForFile(ctx,"${ctx.packageName}.files",file)}
-private fun sharePdf(ctx:Context,uri:Uri){val i=android.content.Intent(android.content.Intent.ACTION_SEND).apply{type="application/pdf";putExtra(android.content.Intent.EXTRA_STREAM,uri);addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)};ctx.startActivity(android.content.Intent.createChooser(i,"Partager le rapport PDF"))}
+@Composable
+private fun StatCard(label: String, value: Int, modifier: Modifier) {
+    Card(modifier) {
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value.toString(), style = MaterialTheme.typography.headlineMedium, color = Navy)
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
