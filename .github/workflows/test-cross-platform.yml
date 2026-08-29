@@ -1,0 +1,20 @@
+name: Test Cross Platform Contract
+
+on:
+  push:
+    branches: [ build-cross-platform-test, build-cross-platform ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run build contract test
+        run: python tests/test_cross_platform_build.py
