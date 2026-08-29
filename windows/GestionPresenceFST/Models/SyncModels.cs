@@ -26,3 +26,32 @@ public static class SyncEntities
             throw new ArgumentOutOfRangeException(nameof(entity), entity, "Entity is not available for offline synchronization.");
     }
 }
+
+public enum SyncOperation
+{
+    Insert,
+    Update,
+    Delete
+}
+
+public sealed record PendingOperation(
+    long Id,
+    string AccountId,
+    string Entity,
+    string RecordId,
+    SyncOperation Operation,
+    string PayloadJson,
+    string? BaseUpdatedAt,
+    int RetryCount,
+    bool Retryable,
+    string? LastError);
+
+public sealed record SyncConflict(
+    long Id,
+    string AccountId,
+    string Entity,
+    string RecordId,
+    string LocalJson,
+    string? RemoteJson,
+    string? BaseUpdatedAt,
+    string Reason);
