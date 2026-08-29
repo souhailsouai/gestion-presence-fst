@@ -55,3 +55,10 @@ public sealed record SyncConflict(
     string? RemoteJson,
     string? BaseUpdatedAt,
     string Reason);
+
+public sealed record RemoteWriteResult(
+    bool Applied,
+    string? ReturnedJson,
+    bool Conflict,
+    int StatusCode,
+    string? Error);
