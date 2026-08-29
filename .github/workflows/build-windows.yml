@@ -1,0 +1,41 @@
+name: Build Windows EXE
+on:
+  push:
+    branches: [ main, feature/mobile-native-like-v2 ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate shared HTML
+        shell: pwsh
+        run: |
+          if (!(Test-Path web/index.html)) { throw 'web/index.html missing' }
+          $html = Get-Content web/index.html -Raw
+          if ($html.Length -lt 10000) { throw 'HTML unexpectedly small' }
+          if ($html -notmatch 'Gestion') { throw 'Application marker missing' }
+      - name: Publish Windows x64
+        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained false -o publish/windows
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (!(Test-Path publish/windows/Gestion-Presence-FST.exe)) { throw 'EXE missing' }
+          if (!(Test-Path publish/windows/web/index.html)) { throw 'Shared HTML missing from publish' }
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Windows
+          path: publish/windows/**
+          if-no-files-found: error
+      - name: Upload updated HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-HTML
+          path: web/index.html
+          if-no-files-found: error
