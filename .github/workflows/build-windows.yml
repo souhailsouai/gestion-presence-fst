@@ -1,0 +1,38 @@
+name: Build Windows Online
+
+on:
+  push:
+    branches:
+      - feature/windows-online-realtime
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build shared online web
+        run: python scripts/build_online_web.py
+      - name: Test shared web
+        run: node --test tests/web/*.test.cjs
+      - name: Restore Windows tests
+        run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
+      - name: Test Windows host
+        run: dotnet test windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj --configuration Release --no-restore
+      - name: Publish Windows x64
+        if: success()
+        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/windows-x64
+      - name: Upload Windows artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Windows-x64
+          path: publish/windows-x64
