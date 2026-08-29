@@ -6,7 +6,7 @@ using GestionPresenceFST.Models;
 
 namespace GestionPresenceFST.Sync;
 
-public sealed class SupabaseRestClient
+public sealed class SupabaseRestClient : IRemoteSyncClient
 {
     private readonly HttpClient _http;
     private readonly Uri _baseUri;
@@ -47,28 +47,13 @@ public sealed class SupabaseRestClient
     public Task<RemoteWriteResult> InsertAsync(string entity, string payloadJson, CancellationToken ct = default)
         => SendWriteAsync(HttpMethod.Post, entity, null, null, payloadJson, ct);
 
-    public Task<RemoteWriteResult> UpdateIfUnchangedAsync(
-        string entity,
-        string id,
-        string payloadJson,
-        string baseUpdatedAt,
-        CancellationToken ct = default)
+    public Task<RemoteWriteResult> UpdateIfUnchangedAsync(string entity, string id, string payloadJson, string baseUpdatedAt, CancellationToken ct = default)
         => SendWriteAsync(HttpMethod.Patch, entity, id, baseUpdatedAt, payloadJson, ct);
 
-    public Task<RemoteWriteResult> DeleteIfUnchangedAsync(
-        string entity,
-        string id,
-        string baseUpdatedAt,
-        CancellationToken ct = default)
+    public Task<RemoteWriteResult> DeleteIfUnchangedAsync(string entity, string id, string baseUpdatedAt, CancellationToken ct = default)
         => SendWriteAsync(HttpMethod.Delete, entity, id, baseUpdatedAt, "{}", ct);
 
-    private async Task<RemoteWriteResult> SendWriteAsync(
-        HttpMethod method,
-        string entity,
-        string? id,
-        string? baseUpdatedAt,
-        string payloadJson,
-        CancellationToken ct)
+    private async Task<RemoteWriteResult> SendWriteAsync(HttpMethod method, string entity, string? id, string? baseUpdatedAt, string payloadJson, CancellationToken ct)
     {
         SyncEntities.EnsureAllowed(entity);
         if (method != HttpMethod.Post)
