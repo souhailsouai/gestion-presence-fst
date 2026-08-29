@@ -6,14 +6,21 @@ namespace GestionPresenceFST.Tests;
 public class OnlineHostStateTests
 {
     [Fact]
-    public void ProductionUrlIsTheApprovedGitHubPagesUrl()
+    public void EmbeddedHtmlContainsOnlineRuntimeWithoutPublicHosting()
     {
-        Assert.Equal("https://souhailsouai.github.io/gestion-presence-fst/", OnlineHostState.ProductionUrl.AbsoluteUri);
+        var html = EmbeddedAppHost.LoadHtml();
+
+        Assert.Contains("window.FSTOnlineRuntime=", html);
+        Assert.Contains("Connexion Internet requise", html);
+        Assert.DoesNotContain("souhailsouai.github.io", html);
+        Assert.DoesNotContain("./online-runtime.js", html);
     }
 
     [Fact]
-    public void OfflineMessageIsExplicit()
+    public void LocalHtmlIsWrittenUnderPrivateUserDataDirectory()
     {
-        Assert.Equal("Connexion Internet requise", OnlineHostState.OfflineTitle);
+        var path = EmbeddedAppHost.GetLocalHtmlPath();
+
+        Assert.EndsWith("GestionPresenceFST\\index.html", path.Replace('/', '\\'));
     }
 }
