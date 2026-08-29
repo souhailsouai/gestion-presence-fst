@@ -1,4 +1,5 @@
 using GestionPresenceFST;
+using Xunit;
 
 namespace GestionPresenceFST.Tests;
 
