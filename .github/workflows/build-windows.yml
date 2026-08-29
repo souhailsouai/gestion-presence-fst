@@ -15,6 +15,21 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Rebuild approved shared HTML baseline
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path web | Out-Null
+          Copy-Item gestion_presence_tp_theme_institutionnel.html web/index.html -Force
+          $b64 = Get-Content scripts/web-superadmin.patch.gz.b64 -Raw
+          $gzPath = Join-Path $env:RUNNER_TEMP 'web-superadmin.patch.gz'
+          $patchPath = Join-Path $env:RUNNER_TEMP 'web-superadmin.patch'
+          [IO.File]::WriteAllBytes($gzPath, [Convert]::FromBase64String($b64.Trim()))
+          $input = [IO.File]::OpenRead($gzPath)
+          $gzip = [IO.Compression.GzipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
+          $output = [IO.File]::Create($patchPath)
+          $gzip.CopyTo($output)
+          $output.Dispose(); $gzip.Dispose(); $input.Dispose()
+          git apply --whitespace=nowarn $patchPath
       - name: Restore tests
         run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
       - name: Run tests
