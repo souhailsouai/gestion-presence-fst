@@ -1,4 +1,4 @@
-name: Build Windows Online
+name: Build Windows Private
 
 on:
   push:
@@ -19,20 +19,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Build shared online web
-        run: python scripts/build_online_web.py
+      - name: Build final embedded HTML
+        run: |
+          python scripts/build_online_web.py
+          python scripts/build_single_file_release.py
       - name: Test shared web
         run: node --test tests/web/*.test.cjs
       - name: Restore Windows tests
         run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
       - name: Test Windows host
         run: dotnet test windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj --configuration Release --no-restore
-      - name: Publish Windows x64
+      - name: Publish Windows x64 single file
         if: success()
-        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/windows-x64
-      - name: Upload Windows artifact
+        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish/windows-x64
+      - name: Upload Windows executable
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Gestion-Presence-FST-Windows-x64
-          path: publish/windows-x64
+          path: publish/windows-x64/Gestion-Presence-FST.exe
