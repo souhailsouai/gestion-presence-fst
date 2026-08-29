@@ -19,7 +19,8 @@ public sealed class LocalDatabase : IAsyncDisposable
         {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared
+            Cache = SqliteCacheMode.Shared,
+            Pooling = false
         }.ToString();
     }
 
