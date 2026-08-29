@@ -1,3 +1,4 @@
+using System.IO;
 using Microsoft.Data.Sqlite;
 
 namespace GestionPresenceFST.Data;
@@ -32,7 +33,7 @@ public sealed class LocalDatabase : IAsyncDisposable
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
-        await using var transaction = await connection.BeginTransactionAsync(ct);
+        using var transaction = connection.BeginTransaction();
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
