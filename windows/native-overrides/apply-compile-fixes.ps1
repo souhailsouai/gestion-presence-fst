@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 function Replace-Once([string]$Path, [string]$Old, [string]$New) {
     $text = Get-Content $Path -Raw
-    if (-not $text.Contains($Old)) { throw "Expected text not found in $Path: $Old" }
+    if (-not $text.Contains($Old)) { throw "Expected text not found in ${Path}: $Old" }
     Set-Content -Path $Path -Value ($text.Replace($Old, $New)) -Encoding UTF8 -NoNewline
 }
 
