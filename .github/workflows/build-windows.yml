@@ -26,9 +26,19 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $chunks = Get-ChildItem 'windows/native-source-v2/chunk-*.b64' | Sort-Object Name
-          if ($chunks.Count -ne 6) { throw "Expected 6 source chunks, found $($chunks.Count)" }
-          $encoded = ($chunks | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $parts = @(
+            'windows/native-source-v2/chunk-00-a.b64',
+            'windows/native-source-v2/chunk-00-b.b64',
+            'windows/native-source-v2/chunk-01.b64',
+            'windows/native-source-v2/chunk-02.b64',
+            'windows/native-source-v2/chunk-03-a.b64',
+            'windows/native-source-v2/chunk-03-b.b64',
+            'windows/native-source-v2/chunk-04-a.b64',
+            'windows/native-source-v2/chunk-04-b.b64',
+            'windows/native-source-v2/chunk-05.b64'
+          )
+          foreach ($part in $parts) { if (-not (Test-Path $part)) { throw "Missing source fragment: $part" } }
+          $encoded = ($parts | ForEach-Object { Get-Content $_ -Raw }) -join ''
           [IO.File]::WriteAllBytes('native-source.tar.gz', [Convert]::FromBase64String($encoded))
           $actual = (Get-FileHash 'native-source.tar.gz' -Algorithm SHA256).Hash.ToLowerInvariant()
           $expected = '24d32902225db387da93a949a8e54df91ab8cdf53a7052d8f44793df3c168ba1'
