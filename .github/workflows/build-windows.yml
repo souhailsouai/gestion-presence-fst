@@ -38,6 +38,8 @@ jobs:
           tar -xzf native-source.tar.gz
           Copy-Item 'windows/native-overrides/ImportExportService.cs' 'windows/GestionPresenceFST/Services/ImportExportService.cs' -Force
           Copy-Item 'windows/native-overrides/PdfService.cs' 'windows/GestionPresenceFST/Services/PdfService.cs' -Force
+          Copy-Item 'windows/native-overrides/AppConfig.cs' 'windows/GestionPresenceFST/Infrastructure/AppConfig.cs' -Force
+          Copy-Item 'windows/native-overrides/AuthService.cs' 'windows/GestionPresenceFST/Services/AuthService.cs' -Force
           pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
           New-Item -ItemType Directory -Force 'windows/GestionPresenceFST.Tests/Auth' | Out-Null
           Copy-Item 'windows/native-overrides/PinAuthenticationRegressionTests.cs' 'windows/GestionPresenceFST.Tests/Auth/PinAuthenticationRegressionTests.cs' -Force
