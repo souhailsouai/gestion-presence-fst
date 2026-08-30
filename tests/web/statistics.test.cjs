@@ -1,0 +1,11 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const modulePath=path.join(__dirname,'../../web/statistics.js');
+function load(){assert.equal(fs.existsSync(modulePath),true);return require(modulePath);}
+const sample={classes:[{id:'c1',teacherId:'t1',name:'MPI 1 G1',module:'Physique'},{id:'c2',teacherId:'t2',name:'PC 1 G3',module:'Ondes'}],students:[{id:'u1',teacherId:'t1',classId:'c1'},{id:'u2',teacherId:'t1',classId:'c1'},{id:'u3',teacherId:'t2',classId:'c2'}],sessions:[{id:'s1',teacherId:'t1',classId:'c1',date:'2026-08-20'},{id:'s2',teacherId:'t1',classId:'c1',date:'2026-08-27'},{id:'s3',teacherId:'t2',classId:'c2',date:'2026-08-28'}],attendance:[{sessionId:'s1',studentId:'u1',status:'present',grade:14},{sessionId:'s1',studentId:'u2',status:'absent',grade:10},{sessionId:'s2',studentId:'u1',status:'retard',grade:16},{sessionId:'s2',studentId:'u2',status:'present',grade:null},{sessionId:'s3',studentId:'u3',status:'present',grade:18}]};
+test('teacher statistics are restricted to own data',()=>{const S=load(),r=S.computeStatistics(sample,{teacherId:'t2'},{id:'t1',isAdmin:false});assert.equal(r.sessions,2);assert.equal(r.students,2);assert.deepEqual(r.statusCounts,{present:2,absent:1,retard:1,justifie:0});assert.equal(r.averageGrade,13.33);});
+test('admin statistics can aggregate all teachers',()=>{const S=load(),r=S.computeStatistics(sample,{}, {id:'a1',isAdmin:true});assert.equal(r.sessions,3);assert.equal(r.students,3);assert.equal(r.statusCounts.present,3);assert.equal(r.averageGrade,14.5);assert.equal(r.timeline.length,3);assert.equal(r.byTeacher.length,2);assert.equal(r.byClass.length,2);});
+test('class and date filters restrict statistics',()=>{const S=load(),r=S.computeStatistics(sample,{classId:'c1',from:'2026-08-25',to:'2026-08-30'},{id:'a1',isAdmin:true});assert.equal(r.sessions,1);assert.equal(r.statusCounts.present,1);assert.equal(r.statusCounts.retard,1);assert.equal(r.averageGrade,16);});
+test('statistics module exposes charts and PDF helpers',()=>{const S=load();for(const name of ['buildStatusChartSvg','buildTimelineChartSvg','renderDashboard','drawPdfCharts','generateStatisticsPdf'])assert.equal(typeof S[name],'function');});
