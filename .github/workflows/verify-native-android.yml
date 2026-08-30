@@ -2,7 +2,7 @@ name: Build Native Android Application
 
 on:
   push:
-    branches: [ release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027 ]
     paths:
       - 'app-native/**'
       - 'build.gradle'
@@ -62,6 +62,7 @@ jobs:
           mkdir -p dist/android
           cp app-native/build/outputs/apk/debug/app-native-debug.apk dist/android/Gestion-Presence-FST-Android-v2.0.0.apk
           sha256sum dist/android/Gestion-Presence-FST-Android-v2.0.0.apk > dist/android/SHA256SUMS.txt
+          sha256sum --check dist/android/SHA256SUMS.txt
 
       - name: Upload native Android application
         uses: actions/upload-artifact@v4
