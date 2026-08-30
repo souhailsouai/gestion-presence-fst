@@ -15,4 +15,6 @@ test('access control module enforces ownership and read-only foreign sessions',(
   assert.match(js,/deleteSession/);
   assert.match(js,/openSessionForNotes/);
   assert.match(js,/saveAttendance/);
+  assert.match(js,/grade_only/);
+  assert.match(js,/gradeOnly/);
 });
