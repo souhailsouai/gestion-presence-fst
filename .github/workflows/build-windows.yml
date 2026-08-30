@@ -46,6 +46,7 @@ jobs:
           tar -xzf native-source.tar.gz
           Copy-Item 'windows/native-overrides/ImportExportService.cs' 'windows/GestionPresenceFST/Services/ImportExportService.cs' -Force
           Copy-Item 'windows/native-overrides/PdfService.cs' 'windows/GestionPresenceFST/Services/PdfService.cs' -Force
+          pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
           Write-Host "PASS: native source SHA256 $actual"
 
       - name: Generate native application icon
