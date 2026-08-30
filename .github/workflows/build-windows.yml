@@ -16,9 +16,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Reconstruct verified native source
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $parts = @(
             'windows/native-source-v2/chunk-00-a.b64','windows/native-source-v2/chunk-00-b.b64',
             'windows/native-source-v2/chunk-01.b64','windows/native-source-v2/chunk-02.b64',
@@ -31,13 +36,25 @@ jobs:
           $actual = (Get-FileHash 'native-source.tar.gz' -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne '24d32902225db387da93a949a8e54df91ab8cdf53a7052d8f44793df3c168ba1') { throw "SHA mismatch $actual" }
           tar -xzf native-source.tar.gz
+          Copy-Item 'windows/native-overrides/ImportExportService.cs' 'windows/GestionPresenceFST/Services/ImportExportService.cs' -Force
+          Copy-Item 'windows/native-overrides/PdfService.cs' 'windows/GestionPresenceFST/Services/PdfService.cs' -Force
           pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
-      - name: Capture auth configuration
+          New-Item -ItemType Directory -Force 'windows/GestionPresenceFST.Tests/Auth' | Out-Null
+          Copy-Item 'windows/native-overrides/PinAuthenticationRegressionTests.cs' 'windows/GestionPresenceFST.Tests/Auth/PinAuthenticationRegressionTests.cs' -Force
+      - name: Generate native application icon
         shell: pwsh
         run: |
-          Write-Host '===== AppConfig.cs ====='
-          Get-Content 'windows/GestionPresenceFST/Infrastructure/AppConfig.cs' -Raw
-          Write-Host '===== Web auth contexts ====='
-          Select-String -Path 'gestion_presence_tp_theme_institutionnel.html' -Pattern 'passwordForSupabase|signInWithPassword|owner|admin-pin-login|teacherAuth|authEmail' -Context 8,8 |
-            Select-Object -First 180 | ForEach-Object { $_.ToString() }
-          throw 'AUTH_CONFIG_CAPTURE_COMPLETE'
+          python -m pip install --disable-pip-version-check pillow
+          New-Item -ItemType Directory -Force 'windows/GestionPresenceFST/Assets' | Out-Null
+          @'
+          from PIL import Image
+          img = Image.new('RGBA', (256, 256), (8, 78, 139, 255))
+          img.save('windows/GestionPresenceFST/Assets/GestionPresenceFST.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          '@ | Set-Content -Encoding UTF8 generate_icon.py
+          python generate_icon.py
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
+      - name: Test PIN authentication regression
+        shell: pwsh
+        run: dotnet test windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PinAuthenticationRegressionTests --logger "console;verbosity=normal"
