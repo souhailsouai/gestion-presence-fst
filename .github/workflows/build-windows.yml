@@ -45,6 +45,8 @@ jobs:
           Copy-Item 'windows/native-overrides/ImportExportService.cs' 'windows/GestionPresenceFST/Services/ImportExportService.cs' -Force
           Copy-Item 'windows/native-overrides/PdfService.cs' 'windows/GestionPresenceFST/Services/PdfService.cs' -Force
           pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
+          New-Item -ItemType Directory -Force 'windows/GestionPresenceFST.Tests/Auth' | Out-Null
+          Copy-Item 'windows/native-overrides/PinAuthenticationRegressionTests.cs' 'windows/GestionPresenceFST.Tests/Auth/PinAuthenticationRegressionTests.cs' -Force
       - name: Generate native application icon
         shell: pwsh
         run: |
@@ -61,4 +63,4 @@ jobs:
         run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
       - name: Test PIN authentication regression
         shell: pwsh
-        run: dotnet test windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PinAuthenticationRegressionTests
+        run: dotnet test windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PinAuthenticationRegressionTests --logger "console;verbosity=normal"
