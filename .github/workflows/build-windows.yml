@@ -49,6 +49,18 @@ jobs:
           pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
           Write-Host "PASS: native source SHA256 $actual"
 
+      - name: Diagnose PIN authentication flow
+        shell: pwsh
+        run: |
+          Write-Host '=== Native PIN references ==='
+          Get-ChildItem 'windows/GestionPresenceFST' -Recurse -File -Include *.cs,*.xaml |
+            Select-String -Pattern 'pin|PIN|incorrect|auth|login|signIn|SignIn' -Context 3,3 |
+            ForEach-Object { $_.ToString() }
+          Write-Host '=== Web PIN references ==='
+          Select-String -Path 'gestion_presence_tp_theme_institutionnel.html' -Pattern 'pin|PIN|incorrect|auth|login|signIn|SignIn' -Context 3,3 |
+            Select-Object -First 250 |
+            ForEach-Object { $_.ToString() }
+
       - name: Generate native application icon
         shell: pwsh
         run: |
