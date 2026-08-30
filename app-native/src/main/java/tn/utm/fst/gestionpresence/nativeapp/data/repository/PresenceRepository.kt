@@ -1,0 +1,334 @@
+package tn.utm.fst.gestionpresence.nativeapp.data.repository
+
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import tn.utm.fst.gestionpresence.nativeapp.core.model.AcademicClass
+import tn.utm.fst.gestionpresence.nativeapp.core.model.ApiException
+import tn.utm.fst.gestionpresence.nativeapp.core.model.AppContract
+import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceDraft
+import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceRecord
+import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceSheet
+import tn.utm.fst.gestionpresence.nativeapp.core.model.AuthSession
+import tn.utm.fst.gestionpresence.nativeapp.core.model.DashboardStats
+import tn.utm.fst.gestionpresence.nativeapp.core.model.MfaEnrollment
+import tn.utm.fst.gestionpresence.nativeapp.core.model.MfaFactor
+import tn.utm.fst.gestionpresence.nativeapp.core.model.ReportSummary
+import tn.utm.fst.gestionpresence.nativeapp.core.model.Student
+import tn.utm.fst.gestionpresence.nativeapp.core.model.TeacherDirectoryEntry
+import tn.utm.fst.gestionpresence.nativeapp.core.model.TeachingSession
+import tn.utm.fst.gestionpresence.nativeapp.core.model.UserProfile
+import tn.utm.fst.gestionpresence.nativeapp.core.security.SecureSessionStore
+import tn.utm.fst.gestionpresence.nativeapp.data.remote.OnlineApiClient
+import java.time.LocalDate
+import java.util.UUID
+
+class PresenceRepository(context: Context) {
+    private val appContext = context.applicationContext
+    private val api = OnlineApiClient()
+    private val sessionStore = SecureSessionStore(appContext)
+    private var activeSession: AuthSession? = null
+    private var activeProfile: UserProfile? = null
+
+    fun isOnline(): Boolean {
+        val connectivity = appContext.getSystemService(ConnectivityManager::class.java)
+        val network = connectivity.activeNetwork ?: return false
+        val capabilities = connectivity.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+    fun session(): AuthSession? = activeSession
+    fun profile(): UserProfile? = activeProfile
+    fun assuranceLevel(): String = activeSession?.let(api::assuranceLevel) ?: "aal1"
+
+    suspend fun login(identifier: String, credential: String, mode: String): LoginBundle {
+        requireOnline()
+        var session = api.login(identifier, credential)
+        val profile = api.profile(session)
+        if (profile.accountState != "active") throw ApiException("FORBIDDEN", "Ce compte est désactivé.")
+        if (mode == "admin" && !profile.isAdmin) throw ApiException("FORBIDDEN", "Droits administrateur requis.")
+        if (session.role != profile.role) session = session.copy(role = profile.role)
+        activeSession = session
+        activeProfile = profile
+        sessionStore.save(session)
+        return LoginBundle(session, profile, api.mfaFactors(session))
+    }
+
+    suspend fun restore(): LoginBundle? {
+        requireOnline()
+        var session = sessionStore.load() ?: return null
+        if (session.isExpired) session = api.refresh(session.refreshToken)
+        return runCatching {
+            val profile = api.profile(session)
+            if (profile.accountState != "active") throw ApiException("FORBIDDEN", "Ce compte est désactivé.")
+            if (session.role != profile.role) session = session.copy(role = profile.role)
+            activeSession = session
+            activeProfile = profile
+            sessionStore.save(session)
+            LoginBundle(session, profile, api.mfaFactors(session))
+        }.getOrElse {
+            sessionStore.clear()
+            activeSession = null
+            activeProfile = null
+            null
+        }
+    }
+
+    suspend fun logout() {
+        activeSession?.let { runCatching { api.logout(it) } }
+        activeSession = null
+        activeProfile = null
+        sessionStore.clear()
+    }
+
+    suspend fun enrollMfa(): MfaEnrollment {
+        requireOnline()
+        return api.enrollMfa(authorizedSession())
+    }
+
+    suspend fun verifyMfa(factorId: String, code: String): AuthSession {
+        requireOnline()
+        val updated = api.verifyMfa(authorizedSession(), factorId, code)
+        activeSession = updated
+        sessionStore.save(updated)
+        return updated
+    }
+
+    suspend fun mfaFactors(): List<MfaFactor> {
+        requireOnline()
+        return api.mfaFactors(authorizedSession())
+    }
+
+    suspend fun removeMfa(factorId: String) {
+        requireOnline()
+        api.unenrollMfa(authorizedSession(), factorId)
+    }
+
+    suspend fun load(): RepositoryData {
+        requireOnline()
+        val session = authorizedSession()
+        val contract = api.appContract(session)
+        if (contract.maintenanceEnabled) {
+            throw ApiException("SERVER_UNAVAILABLE", contract.maintenanceMessage.ifBlank { "Application en maintenance." })
+        }
+        val classes = api.classes(session)
+        val students = api.students(session)
+        val sessions = api.sessions(session)
+        val attendance = api.attendance(session)
+        val directory = api.teacherDirectory(session)
+        return RepositoryData(
+            contract = contract,
+            classes = classes,
+            students = students,
+            sessions = sessions,
+            attendance = attendance,
+            directory = directory,
+            stats = stats(classes, students, sessions, attendance)
+        )
+    }
+
+    suspend fun addClass(
+        name: String,
+        module: String,
+        track: String,
+        classNumber: Int,
+        groupNumber: Int,
+        day: String?,
+        startTime: String?,
+        endTime: String?,
+        room: String?
+    ) {
+        requireOnline()
+        validateTimes(startTime, endTime)
+        val session = authorizedSession()
+        api.upsertClass(session, buildJsonObject {
+            put("id", UUID.randomUUID().toString())
+            put("teacher_id", session.userId)
+            put("name", name.trim())
+            put("module", module.trim())
+            put("track", track)
+            put("class_number", classNumber)
+            put("group_number", groupNumber)
+            if (day.isNullOrBlank()) put("day", JsonNull) else put("day", day)
+            if (startTime.isNullOrBlank()) put("start_time", JsonNull) else put("start_time", startTime)
+            if (endTime.isNullOrBlank()) put("end_time", JsonNull) else put("end_time", endTime)
+            if (room.isNullOrBlank()) put("room", JsonNull) else put("room", room.trim())
+        })
+    }
+
+    suspend fun addStudent(classId: String, lastName: String, firstName: String, email: String?) {
+        requireOnline()
+        val session = authorizedSession()
+        api.upsertStudent(session, buildJsonObject {
+            put("id", UUID.randomUUID().toString())
+            put("teacher_id", session.userId)
+            put("class_id", classId)
+            put("last_name", lastName.trim())
+            put("first_name", firstName.trim())
+            if (email.isNullOrBlank()) put("email", JsonNull) else put("email", email.trim())
+        })
+    }
+
+    suspend fun addSession(classId: String, date: String, startTime: String, endTime: String) {
+        requireOnline()
+        validateTimes(startTime, endTime)
+        LocalDate.parse(date)
+        val session = authorizedSession()
+        api.upsertSession(session, buildJsonObject {
+            put("id", UUID.randomUUID().toString())
+            put("teacher_id", session.userId)
+            put("class_id", classId)
+            put("session_date", date)
+            put("start_time", startTime)
+            put("end_time", endTime)
+        })
+    }
+
+    suspend fun completeSession(item: TeachingSession) {
+        requireOnline()
+        api.upsertSession(authorizedSession(), buildJsonObject {
+            put("id", item.id)
+            put("teacher_id", item.teacherId)
+            put("class_id", item.classId)
+            put("session_date", item.sessionDate)
+            put("start_time", item.startTime)
+            put("end_time", item.endTime)
+            put("completed_at", java.time.Instant.now().toString())
+        })
+    }
+
+    suspend fun deleteClass(id: String) = delete("classes", id)
+    suspend fun deleteStudent(id: String) = delete("students", id)
+    suspend fun deleteSession(id: String) = delete("sessions", id)
+
+    suspend fun attendanceSheet(sessionId: String): AttendanceSheet {
+        requireOnline()
+        return api.getAttendanceSheet(authorizedSession(), sessionId)
+    }
+
+    suspend fun saveAttendance(
+        sessionId: String,
+        expectedRevision: Long,
+        operationId: String,
+        records: List<AttendanceDraft>,
+        justification: String? = null
+    ): AttendanceSheet {
+        requireOnline()
+        records.forEach { require(it.grade == null || it.grade in 0.0..20.0) { "La note doit être comprise entre 0 et 20." } }
+        return api.saveAttendanceSheet(
+            session = authorizedSession(),
+            sessionId = sessionId,
+            expectedRevision = expectedRevision,
+            operationId = operationId,
+            records = records,
+            justification = justification
+        )
+    }
+
+    suspend fun adminCreateTeacher(username: String, fullName: String, password: String): JsonObject {
+        requireOnline()
+        return api.adminAction(authorizedSession(), buildJsonObject {
+            put("action", "create")
+            put("username", username)
+            put("full_name", fullName)
+            put("password", password)
+        })
+    }
+
+    suspend fun adminResetPassword(userId: String, password: String, justification: String): JsonObject {
+        requireOnline()
+        return api.adminAction(authorizedSession(), buildJsonObject {
+            put("action", "reset_password")
+            put("user_id", userId)
+            put("password", password)
+            put("justification", justification)
+        })
+    }
+
+    suspend fun adminSetPin(pin: String): JsonObject {
+        requireOnline()
+        return api.adminAction(authorizedSession(), buildJsonObject {
+            put("action", "set_admin_pin")
+            put("pin", pin)
+        })
+    }
+
+    fun reports(data: RepositoryData): List<ReportSummary> {
+        val attendanceBySession = data.attendance.groupBy { it.sessionId }
+        return data.classes.map { academicClass ->
+            val sessionIds = data.sessions.filter { it.classId == academicClass.id }.map { it.id }.toSet()
+            val records = attendanceBySession.filterKeys(sessionIds::contains).values.flatten()
+            ReportSummary(
+                title = "${academicClass.name} — ${academicClass.module}",
+                totalRecords = records.size,
+                present = records.count { it.status.wireValue == "present" },
+                absent = records.count { it.status.wireValue == "absent" },
+                late = records.count { it.status.wireValue == "retard" },
+                justified = records.count { it.status.wireValue == "justifie" },
+                averageGrade = records.mapNotNull { it.grade }.takeIf { it.isNotEmpty() }?.average()
+            )
+        }
+    }
+
+    private suspend fun delete(table: String, id: String) {
+        requireOnline()
+        api.deleteRow(authorizedSession(), table, id)
+    }
+
+    private suspend fun authorizedSession(): AuthSession {
+        var session = activeSession ?: throw ApiException("UNAUTHENTICATED", "Session absente.")
+        if (session.isExpired) {
+            session = api.refresh(session.refreshToken)
+            activeSession = session
+            sessionStore.save(session)
+        }
+        return session
+    }
+
+    private fun requireOnline() {
+        if (!isOnline()) throw ApiException("NETWORK_UNAVAILABLE", "Connexion Internet requise.")
+    }
+
+    private fun validateTimes(start: String?, end: String?) {
+        if (!start.isNullOrBlank() && !end.isNullOrBlank()) {
+            require(start < end) { "L’heure de début doit précéder l’heure de fin." }
+        }
+    }
+
+    private fun stats(
+        classes: List<AcademicClass>,
+        students: List<Student>,
+        sessions: List<TeachingSession>,
+        attendance: List<AttendanceRecord>
+    ): DashboardStats = DashboardStats(
+        classCount = classes.size,
+        studentCount = students.size,
+        sessionCount = sessions.size,
+        attendanceCount = attendance.size,
+        presentCount = attendance.count { it.status.wireValue == "present" },
+        absentCount = attendance.count { it.status.wireValue == "absent" },
+        lateCount = attendance.count { it.status.wireValue == "retard" },
+        justifiedCount = attendance.count { it.status.wireValue == "justifie" }
+    )
+}
+
+data class LoginBundle(
+    val session: AuthSession,
+    val profile: UserProfile,
+    val factors: List<MfaFactor>
+)
+
+data class RepositoryData(
+    val contract: AppContract,
+    val classes: List<AcademicClass>,
+    val students: List<Student>,
+    val sessions: List<TeachingSession>,
+    val attendance: List<AttendanceRecord>,
+    val directory: List<TeacherDirectoryEntry>,
+    val stats: DashboardStats
+)
