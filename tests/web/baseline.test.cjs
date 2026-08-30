@@ -3,11 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const htmlPath = path.join(__dirname, '..', '..', 'web', 'index.html');
+const root = path.join(__dirname, '..', '..');
+const canonicalPath = path.join(root, 'gestion_presence_tp_theme_institutionnel.html');
 
 test('canonical approved web interface exists', () => {
-  assert.equal(fs.existsSync(htmlPath), true);
-  const html = fs.readFileSync(htmlPath, 'utf8');
+  assert.equal(fs.existsSync(canonicalPath), true);
+  const html = fs.readFileSync(canonicalPath, 'utf8');
   for (const marker of [
     'Gestion Présence FST — 2026/2027',
     'teacher_directory',
