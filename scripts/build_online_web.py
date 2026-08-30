@@ -26,12 +26,24 @@ html = out.read_text(encoding='utf-8')
 tags = [
     '<script src="./online-runtime.js"></script>',
     '<script src="./online-fixes.js"></script>',
+    '<script src="./security-v2.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
         html = html.replace('</body>', f'\n{tag}\n</body>', 1)
 out.write_text(html, encoding='utf-8')
 
-for marker in ['teacher_directory', 'restorePersistentSession', 'ACTIVE_MODE_KEY', '2026/2027', *tags]:
+markers = [
+    'teacher_directory',
+    'restorePersistentSession',
+    'ACTIVE_MODE_KEY',
+    '2026/2027',
+    *tags,
+]
+for marker in markers:
     assert marker in html, marker
+
+security = (web / 'security-v2.js').read_text(encoding='utf-8')
+for marker in ['pin-login', 'challengeAndVerify', 'save_attendance_sheet', 'VERSION_CONFLICT']:
+    assert marker in security, marker
 print(out)
