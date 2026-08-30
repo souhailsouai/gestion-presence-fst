@@ -19,7 +19,6 @@ jobs:
       - name: Reconstruct verified native source
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
           $parts = @(
             'windows/native-source-v2/chunk-00-a.b64','windows/native-source-v2/chunk-00-b.b64',
             'windows/native-source-v2/chunk-01.b64','windows/native-source-v2/chunk-02.b64',
@@ -33,22 +32,12 @@ jobs:
           if ($actual -ne '24d32902225db387da93a949a8e54df91ab8cdf53a7052d8f44793df3c168ba1') { throw "SHA mismatch $actual" }
           tar -xzf native-source.tar.gz
           pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
-      - name: Print auth sources
+      - name: Capture auth configuration
         shell: pwsh
         run: |
-          $files = @(
-            'windows/GestionPresenceFST/Services/AuthService.cs',
-            'windows/GestionPresenceFST/Services/IAuthService.cs',
-            'windows/GestionPresenceFST/ViewModels/LoginViewModel.cs',
-            'windows/GestionPresenceFST/Infrastructure/AppComposition.cs',
-            'windows/GestionPresenceFST/Data/SupabaseGateway.cs',
-            'windows/GestionPresenceFST/Data/ISupabaseGateway.cs',
-            'windows/GestionPresenceFST/Security/UserSession.cs',
-            'windows/GestionPresenceFST/Windows/LoginWindow.xaml',
-            'windows/GestionPresenceFST/Windows/LoginWindow.xaml.cs'
-          )
-          foreach ($file in $files) {
-            Write-Host "===== $file ====="
-            if (Test-Path $file) { Get-Content $file -Raw } else { Write-Host 'MISSING' }
-          }
-          throw 'AUTH_SOURCE_CAPTURE_COMPLETE'
+          Write-Host '===== AppConfig.cs ====='
+          Get-Content 'windows/GestionPresenceFST/Infrastructure/AppConfig.cs' -Raw
+          Write-Host '===== Web auth contexts ====='
+          Select-String -Path 'gestion_presence_tp_theme_institutionnel.html' -Pattern 'passwordForSupabase|signInWithPassword|owner|admin-pin-login|teacherAuth|authEmail' -Context 8,8 |
+            Select-Object -First 180 | ForEach-Object { $_.ToString() }
+          throw 'AUTH_CONFIG_CAPTURE_COMPLETE'
