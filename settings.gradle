@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "GestionPresenceFST"
 include ':app'
+include ':app-native'
