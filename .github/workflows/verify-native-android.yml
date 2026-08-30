@@ -1,0 +1,71 @@
+name: Build Native Android Application
+
+on:
+  push:
+    branches: [ release/final-cross-platform-2026-2027 ]
+    paths:
+      - 'app-native/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - '.github/workflows/verify-native-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-native-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Verify native online-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R "android.webkit.WebView\|file:///android_asset\|androidx.room\|RoomDatabase\|androidx.work\|WorkManager" app-native/src/main app-native/build.gradle.kts --include='*.kt' --include='*.xml' --include='*.kts'
+          grep -R "AndroidKeyStore" app-native/src/main --include='*.kt'
+          grep -R "save_attendance_sheet" app-native/src/main --include='*.kt'
+          grep -R "challengeAndVerify\|factors/.*/verify" app-native/src/main --include='*.kt'
+
+      - name: Unit tests
+        run: gradle :app-native:testDebugUnitTest --stacktrace --warning-mode all
+
+      - name: Android lint
+        run: gradle :app-native:lintDebug --stacktrace
+
+      - name: Build installable native APK
+        run: gradle :app-native:assembleDebug --stacktrace
+
+      - name: Verify and package APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app-native/build/outputs/apk/debug/app-native-debug.apk
+          mkdir -p dist/android
+          cp app-native/build/outputs/apk/debug/app-native-debug.apk dist/android/Gestion-Presence-FST-Android-v2.0.0.apk
+          sha256sum dist/android/Gestion-Presence-FST-Android-v2.0.0.apk > dist/android/SHA256SUMS.txt
+
+      - name: Upload native Android application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Android-v2.0.0
+          path: dist/android/**
+          if-no-files-found: error
