@@ -2,7 +2,7 @@ name: Build Native Android Application
 
 on:
   push:
-    branches: [ main, release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027, fix/android-profile-json-object ]
     paths:
       - 'app-native/**'
       - 'build.gradle'
