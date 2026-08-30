@@ -1,0 +1,5 @@
+sha256=24d32902225db387da93a949a8e54df91ab8cdf53a7052d8f44793df3c168ba1
+encoding=base64
+archive=tar.gz
+chunks=6
+icon=generated-during-ci
