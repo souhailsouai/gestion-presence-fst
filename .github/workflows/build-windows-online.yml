@@ -2,7 +2,7 @@ name: Build Synchronized Windows Application
 
 on:
   push:
-    branches: [ release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027 ]
     paths:
       - 'windows/GestionPresenceFSTOnline/**'
       - 'web/**'
