@@ -1,7 +1,6 @@
 begin;
 
 -- Business authorization is based on authenticated identity plus role/ownership.
--- MFA/AAL2 is no longer part of the application authorization contract.
 create or replace function private.mutation_allowed()
 returns boolean
 language sql
