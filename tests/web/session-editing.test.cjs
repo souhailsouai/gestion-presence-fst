@@ -10,6 +10,8 @@ test('session editing layer locks completed teacher attendance but keeps grades 
   assert.match(js,/loadPresenceSheet/);
   assert.match(js,/canEditAttendance/);
   assert.match(js,/canEditGrade/);
+  assert.match(js,/gradeOnly/);
+  assert.match(js,/Non saisi/);
   assert.match(js,/materializeAttendance/);
   assert.match(js,/updateAttendanceComment/);
   assert.match(js,/updateAttendanceGrade/);
