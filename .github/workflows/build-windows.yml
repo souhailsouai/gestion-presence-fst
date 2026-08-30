@@ -1,7 +1,9 @@
-name: Build Windows App
+name: Build Native Windows App
 
 on:
   push:
+    branches: [ feature/native-windows-app ]
+  pull_request:
     branches: [ fix/session-notes-analytics ]
   workflow_dispatch:
 
@@ -14,29 +16,131 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Prepare web source
+
+      - name: Reconstruct verified native source and apply auth fix
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force web | Out-Null
-          Copy-Item app/src/main/assets/index.html web/index.html -Force
-          if (-not (Test-Path shared/patch/fst_patch.js)) { throw 'fst_patch.js missing' }
-          if (-not (Test-Path shared/patch/fst_patch.css)) { throw 'fst_patch.css missing' }
-      - name: Publish Windows x64
-        shell: pwsh
-        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o windows-publish
-      - name: Verify executable
+          $ErrorActionPreference = 'Stop'
+          $parts = @(
+            'windows/native-source-v2/chunk-00-a.b64','windows/native-source-v2/chunk-00-b.b64',
+            'windows/native-source-v2/chunk-01.b64','windows/native-source-v2/chunk-02.b64',
+            'windows/native-source-v2/chunk-03-a.b64','windows/native-source-v2/chunk-03-b.b64',
+            'windows/native-source-v2/chunk-04-a.b64','windows/native-source-v2/chunk-04-b.b64',
+            'windows/native-source-v2/chunk-05.b64'
+          )
+          $encoded = ($parts | ForEach-Object { Get-Content $_ -Raw }) -join ''
+          [IO.File]::WriteAllBytes('native-source.tar.gz', [Convert]::FromBase64String($encoded))
+          $actual = (Get-FileHash 'native-source.tar.gz' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = '24d32902225db387da93a949a8e54df91ab8cdf53a7052d8f44793df3c168ba1'
+          if ($actual -ne $expected) { throw "Native source SHA256 mismatch: $actual" }
+          tar -xzf native-source.tar.gz
+          Copy-Item 'windows/native-overrides/ImportExportService.cs' 'windows/GestionPresenceFST/Services/ImportExportService.cs' -Force
+          Copy-Item 'windows/native-overrides/PdfService.cs' 'windows/GestionPresenceFST/Services/PdfService.cs' -Force
+          Copy-Item 'windows/native-overrides/AppConfig.cs' 'windows/GestionPresenceFST/Infrastructure/AppConfig.cs' -Force
+          Copy-Item 'windows/native-overrides/AuthService.cs' 'windows/GestionPresenceFST/Services/AuthService.cs' -Force
+          pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
+          New-Item -ItemType Directory -Force 'windows/GestionPresenceFST.Tests/Auth' | Out-Null
+          Copy-Item 'windows/native-overrides/PinAuthenticationRegressionTests.cs' 'windows/GestionPresenceFST.Tests/Auth/PinAuthenticationRegressionTests.cs' -Force
+
+          $legacyTest = 'windows/GestionPresenceFST.Tests/Services/AuthServiceTests.cs'
+          $legacy = Get-Content $legacyTest -Raw
+          $before = $legacy
+          $legacy = $legacy.Replace('Teacher_login_tries_pin_then_password_fallback', 'Teacher_login_uses_password_path_only')
+          $legacy = $legacy.Replace('new[] { "pin", "password" }', 'new[] { "password" }')
+          if ($legacy -eq $before) { throw 'Legacy auth test was not updated; expected pattern not found' }
+          Set-Content $legacyTest $legacy -Encoding UTF8 -NoNewline
+
+          $proj = 'windows/GestionPresenceFST/GestionPresenceFST.csproj'
+          $projText = Get-Content $proj -Raw
+          $projText = $projText.Replace('<Version>2.0.0</Version>', '<Version>2.0.1</Version>')
+          $projText = $projText.Replace('<FileVersion>2.0.0.0</FileVersion>', '<FileVersion>2.0.1.0</FileVersion>')
+          $projText = $projText.Replace('<AssemblyVersion>2.0.0.0</AssemblyVersion>', '<AssemblyVersion>2.0.1.0</AssemblyVersion>')
+          Set-Content $proj $projText -Encoding UTF8 -NoNewline
+          $iss = 'windows/installer/GestionPresenceFST.iss'
+          $issText = Get-Content $iss -Raw
+          $issText = $issText.Replace('2.0.0', '2.0.1')
+          Set-Content $iss $issText -Encoding UTF8 -NoNewline
+          Write-Host "PASS: native source SHA256 $actual"
+
+      - name: Generate native application icon
         shell: pwsh
         run: |
-          if (-not (Test-Path windows-publish/Gestion-Presence-FST.exe)) { throw 'Windows executable missing' }
-          if (-not (Test-Path windows-publish/web/index.html)) { throw 'Embedded HTML missing' }
-          if (-not (Test-Path windows-publish/web/fst_patch.js)) { throw 'Shared JS patch missing' }
-      - name: Upload Windows app
+          python -m pip install --disable-pip-version-check pillow
+          New-Item -ItemType Directory -Force 'windows/GestionPresenceFST/Assets' | Out-Null
+          @'
+          from PIL import Image, ImageDraw, ImageFont
+          size = 256
+          img = Image.new('RGBA', (size, size), (8, 78, 139, 255))
+          d = ImageDraw.Draw(img)
+          d.rounded_rectangle((18, 18, 238, 238), radius=42, outline=(255,255,255,255), width=10)
+          try:
+              font = ImageFont.truetype('arialbd.ttf', 78)
+          except Exception:
+              font = ImageFont.load_default()
+          text = 'FST'
+          box = d.textbbox((0,0), text, font=font)
+          x = (size - (box[2]-box[0])) / 2
+          y = (size - (box[3]-box[1])) / 2 - 8
+          d.text((x,y), text, fill=(255,255,255,255), font=font)
+          img.save('windows/GestionPresenceFST/Assets/GestionPresenceFST.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          '@ | Set-Content -Encoding UTF8 generate_icon.py
+          python generate_icon.py
+          if (-not (Test-Path 'windows/GestionPresenceFST/Assets/GestionPresenceFST.ico')) { throw 'Application icon missing' }
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
+
+      - name: Test all native Windows tests
+        shell: pwsh
+        run: dotnet test windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj -c Release --no-restore --logger "console;verbosity=normal"
+
+      - name: Publish native Windows x64
+        shell: pwsh
+        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o windows/publish
+
+      - name: Verify no browser or localhost dependency
+        shell: pwsh
+        run: pwsh windows/scripts/verify-native.ps1
+
+      - name: Verify corrected authentication configuration
+        shell: pwsh
+        run: |
+          $config = Get-Content 'windows/GestionPresenceFST/Infrastructure/AppConfig.cs' -Raw
+          $auth = Get-Content 'windows/GestionPresenceFST/Services/AuthService.cs' -Raw
+          if (-not $config.Contains('https://dbslzmvzbxczpqyektpx.supabase.co')) { throw 'Wrong Supabase backend in Windows build' }
+          if (($auth.Split('SignInWithPinAsync(').Count - 1) -ne 1) { throw 'Teacher login still routes through admin PIN function' }
+          if (-not $auth.Contains('SignInWithPasswordAsync(TeacherAuthEmail(username), credential, ct)')) { throw 'Teacher password/PIN auth path missing' }
+          Write-Host 'PASS: Windows authentication matches final application'
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          & $iscc 'windows/installer/GestionPresenceFST.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path 'windows/dist/Gestion-Presence-FST-Setup.exe')) { throw 'Installer missing' }
+
+      - name: Upload portable native app
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Windows-v1.2.1
-          path: windows-publish/**
+          name: Gestion-Presence-FST-Native-Windows-v2.0.1
+          path: windows/publish/**
+          if-no-files-found: error
+
+      - name: Upload corrected Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Setup-v2.0.1
+          path: windows/dist/Gestion-Presence-FST-Setup.exe
           if-no-files-found: error
