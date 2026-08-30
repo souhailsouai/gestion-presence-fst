@@ -46,6 +46,15 @@ jobs:
           pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
           New-Item -ItemType Directory -Force 'windows/GestionPresenceFST.Tests/Auth' | Out-Null
           Copy-Item 'windows/native-overrides/PinAuthenticationRegressionTests.cs' 'windows/GestionPresenceFST.Tests/Auth/PinAuthenticationRegressionTests.cs' -Force
+
+          $legacyTest = 'windows/GestionPresenceFST.Tests/Services/AuthServiceTests.cs'
+          $legacy = Get-Content $legacyTest -Raw
+          $before = $legacy
+          $legacy = $legacy.Replace('Teacher_login_tries_pin_then_password_fallback', 'Teacher_login_uses_password_path_only')
+          $legacy = $legacy.Replace('new[] { "pin", "password" }', 'new[] { "password" }')
+          if ($legacy -eq $before) { throw 'Legacy auth test was not updated; expected pattern not found' }
+          Set-Content $legacyTest $legacy -Encoding UTF8 -NoNewline
+
           $proj = 'windows/GestionPresenceFST/GestionPresenceFST.csproj'
           $projText = Get-Content $proj -Raw
           $projText = $projText.Replace('<Version>2.0.0</Version>', '<Version>2.0.1</Version>')
