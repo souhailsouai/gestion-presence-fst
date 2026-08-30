@@ -44,6 +44,8 @@ jobs:
           $expected = '24d32902225db387da93a949a8e54df91ab8cdf53a7052d8f44793df3c168ba1'
           if ($actual -ne $expected) { throw "Native source SHA256 mismatch: $actual" }
           tar -xzf native-source.tar.gz
+          Copy-Item 'windows/native-overrides/ImportExportService.cs' 'windows/GestionPresenceFST/Services/ImportExportService.cs' -Force
+          Copy-Item 'windows/native-overrides/PdfService.cs' 'windows/GestionPresenceFST/Services/PdfService.cs' -Force
           Write-Host "PASS: native source SHA256 $actual"
 
       - name: Generate native application icon
