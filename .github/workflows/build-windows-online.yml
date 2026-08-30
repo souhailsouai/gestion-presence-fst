@@ -70,7 +70,6 @@ jobs:
             -c Release `
             -r win-x64 `
             --self-contained true `
-            --no-restore `
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:PublishTrimmed=false `
