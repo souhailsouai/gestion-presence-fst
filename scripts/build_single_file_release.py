@@ -7,6 +7,9 @@ html_path = root / 'web' / 'index.html'
 runtime_path = root / 'web' / 'online-runtime.js'
 fixes_path = root / 'web' / 'online-fixes.js'
 access_path = root / 'web' / 'access-control.js'
+permissions_path = root / 'web' / 'session-permissions.js'
+editing_path = root / 'web' / 'session-editing.js'
+statistics_path = root / 'web' / 'statistics.js'
 report_path = root / 'web' / 'report-pdf.js'
 vendor = root / 'web' / 'vendor'
 vendor.mkdir(parents=True, exist_ok=True)
@@ -30,6 +33,9 @@ autotable = (vendor / 'jspdf.plugin.autotable.min.js').read_text(encoding='utf-8
 runtime = runtime_path.read_text(encoding='utf-8').strip()
 fixes = fixes_path.read_text(encoding='utf-8').strip()
 access = access_path.read_text(encoding='utf-8').strip()
+permissions = permissions_path.read_text(encoding='utf-8').strip()
+editing = editing_path.read_text(encoding='utf-8').strip()
+statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
 
 inline = (
@@ -37,13 +43,17 @@ inline = (
     '<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
     '<script data-fst-online-fixes="inline">\n' + fixes + '\n</script>\n'
     '<script data-fst-access-control="inline">\n' + access + '\n</script>\n'
+    '<script data-fst-session-permissions="inline">\n' + permissions + '\n</script>\n'
+    '<script data-fst-session-editing="inline">\n' + editing + '\n</script>\n'
+    '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
 )
 html = html.replace('</body>', inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
 
 for marker in ['window.FSTOnlineRuntime=', 'window.loadData=async function', 'Connexion Internet requise',
-               'data-fst-pdf-engine="inline"', 'window.FSTAccessControl=', 'window.FSTPdf=', 'Lecture seule']:
+               'data-fst-pdf-engine="inline"', 'window.FSTAccessControl=', 'FSTSessionPermissions',
+               'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques', 'window.FSTPdf=', 'Lecture seule']:
     assert marker in html, marker
 assert './online-runtime.js' not in html
 assert './online-fixes.js' not in html
