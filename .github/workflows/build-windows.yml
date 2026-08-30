@@ -1,0 +1,42 @@
+name: Build Windows App
+
+on:
+  push:
+    branches: [ fix/session-notes-analytics ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Prepare web source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force web | Out-Null
+          Copy-Item app/src/main/assets/index.html web/index.html -Force
+          if (-not (Test-Path shared/patch/fst_patch.js)) { throw 'fst_patch.js missing' }
+          if (-not (Test-Path shared/patch/fst_patch.css)) { throw 'fst_patch.css missing' }
+      - name: Publish Windows x64
+        shell: pwsh
+        run: dotnet publish windows/GestionPresenceFST/GestionPresenceFST.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o windows-publish
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (-not (Test-Path windows-publish/Gestion-Presence-FST.exe)) { throw 'Windows executable missing' }
+          if (-not (Test-Path windows-publish/web/index.html)) { throw 'Embedded HTML missing' }
+          if (-not (Test-Path windows-publish/web/fst_patch.js)) { throw 'Shared JS patch missing' }
+      - name: Upload Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Windows-v1.2.1
+          path: windows-publish/**
+          if-no-files-found: error
