@@ -7,6 +7,7 @@ html_path = root / 'web' / 'index.html'
 runtime_path = root / 'web' / 'online-runtime.js'
 fixes_path = root / 'web' / 'online-fixes.js'
 access_path = root / 'web' / 'access-control.js'
+attendance_policy_path = root / 'web' / 'attendance-policy.js'
 permissions_path = root / 'web' / 'session-permissions.js'
 editing_path = root / 'web' / 'session-editing.js'
 statistics_path = root / 'web' / 'statistics.js'
@@ -33,6 +34,7 @@ autotable = (vendor / 'jspdf.plugin.autotable.min.js').read_text(encoding='utf-8
 runtime = runtime_path.read_text(encoding='utf-8').strip()
 fixes = fixes_path.read_text(encoding='utf-8').strip()
 access = access_path.read_text(encoding='utf-8').strip()
+attendance_policy = attendance_policy_path.read_text(encoding='utf-8').strip()
 permissions = permissions_path.read_text(encoding='utf-8').strip()
 editing = editing_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
@@ -43,6 +45,7 @@ inline = (
     '<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
     '<script data-fst-online-fixes="inline">\n' + fixes + '\n</script>\n'
     '<script data-fst-access-control="inline">\n' + access + '\n</script>\n'
+    '<script data-fst-attendance-policy="inline">\n' + attendance_policy + '\n</script>\n'
     '<script data-fst-session-permissions="inline">\n' + permissions + '\n</script>\n'
     '<script data-fst-session-editing="inline">\n' + editing + '\n</script>\n'
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
@@ -51,9 +54,13 @@ inline = (
 html = html.replace('</body>', inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
 
-for marker in ['window.FSTOnlineRuntime=', 'window.loadData=async function', 'Connexion Internet requise',
-               'data-fst-pdf-engine="inline"', 'window.FSTAccessControl=', 'FSTSessionPermissions',
-               'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques', 'window.FSTPdf=', 'Lecture seule']:
+for marker in [
+    'window.FSTOnlineRuntime=', 'window.loadData=async function', 'Connexion Internet requise',
+    'data-fst-pdf-engine="inline"', 'window.FSTAccessControl=', 'grade_only',
+    'FSTSessionPermissions', 'FSTSessionEditing', 'FSTStatistics',
+    'Statistiques et graphiques', 'Répartition des notes', 'Comparaison par module',
+    'PDF statistiques', 'window.FSTPdf=', 'Lecture seule'
+]:
     assert marker in html, marker
 assert './online-runtime.js' not in html
 assert './online-fixes.js' not in html
