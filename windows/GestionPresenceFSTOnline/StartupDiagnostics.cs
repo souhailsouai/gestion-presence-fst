@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+
 namespace GestionPresenceFSTOnline;
 
 public static class StartupDiagnostics
