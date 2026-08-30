@@ -1,40 +1,42 @@
-name: Build Android APK
+name: Build Legacy Android WebView APK (Manual)
 
 on:
-  push:
-    branches:
-      - feature/windows-online-realtime
-      - main
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Compatibility-only workflow. The official Android release is built by
+# .github/workflows/verify-native-android.yml from the app-native module.
 jobs:
-  build:
+  build-legacy-webview:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build shared final HTML
+
+      - name: Build shared compatibility HTML
         run: |
           python scripts/build_online_web.py
           python scripts/build_single_file_release.py
@@ -44,13 +46,16 @@ jobs:
           grep -q 'data-fst-pdf-engine="inline"' app/src/main/assets/index.html
           grep -q 'AndroidPdfBridge' app/src/main/assets/index.html
           grep -q 'Lecture seule' app/src/main/assets/index.html
-      - name: Build debug APK
+
+      - name: Build compatibility APK
         run: gradle :app:assembleDebug --stacktrace
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Gestion-Presence-FST-2026-2027.apk
-      - name: Upload APK
+
+      - name: Package compatibility APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk Gestion-Presence-FST-Android-Legacy-WebView.apk
+
+      - name: Upload compatibility APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Android
-          path: Gestion-Presence-FST-2026-2027.apk
+          name: Gestion-Presence-FST-Android-Legacy-WebView
+          path: Gestion-Presence-FST-Android-Legacy-WebView.apk
           if-no-files-found: error
