@@ -23,8 +23,14 @@ jobs:
         run: |
           python scripts/build_online_web.py
           python scripts/build_single_file_release.py
-      - name: Test shared web
+      - name: Test shared web and PDF generation
         run: node --test tests/web/*.test.cjs
+      - name: Upload final HTML
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-HTML-Final
+          path: web/index.html
       - name: Restore Windows tests
         run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
       - name: Test Windows host
