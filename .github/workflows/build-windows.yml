@@ -45,15 +45,20 @@ jobs:
           Copy-Item 'windows/native-overrides/ImportExportService.cs' 'windows/GestionPresenceFST/Services/ImportExportService.cs' -Force
           Copy-Item 'windows/native-overrides/PdfService.cs' 'windows/GestionPresenceFST/Services/PdfService.cs' -Force
           pwsh 'windows/native-overrides/apply-compile-fixes.ps1'
-      - name: Diagnose PIN authentication flow
+      - name: Generate native application icon
         shell: pwsh
         run: |
-          Write-Host '=== Native PIN references ==='
-          Get-ChildItem 'windows/GestionPresenceFST' -Recurse -File -Include *.cs,*.xaml |
-            Select-String -Pattern 'pin|PIN|incorrect|auth|login|signIn|SignIn|credential|admin-pin-login' -Context 5,5 |
-            ForEach-Object { $_.ToString() }
-          Write-Host '=== Web PIN references ==='
-          Select-String -Path 'gestion_presence_tp_theme_institutionnel.html' -Pattern 'pin|PIN|incorrect|auth|login|signIn|SignIn|credential|admin-pin-login' -Context 5,5 |
-            Select-Object -First 300 |
-            ForEach-Object { $_.ToString() }
-          throw 'DIAGNOSTIC_COMPLETE'
+          python -m pip install --disable-pip-version-check pillow
+          New-Item -ItemType Directory -Force 'windows/GestionPresenceFST/Assets' | Out-Null
+          @'
+          from PIL import Image
+          img = Image.new('RGBA', (256, 256), (8, 78, 139, 255))
+          img.save('windows/GestionPresenceFST/Assets/GestionPresenceFST.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          '@ | Set-Content -Encoding UTF8 generate_icon.py
+          python generate_icon.py
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj
+      - name: Test PIN authentication regression
+        shell: pwsh
+        run: dotnet test windows/GestionPresenceFST.Tests/GestionPresenceFST.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PinAuthenticationRegressionTests
