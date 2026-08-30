@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, feature/mobile-native-like-v2 ]
+    branches: [ main, feature/mobile-native-like-v2, fix/session-notes-analytics ]
   workflow_dispatch:
 
 permissions:
@@ -28,13 +28,16 @@ jobs:
           test -s app/src/main/assets/index.html
           test -s app/src/main/assets/mobile.css
           test -s app/src/main/assets/mobile.js
+          test -s shared/patch/fst_patch.css
+          test -s shared/patch/fst_patch.js
+          node --check shared/patch/fst_patch.js
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Gestion-Presence-FST-2026-2027.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Gestion-Presence-FST-2026-2027-v1.2.1.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Android
-          path: Gestion-Presence-FST-2026-2027.apk
+          name: Gestion-Presence-FST-Android-v1.2.1
+          path: Gestion-Presence-FST-2026-2027-v1.2.1.apk
           if-no-files-found: error
