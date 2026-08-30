@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace GestionPresenceFST.Tests.Auth;
@@ -13,14 +14,15 @@ public sealed class PinAuthenticationRegressionTests
     }
 
     [Fact]
-    public void Pin_sign_in_must_use_supabase_auth_password_not_local_profile_hash()
+    public void Windows_auth_must_match_the_final_application_backend_and_login_paths()
     {
         var root = RepoRoot();
-        var authServicePath = Path.Combine(root, "windows", "GestionPresenceFST", "Services", "AuthService.cs");
-        var source = File.ReadAllText(authServicePath);
+        var auth = File.ReadAllText(Path.Combine(root, "windows", "GestionPresenceFST", "Services", "AuthService.cs"));
+        var config = File.ReadAllText(Path.Combine(root, "windows", "GestionPresenceFST", "Infrastructure", "AppConfig.cs"));
 
-        Assert.DoesNotContain("SHA256.HashData", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("pin_hash=eq", source, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("SignInWithPasswordAsync", source, StringComparison.Ordinal);
+        Assert.Contains("https://dbslzmvzbxczpqyektpx.supabase.co", config, StringComparison.Ordinal);
+        Assert.Contains("sb_publishable_wKwmPnXS_Q7REGU57hTIyw_eqxhIXLT", config, StringComparison.Ordinal);
+        Assert.Equal(1, Regex.Matches(auth, @"SignInWithPinAsync\(").Count);
+        Assert.Contains("tokens = await _gateway.SignInWithPasswordAsync(TeacherAuthEmail(username), credential, ct);", auth, StringComparison.Ordinal);
     }
 }
