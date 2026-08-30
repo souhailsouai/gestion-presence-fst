@@ -16,9 +16,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: secure-web-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-web:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +67,7 @@ jobs:
           cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
           cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
           sha256sum dist/web/* > dist/web/SHA256SUMS.txt
+          sha256sum --check dist/web/SHA256SUMS.txt
 
       - name: Upload secure Web application
         uses: actions/upload-artifact@v4
