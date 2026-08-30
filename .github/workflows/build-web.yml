@@ -1,0 +1,71 @@
+name: Build Secure Web Application
+
+on:
+  push:
+    branches: [ release/final-cross-platform-2026-2027 ]
+    paths:
+      - 'gestion_presence_tp_theme_institutionnel.html'
+      - 'web/**'
+      - 'scripts/build_online_web.py'
+      - 'scripts/build_single_file_release.py'
+      - 'scripts/web-superadmin.patch.part*'
+      - 'tests/web/**'
+      - '.github/workflows/build-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify JavaScript syntax and contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/security-v2.js
+          for test in tests/web/*.test.cjs; do
+            node "$test"
+          done
+
+      - name: Build online Web application
+        run: python scripts/build_online_web.py
+
+      - name: Build standalone Web release
+        run: python scripts/build_single_file_release.py
+
+      - name: Verify final Web artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s web/index.html
+          grep -Fq 'data-fst-security-v2="inline"' web/index.html
+          grep -Fq 'save_attendance_sheet' web/index.html
+          grep -Fq 'challengeAndVerify' web/index.html
+          grep -Fq 'VERSION_CONFLICT' web/index.html
+          ! grep -Fq './security-v2.js' web/index.html
+          mkdir -p dist/web
+          cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
+          cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
+          sha256sum dist/web/* > dist/web/SHA256SUMS.txt
+
+      - name: Upload secure Web application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestion-Presence-FST-Web-v2.0.0
+          path: dist/web/**
+          if-no-files-found: error
