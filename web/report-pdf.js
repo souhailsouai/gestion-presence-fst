@@ -21,7 +21,7 @@
     const s=sessionById(sessionId);if(!s)throw new Error('Séance introuvable.');
     if(!acl()?.canManageRecord(s))throw new Error('Cette séance est en lecture seule.');
     const c=classFor(s);const students=(data.students||[]).filter(st=>String(st.classId)===String(s.classId));
-    return {institution:INSTITUTION_NAME,academicYear:YEAR,teacher:teacherName(s.teacherId),track:c?.track||'—',classNumber:c?.classNumber||'—',groupNumber:c?.groupNumber||'—',module:c?.module||'—',date:s.date,start:s.start,end:s.end,room:c?.room||'—',students:students.map(st=>{const a=(data.attendance||[]).find(x=>String(x.sessionId)===String(s.id)&&String(x.studentId)===String(st.id));return{name:`${st.lastname} ${st.firstname}`,status:a?.status||'Non saisi',comment:a?.comment||'—',grade:a?.grade==null?'—':`${a.grade} /20`};})};
+    return {institution:INSTITUTION_NAME,academicYear:YEAR,teacher:teacherName(s.teacherId),track:c?.track||'—',classNumber:c?.classNumber||'—',groupNumber:c?.groupNumber||'—',module:c?.module||'—',date:s.date,start:s.start,end:s.end,room:c?.room||'—',students:students.map(st=>{const a=(data.attendance||[]).find(x=>String(x.sessionId)===String(s.id)&&String(x.studentId)===String(st.id));return{name:`${st.lastname} ${st.firstname}`,status:a?.gradeOnly?'Non saisi':(a?.status||'Non saisi'),comment:a?.comment||'—',grade:a?.grade==null?'—':`${a.grade} /20`};})};
   }
   function addHeader(doc,title,model){doc.setFontSize(14);doc.text(title,14,16);doc.setFontSize(9);[model.institution,`Année universitaire : ${model.academicYear}`,`Enseignant : ${model.teacher}`].forEach((x,i)=>doc.text(String(x),14,23+i*5));}
   function generateSessionPdf(sessionId){
@@ -31,7 +31,7 @@
     const admin=acl()?.isAdmin(),own=String(currentTeacher?.id||''),target=admin?(requestedTeacherId?String(requestedTeacherId):null):own;
     if(!admin&&requestedTeacherId&&String(requestedTeacherId)!==own)throw new Error('Rapport non autorisé.');
     const sessions=(data.sessions||[]).filter(s=>!target||String(s.teacherId)===target),groups=new Map();
-    for(const s of sessions){const tid=String(s.teacherId);if(!groups.has(tid))groups.set(tid,{teacherId:tid,teacher:teacherName(tid),rows:[]});const c=classFor(s),ownStudents=(data.students||[]).filter(st=>String(st.classId)===String(s.classId)&&(!st.teacherId||String(st.teacherId)===tid)),attendance=(data.attendance||[]).filter(a=>String(a.sessionId)===String(s.id));groups.get(tid).rows.push({date:s.date,time:`${s.start}-${s.end}`,className:c?.name||'—',module:c?.module||'—',room:c?.room||'—',students:ownStudents.length,attendance:attendance.length});}
+    for(const s of sessions){const tid=String(s.teacherId);if(!groups.has(tid))groups.set(tid,{teacherId:tid,teacher:teacherName(tid),rows:[]});const c=classFor(s),ownStudents=(data.students||[]).filter(st=>String(st.classId)===String(s.classId)&&(!st.teacherId||String(st.teacherId)===tid)),attendance=(data.attendance||[]).filter(a=>String(a.sessionId)===String(s.id)&&!a.gradeOnly);groups.get(tid).rows.push({date:s.date,time:`${s.start}-${s.end}`,className:c?.name||'—',module:c?.module||'—',room:c?.room||'—',students:ownStudents.length,attendance:attendance.length});}
     return {institution:INSTITUTION_NAME,academicYear:YEAR,groups:[...groups.values()]};
   }
   function generateGeneralPdf(requestedTeacherId){
