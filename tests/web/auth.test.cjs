@@ -1,0 +1,10 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const src = fs.readFileSync('web/auth.js', 'utf8');
+assert.equal((src.match(/FSTApp\.auth\.login\s*=/g) || []).length, 1);
+assert.equal((src.match(/FSTApp\.auth\.restoreSession\s*=/g) || []).length, 1);
+assert.doesNotMatch(src, /mfa|totp|challengeAndVerify|auth\.mfa/i);
+assert.match(src, /requestedMode === 'admin'/);
+assert.match(src, /profile\.(?:is_admin|role)/);
+assert.match(src, /normalizeIdentifier/);
+console.log('PASS: unified authentication contract');
