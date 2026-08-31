@@ -62,10 +62,10 @@ jobs:
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'VERSION_CONFLICT' web/index.html
           grep -Fq 'data-fst-supabase="inline"' web/index.html
-          ! grep -Fq 'challengeAndVerify' web/index.html
-          ! grep -Fq 'auth.mfa.' web/index.html
           ! grep -Fq './security-v2.js' web/index.html
           ! grep -Fq 'cdn.jsdelivr.net/npm/@supabase/supabase-js' web/index.html
+          ! grep -Fq 'auth.mfa.' web/security-v2.js
+          ! grep -Fq 'challengeAndVerify' web/security-v2.js
           mkdir -p dist/web
           cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
           cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
