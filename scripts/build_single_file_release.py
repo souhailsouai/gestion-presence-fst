@@ -18,6 +18,7 @@ vendor = root / 'web' / 'vendor'
 vendor.mkdir(parents=True, exist_ok=True)
 
 assets = {
+    vendor / 'supabase.min.js': 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js',
     vendor / 'jspdf.umd.min.js': 'https://raw.githubusercontent.com/parallax/jsPDF/v4.2.1/dist/jspdf.umd.min.js',
     vendor / 'jspdf.plugin.autotable.min.js': 'https://raw.githubusercontent.com/simonbengtsson/jsPDF-AutoTable/v5.0.8/dist/jspdf.plugin.autotable.min.js',
 }
@@ -29,8 +30,18 @@ for path, url in assets.items():
 html = html_path.read_text(encoding='utf-8')
 for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './no-mfa.js']:
     html = html.replace(f'<script src="{src}"></script>', '')
+html = re.sub(
+    r'\s*<script[^>]+src=["\'][^"\']*cdn\.jsdelivr\.net/npm/@supabase/supabase-js@2\.57\.4/dist/umd/supabase\.min\.js["\'][^>]*></script>',
+    '',
+    html,
+    flags=re.I,
+)
 html = re.sub(r'\s*<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', '', html, flags=re.I)
 
+# The empty placeholder is replaced wholesale by renderAuthScreen(); it does not need a duplicate id.
+html = html.replace('<div class="auth-box" id="auth-box"></div>', '<div class="auth-box" data-auth-placeholder="true"></div>', 1)
+
+supabase = (vendor / 'supabase.min.js').read_text(encoding='utf-8').strip()
 jspdf = (vendor / 'jspdf.umd.min.js').read_text(encoding='utf-8').strip()
 autotable = (vendor / 'jspdf.plugin.autotable.min.js').read_text(encoding='utf-8').strip()
 runtime = runtime_path.read_text(encoding='utf-8').strip()
@@ -45,7 +56,8 @@ statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
 
 inline = (
-    '\n<script data-fst-pdf-engine="inline">\n' + jspdf + '\n' + autotable + '\n</script>\n'
+    '\n<script data-fst-supabase="inline">\n' + supabase + '\n</script>\n'
+    '<script data-fst-pdf-engine="inline">\n' + jspdf + '\n' + autotable + '\n</script>\n'
     '<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
     '<script data-fst-online-fixes="inline">\n' + fixes + '\n</script>\n'
     '<script data-fst-security-v2="inline">\n' + security + '\n</script>\n'
@@ -63,7 +75,8 @@ html_path.write_text(html, encoding='utf-8')
 for marker in [
     'window.FSTOnlineRuntime=', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
     'VERSION_CONFLICT', 'Connexion Internet requise', 'window.FSTMfaDisabled = true',
-    'data-fst-pdf-engine="inline"', 'data-fst-security-v2="inline"', 'data-fst-no-mfa="inline"',
+    'data-fst-supabase="inline"', 'data-fst-pdf-engine="inline"',
+    'data-fst-security-v2="inline"', 'data-fst-no-mfa="inline"',
     'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions',
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
@@ -72,5 +85,13 @@ for marker in [
     assert marker in html, marker
 for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './no-mfa.js']:
     assert src not in html
+assert 'cdn.jsdelivr.net/npm/@supabase/supabase-js' not in html
+assert 'challengeAndVerify' not in html
+assert 'auth.mfa.' not in html
 assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
+
+ids = re.findall(r'\bid=["\']([^"\']+)["\']', html, flags=re.I)
+duplicates = sorted({value for value in ids if ids.count(value) > 1})
+assert not duplicates, f'duplicate HTML ids: {duplicates}'
+
 print(html_path)
