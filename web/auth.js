@@ -1,24 +1,24 @@
 (() => {
   'use strict';
   const FSTApp = window.FSTApp = window.FSTApp || {};
-  const auth = FSTApp.auth = FSTApp.auth || {};
+  FSTApp.auth = FSTApp.auth || {};
 
-  auth.normalizeIdentifier = function normalizeIdentifier(value) {
+  FSTApp.auth.normalizeIdentifier = function normalizeIdentifier(value) {
     return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
   };
-  auth.isAdminProfile = function isAdminProfile(profile) {
+  FSTApp.auth.isAdminProfile = function isAdminProfile(profile) {
     return Boolean(profile && (profile.is_admin === true || profile.role === 'admin'));
   };
 
-  auth.login = async function login({ identifier, secret, requestedMode = 'teacher' }) {
+  FSTApp.auth.login = async function login({ identifier, secret, requestedMode = 'teacher' }) {
     if (!navigator.onLine) throw new Error('Connexion Internet requise.');
-    const normalized = auth.normalizeIdentifier(identifier);
+    const normalized = FSTApp.auth.normalizeIdentifier(identifier);
     if (!normalized || !String(secret || '')) throw new Error('Saisissez votre identifiant et votre mot de passe ou PIN.');
     let session = null;
     try {
       session = await FSTApp.api.invokePinLogin(normalized, String(secret));
       const profile = await FSTApp.api.profile(session.user.id);
-      if (requestedMode === 'admin' && !auth.isAdminProfile(profile)) throw new Error('Ce compte ne possède pas les droits administrateur.');
+      if (requestedMode === 'admin' && !FSTApp.auth.isAdminProfile(profile)) throw new Error('Ce compte ne possède pas les droits administrateur.');
       const mode = requestedMode === 'admin' ? 'admin' : 'teacher';
       FSTApp.state.session = session;
       FSTApp.state.profile = profile;
@@ -32,7 +32,7 @@
     }
   };
 
-  auth.restoreSession = async function restoreSession() {
+  FSTApp.auth.restoreSession = async function restoreSession() {
     if (!navigator.onLine) return null;
     const { data, error } = await FSTApp.api.client().auth.getSession();
     if (error || !data?.session?.user) return null;
@@ -40,7 +40,7 @@
       const profile = await FSTApp.api.profile(data.session.user.id);
       let mode = 'teacher';
       try { mode = localStorage.getItem('presence_active_mode') || 'teacher'; } catch (_) {}
-      if (mode === 'admin' && !auth.isAdminProfile(profile)) mode = 'teacher';
+      if (mode === 'admin' && !FSTApp.auth.isAdminProfile(profile)) mode = 'teacher';
       FSTApp.state.session = data.session;
       FSTApp.state.profile = profile;
       FSTApp.state.mode = mode;
@@ -52,7 +52,7 @@
     }
   };
 
-  auth.logout = async function logout() {
+  FSTApp.auth.logout = async function logout() {
     try { await FSTApp.api.client().auth.signOut(); } catch (_) {}
     FSTApp.state.session = null;
     FSTApp.state.profile = null;
