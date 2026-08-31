@@ -8,7 +8,9 @@ const source = fs.readFileSync(path.join(root, 'web/security-v2.js'), 'utf8');
 new Function(source);
 
 for (const marker of [
-  "functions.invoke('pin-login'",
+  "'pin-login'",
+  "'password-login'",
+  'functions.invoke(endpoint',
   "rpc('get_attendance_sheet'",
   "rpc('save_attendance_sheet'",
   'p_expected_revision',
