@@ -1,0 +1,10 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const src = fs.readFileSync('web/administration.js', 'utf8');
+assert.match(src, /isAdminProfile/);
+assert.match(src, /profile/);
+assert.doesNotMatch(src, /requestedMode.*return true/);
+assert.match(src, /teachers/);
+assert.match(src, /students/);
+assert.match(src, /timetable/);
+console.log('PASS: server-profile role gating contract');
