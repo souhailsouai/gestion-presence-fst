@@ -1,0 +1,11 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const src = fs.readFileSync('web/attendance.js', 'utf8');
+assert.match(src, /save_attendance_sheet/);
+assert.match(src, /expected_revision/);
+assert.match(src, /operation_id/);
+assert.match(src, /crypto\.randomUUID/);
+assert.match(src, /VERSION_CONFLICT/);
+assert.match(src, /navigator\.onLine/);
+assert.doesNotMatch(src, /syncQueue|QUEUE_KEY|localStorage\.setItem\([^)]*attendance/i);
+console.log('PASS: revision-safe attendance contract');
