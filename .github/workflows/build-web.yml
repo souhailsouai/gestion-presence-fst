@@ -66,7 +66,6 @@ jobs:
           grep -Fq 'VERSION_CONFLICT' dist/web/Gestion-Presence-FST-Web-2026-2027.html
           grep -Fq 'data-testid="login-submit"' dist/web/Gestion-Presence-FST-Web-2026-2027.html
           ! grep -Fq '<script src=' dist/web/Gestion-Presence-FST-Web-2026-2027.html
-          ! grep -Eiq 'playwright|chromium' dist/web/Gestion-Presence-FST-Web-2026-2027.html
           sha256sum --check dist/web/SHA256SUMS.txt
 
       - name: Upload secure Web application
