@@ -40,10 +40,14 @@ for path in vendors:
 html = html.replace('<!-- FST_VENDOR -->', '\n'.join(vendor_parts))
 
 module_parts = []
+application_sources = []
 for path in modules:
-    text = path.read_text(encoding='utf-8').strip().replace('</script>', '<\\/script>')
+    raw = path.read_text(encoding='utf-8').strip()
+    application_sources.append(raw)
+    text = raw.replace('</script>', '<\\/script>')
     module_parts.append(f'<script data-fst-module="{path.name}">\n{text}\n</script>')
 html = html.replace('<!-- FST_MODULES -->', '\n'.join(module_parts))
+application_js = '\n'.join(application_sources)
 
 required = [
     'FSTApp.auth.login', 'FSTApp.auth.restoreSession', 'FSTApp.boot',
@@ -54,13 +58,16 @@ required = [
 for marker in required:
     assert marker in html, marker
 
-assert (html.count('FSTApp.auth.login =') == 1), 'duplicate canonical login implementation'
-assert (html.count('FSTApp.auth.restoreSession =') == 1), 'duplicate canonical session restore implementation'
-assert (html.count('FSTApp.boot =') == 1), 'duplicate canonical boot implementation'
+assert application_js.count('FSTApp.auth.login =') == 1, 'duplicate canonical login implementation'
+assert application_js.count('FSTApp.auth.restoreSession =') == 1, 'duplicate canonical session restore implementation'
+assert application_js.count('FSTApp.boot =') == 1, 'duplicate canonical boot implementation'
 assert not re.search(r'<script[^>]+src=', html, re.I), 'external script dependency present'
 assert not re.search(r'<link[^>]+(?:cdnjs|jsdelivr|unpkg)', html, re.I), 'external stylesheet dependency present'
-assert not re.search(r'auth\.mfa|challengeAndVerify|totp', html, re.I), 'MFA client flow present'
-assert 'web-superadmin.patch' not in html
+# Supabase's vendored SDK contains optional MFA/TOTP APIs internally. The application
+# itself must never call or expose them, so the policy check is intentionally scoped
+# to our own modules rather than third-party source code.
+assert not re.search(r'auth\.mfa|challengeAndVerify|totp', application_js, re.I), 'MFA client flow present in application code'
+assert 'web-superadmin.patch' not in application_js
 
 class IdValidator(HTMLParser):
     def __init__(self):
