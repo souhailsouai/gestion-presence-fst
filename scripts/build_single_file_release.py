@@ -1,119 +1,86 @@
 from pathlib import Path
-from urllib.request import urlopen
 from html.parser import HTMLParser
+import hashlib
 import re
 
 root = Path(__file__).resolve().parents[1]
-html_path = root / 'web' / 'index.html'
-runtime_path = root / 'web' / 'online-runtime.js'
-fixes_path = root / 'web' / 'online-fixes.js'
-security_path = root / 'web' / 'security-v2.js'
-no_mfa_path = root / 'web' / 'no-mfa.js'
-access_path = root / 'web' / 'access-control.js'
-attendance_policy_path = root / 'web' / 'attendance-policy.js'
-permissions_path = root / 'web' / 'session-permissions.js'
-editing_path = root / 'web' / 'session-editing.js'
-statistics_path = root / 'web' / 'statistics.js'
-report_path = root / 'web' / 'report-pdf.js'
-vendor = root / 'web' / 'vendor'
-vendor.mkdir(parents=True, exist_ok=True)
+web = root / 'web'
+template = web / 'index.template.html'
+styles = web / 'styles.css'
+vendor = web / 'vendor'
+out = web / 'index.html'
+dist = root / 'dist' / 'web'
+dist.mkdir(parents=True, exist_ok=True)
+release = dist / 'Gestion-Presence-FST-Web-2026-2027.html'
+checksum = dist / 'SHA256SUMS.txt'
 
-assets = {
-    vendor / 'supabase.min.js': 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js',
-    vendor / 'jspdf.umd.min.js': 'https://raw.githubusercontent.com/parallax/jsPDF/v4.2.1/dist/jspdf.umd.min.js',
-    vendor / 'jspdf.plugin.autotable.min.js': 'https://raw.githubusercontent.com/simonbengtsson/jsPDF-AutoTable/v5.0.8/dist/jspdf.plugin.autotable.min.js',
-}
-for path, url in assets.items():
-    if not path.exists() or path.stat().st_size < 1000:
-        with urlopen(url, timeout=60) as response:
-            path.write_bytes(response.read())
+modules = [
+    web / 'ui.js',
+    web / 'api.js',
+    web / 'auth.js',
+    web / 'attendance.js',
+    web / 'administration.js',
+    web / 'reports.js',
+    web / 'app-shell.js',
+]
+vendors = [
+    vendor / 'supabase.min.js',
+    vendor / 'jspdf.umd.min.js',
+    vendor / 'jspdf.plugin.autotable.min.js',
+]
 
-html = html_path.read_text(encoding='utf-8')
-for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './no-mfa.js']:
-    html = html.replace(f'<script src="{src}"></script>', '')
-html = re.sub(
-    r'\s*<script[^>]+src=["\'][^"\']*cdn\.jsdelivr\.net/npm/@supabase/supabase-js@2\.57\.4/dist/umd/supabase\.min\.js["\'][^>]*></script>',
-    '',
-    html,
-    flags=re.I,
-)
-html = re.sub(r'\s*<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', '', html, flags=re.I)
+html = template.read_text(encoding='utf-8')
+css = styles.read_text(encoding='utf-8').strip()
+html = html.replace('<!-- FST_STYLES -->', f'<style data-fst-styles="inline">\n{css}\n</style>')
 
-# The empty placeholder is replaced wholesale by renderAuthScreen(); it does not need a duplicate id.
-html = html.replace('<div class="auth-box" id="auth-box"></div>', '<div class="auth-box" data-auth-placeholder="true"></div>', 1)
+vendor_parts = []
+for path in vendors:
+    text = path.read_text(encoding='utf-8').strip().replace('</script>', '<\\/script>')
+    vendor_parts.append(f'<script data-fst-vendor="{path.name}">\n{text}\n</script>')
+html = html.replace('<!-- FST_VENDOR -->', '\n'.join(vendor_parts))
 
-supabase = (vendor / 'supabase.min.js').read_text(encoding='utf-8').strip()
-jspdf = (vendor / 'jspdf.umd.min.js').read_text(encoding='utf-8').strip()
-autotable = (vendor / 'jspdf.plugin.autotable.min.js').read_text(encoding='utf-8').strip()
-runtime = runtime_path.read_text(encoding='utf-8').strip()
-fixes = fixes_path.read_text(encoding='utf-8').strip()
-security = security_path.read_text(encoding='utf-8').strip()
-no_mfa = no_mfa_path.read_text(encoding='utf-8').strip()
-access = access_path.read_text(encoding='utf-8').strip()
-attendance_policy = attendance_policy_path.read_text(encoding='utf-8').strip()
-permissions = permissions_path.read_text(encoding='utf-8').strip()
-editing = editing_path.read_text(encoding='utf-8').strip()
-statistics = statistics_path.read_text(encoding='utf-8').strip()
-report = report_path.read_text(encoding='utf-8').strip()
+module_parts = []
+for path in modules:
+    text = path.read_text(encoding='utf-8').strip().replace('</script>', '<\\/script>')
+    module_parts.append(f'<script data-fst-module="{path.name}">\n{text}\n</script>')
+html = html.replace('<!-- FST_MODULES -->', '\n'.join(module_parts))
 
-# Critical dependencies must execute before the legacy application script, which creates
-# the Supabase client at parse time. Appending them at </body> leaves the login screen blank.
-vendor_inline = (
-    '\n<script data-fst-supabase="inline">\n' + supabase + '\n</script>\n'
-    '<script data-fst-pdf-engine="inline">\n' + jspdf + '\n' + autotable + '\n</script>\n'
-)
-first_script = re.search(r'<script\b', html, re.I)
-assert first_script, 'base HTML must contain application JavaScript'
-html = html[:first_script.start()] + vendor_inline + html[first_script.start():]
-
-application_inline = (
-    '\n<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
-    '<script data-fst-online-fixes="inline">\n' + fixes + '\n</script>\n'
-    '<script data-fst-security-v2="inline">\n' + security + '\n</script>\n'
-    '<script data-fst-no-mfa="inline">\n' + no_mfa + '\n</script>\n'
-    '<script data-fst-access-control="inline">\n' + access + '\n</script>\n'
-    '<script data-fst-attendance-policy="inline">\n' + attendance_policy + '\n</script>\n'
-    '<script data-fst-session-permissions="inline">\n' + permissions + '\n</script>\n'
-    '<script data-fst-session-editing="inline">\n' + editing + '\n</script>\n'
-    '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
-    '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
-)
-html = html.replace('</body>', application_inline + '</body>', 1)
-html_path.write_text(html, encoding='utf-8')
-
-for marker in [
-    'window.FSTOnlineRuntime=', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
-    'VERSION_CONFLICT', 'Connexion Internet requise', 'window.FSTMfaDisabled = true',
-    'data-fst-supabase="inline"', 'data-fst-pdf-engine="inline"',
-    'data-fst-security-v2="inline"', 'data-fst-no-mfa="inline"',
-    'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions',
-    'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
-    'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
-    'window.FSTPdf=', 'Lecture seule'
-]:
+required = [
+    'FSTApp.auth.login', 'FSTApp.auth.restoreSession', 'FSTApp.boot',
+    'pin-login', 'save_attendance_sheet', 'VERSION_CONFLICT', '2026/2027',
+    'data-testid="login-identifier"', 'data-testid="login-secret"', 'data-testid="login-submit"',
+    'Statistiques et graphiques', 'Répartition des notes', 'Comparaison par module', 'Lecture seule'
+]
+for marker in required:
     assert marker in html, marker
-for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './no-mfa.js']:
-    assert src not in html
-assert 'cdn.jsdelivr.net/npm/@supabase/supabase-js' not in html
-assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
-assert html.index('data-fst-supabase="inline"') < html.index('supabase.createClient')
+
+assert (html.count('FSTApp.auth.login =') == 1), 'duplicate canonical login implementation'
+assert (html.count('FSTApp.auth.restoreSession =') == 1), 'duplicate canonical session restore implementation'
+assert (html.count('FSTApp.boot =') == 1), 'duplicate canonical boot implementation'
+assert not re.search(r'<script[^>]+src=', html, re.I), 'external script dependency present'
+assert not re.search(r'<link[^>]+(?:cdnjs|jsdelivr|unpkg)', html, re.I), 'external stylesheet dependency present'
+assert not re.search(r'auth\.mfa|challengeAndVerify|totp', html, re.I), 'MFA client flow present'
+assert 'web-superadmin.patch' not in html
 
 class IdValidator(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.ids = []
-
     def handle_starttag(self, tag, attrs):
         for name, value in attrs:
             if name.lower() == 'id' and value:
                 self.ids.append(value)
-
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
 
 validator = IdValidator()
 validator.feed(html)
 duplicates = sorted({value for value in validator.ids if validator.ids.count(value) > 1})
-assert not duplicates, f'duplicate live HTML ids: {duplicates}'
+assert not duplicates, f'duplicate static HTML ids: {duplicates}'
 
-print(html_path)
+out.write_text(html, encoding='utf-8')
+release.write_text(html, encoding='utf-8')
+digest = hashlib.sha256(release.read_bytes()).hexdigest()
+checksum.write_text(f'{digest}  {release.name}\n', encoding='utf-8')
+print(release)
+print(digest)
