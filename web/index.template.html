@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Gestion de présence — FST</title>
+  <!-- FST_STYLES -->
+</head>
+<body>
+  <main id="app-root" data-testid="app-root">
+    <section class="login-page" data-testid="login-screen" aria-labelledby="login-title">
+      <div class="login-brand">
+        <div class="brand-mark" aria-hidden="true">FST</div>
+        <div>
+          <p class="eyebrow">Université de Tunis El Manar</p>
+          <h1 id="login-title">Gestion de présence des TP</h1>
+          <p class="brand-subtitle">Faculté des Sciences de Tunis · Cycles préparatoires MPI / PC · 2026/2027</p>
+        </div>
+      </div>
+      <div class="login-card">
+        <div class="login-card-head">
+          <h2>Connexion</h2>
+          <p>Accès réservé aux enseignants et administrateurs.</p>
+        </div>
+        <form id="login-form" novalidate>
+          <label for="login-role">Espace</label>
+          <select id="login-role" class="field" autocomplete="off">
+            <option value="teacher">Enseignant</option>
+            <option value="admin">Administration</option>
+          </select>
+          <label for="login-identifier">Identifiant</label>
+          <input id="login-identifier" data-testid="login-identifier" class="field" type="text" autocomplete="username" required>
+          <label for="login-secret">Mot de passe ou PIN</label>
+          <input id="login-secret" data-testid="login-secret" class="field" type="password" autocomplete="current-password" required>
+          <div id="login-error" class="form-message error" role="alert" hidden></div>
+          <button id="login-submit" data-testid="login-submit" class="button primary wide" type="submit">Se connecter</button>
+        </form>
+        <p class="online-note"><span class="status-dot"></span> Application en ligne sécurisée par Supabase</p>
+      </div>
+    </section>
+  </main>
+  <div id="status-region" data-testid="status-region" class="toast-region" role="status" aria-live="polite"></div>
+  <!-- FST_VENDOR -->
+  <!-- FST_MODULES -->
+</body>
+</html>
