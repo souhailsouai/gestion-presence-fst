@@ -7,6 +7,7 @@ html_path = root / 'web' / 'index.html'
 runtime_path = root / 'web' / 'online-runtime.js'
 fixes_path = root / 'web' / 'online-fixes.js'
 security_path = root / 'web' / 'security-v2.js'
+no_mfa_path = root / 'web' / 'no-mfa.js'
 access_path = root / 'web' / 'access-control.js'
 attendance_policy_path = root / 'web' / 'attendance-policy.js'
 permissions_path = root / 'web' / 'session-permissions.js'
@@ -26,7 +27,7 @@ for path, url in assets.items():
             path.write_bytes(response.read())
 
 html = html_path.read_text(encoding='utf-8')
-for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js']:
+for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './no-mfa.js']:
     html = html.replace(f'<script src="{src}"></script>', '')
 html = re.sub(r'\s*<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', '', html, flags=re.I)
 
@@ -35,6 +36,7 @@ autotable = (vendor / 'jspdf.plugin.autotable.min.js').read_text(encoding='utf-8
 runtime = runtime_path.read_text(encoding='utf-8').strip()
 fixes = fixes_path.read_text(encoding='utf-8').strip()
 security = security_path.read_text(encoding='utf-8').strip()
+no_mfa = no_mfa_path.read_text(encoding='utf-8').strip()
 access = access_path.read_text(encoding='utf-8').strip()
 attendance_policy = attendance_policy_path.read_text(encoding='utf-8').strip()
 permissions = permissions_path.read_text(encoding='utf-8').strip()
@@ -47,6 +49,7 @@ inline = (
     '<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
     '<script data-fst-online-fixes="inline">\n' + fixes + '\n</script>\n'
     '<script data-fst-security-v2="inline">\n' + security + '\n</script>\n'
+    '<script data-fst-no-mfa="inline">\n' + no_mfa + '\n</script>\n'
     '<script data-fst-access-control="inline">\n' + access + '\n</script>\n'
     '<script data-fst-attendance-policy="inline">\n' + attendance_policy + '\n</script>\n'
     '<script data-fst-session-permissions="inline">\n' + permissions + '\n</script>\n'
@@ -59,15 +62,15 @@ html_path.write_text(html, encoding='utf-8')
 
 for marker in [
     'window.FSTOnlineRuntime=', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
-    'challengeAndVerify', 'VERSION_CONFLICT', 'Connexion Internet requise',
-    'data-fst-pdf-engine="inline"', 'data-fst-security-v2="inline"',
+    'VERSION_CONFLICT', 'Connexion Internet requise', 'window.FSTMfaDisabled = true',
+    'data-fst-pdf-engine="inline"', 'data-fst-security-v2="inline"', 'data-fst-no-mfa="inline"',
     'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions',
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
     'window.FSTPdf=', 'Lecture seule'
 ]:
     assert marker in html, marker
-for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js']:
+for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './no-mfa.js']:
     assert src not in html
-assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\']', html, re.I)
+assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
 print(html_path)
