@@ -4,18 +4,23 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '../..');
 const html = fs.readFileSync(path.join(root, 'web/index.html'), 'utf8');
-
-const vendorMarker = 'data-fst-supabase="inline"';
-const clientUse = 'supabase.createClient';
-
-const vendorIndex = html.indexOf(vendorMarker);
-const clientIndex = html.indexOf(clientUse);
-
-assert.ok(vendorIndex >= 0, 'Standalone Web bundle must inline Supabase JS.');
-assert.ok(clientIndex >= 0, 'Standalone Web bundle must initialize the Supabase client.');
-assert.ok(
-  vendorIndex < clientIndex,
-  'Supabase JS must be loaded before application code calls supabase.createClient().'
-);
-
-console.log('PASS: standalone Web dependency order is executable');
+const markers = [
+  'data-fst-vendor="supabase.min.js"',
+  'data-fst-module="ui.js"',
+  'data-fst-module="api.js"',
+  'data-fst-module="auth.js"',
+  'data-fst-module="attendance.js"',
+  'data-fst-module="administration.js"',
+  'data-fst-module="reports.js"',
+  'data-fst-module="app-shell.js"'
+];
+let previous = -1;
+for (const marker of markers) {
+  const index = html.indexOf(marker);
+  assert.ok(index >= 0, `Missing bundle marker: ${marker}`);
+  assert.ok(index > previous, `Incorrect bundle order at: ${marker}`);
+  previous = index;
+}
+assert.ok(html.indexOf('data-fst-vendor="supabase.min.js"') < html.indexOf('window.supabase.createClient'), 'Supabase SDK must load before the API module creates a client.');
+assert.ok(html.indexOf('data-fst-module="auth.js"') < html.indexOf('data-fst-module="app-shell.js"'), 'Authentication must register before boot.');
+console.log('PASS: rebuilt standalone dependency order is executable');
