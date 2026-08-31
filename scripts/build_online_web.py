@@ -1,6 +1,7 @@
 from pathlib import Path
 import base64
 import gzip
+import re
 import subprocess
 import tempfile
 
@@ -23,6 +24,15 @@ finally:
     patch_path.unlink(missing_ok=True)
 
 html = out.read_text(encoding='utf-8')
+# The historical patch contains an older inline security runtime. Remove it so the
+# maintained web/security-v2.js is the only security implementation in the build.
+html = re.sub(
+    r'\s*<script\s+data-fst-security-v2=["\']inline["\'][^>]*>.*?</script>',
+    '',
+    html,
+    flags=re.I | re.S,
+)
+
 tags = [
     '<script src="./online-runtime.js"></script>',
     '<script src="./online-fixes.js"></script>',
@@ -43,6 +53,8 @@ markers = [
 ]
 for marker in markers:
     assert marker in html, marker
+assert 'challengeAndVerify' not in html
+assert 'auth.mfa.' not in html
 
 security = (web / 'security-v2.js').read_text(encoding='utf-8')
 for marker in ['pin-login', 'save_attendance_sheet', 'VERSION_CONFLICT']:
