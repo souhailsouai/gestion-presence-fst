@@ -2,7 +2,7 @@ name: Build Secure Web Application
 
 on:
   push:
-    branches: [ main, release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027, 'fix/**' ]
     paths:
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
@@ -10,6 +10,8 @@ on:
       - 'scripts/build_single_file_release.py'
       - 'scripts/web-superadmin.patch.part*'
       - 'tests/web/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/build-web.yml'
   workflow_dispatch:
 
@@ -23,7 +25,7 @@ concurrency:
 jobs:
   build-web:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,12 +40,21 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install Web test dependencies
+        run: npm install
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Verify JavaScript syntax and contracts
         shell: bash
         run: |
           set -euo pipefail
           node --check web/security-v2.js
           for test in tests/web/*.test.cjs; do
+            case "$test" in
+              *standalone-browser-smoke.test.cjs) continue ;;
+            esac
             node "$test"
           done
 
@@ -72,6 +83,9 @@ jobs:
           cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
           sha256sum dist/web/* > dist/web/SHA256SUMS.txt
           sha256sum --check dist/web/SHA256SUMS.txt
+
+      - name: Reproduce standalone browser startup
+        run: node tests/web/standalone-browser-smoke.test.cjs
 
       - name: Upload secure Web application
         uses: actions/upload-artifact@v4
