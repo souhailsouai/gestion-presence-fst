@@ -56,10 +56,18 @@ editing = editing_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
 
-inline = (
+# Critical dependencies must execute before the legacy application script, which creates
+# the Supabase client at parse time. Appending them at </body> leaves the login screen blank.
+vendor_inline = (
     '\n<script data-fst-supabase="inline">\n' + supabase + '\n</script>\n'
     '<script data-fst-pdf-engine="inline">\n' + jspdf + '\n' + autotable + '\n</script>\n'
-    '<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
+)
+first_script = re.search(r'<script\b', html, re.I)
+assert first_script, 'base HTML must contain application JavaScript'
+html = html[:first_script.start()] + vendor_inline + html[first_script.start():]
+
+application_inline = (
+    '\n<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
     '<script data-fst-online-fixes="inline">\n' + fixes + '\n</script>\n'
     '<script data-fst-security-v2="inline">\n' + security + '\n</script>\n'
     '<script data-fst-no-mfa="inline">\n' + no_mfa + '\n</script>\n'
@@ -70,7 +78,7 @@ inline = (
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
 )
-html = html.replace('</body>', inline + '</body>', 1)
+html = html.replace('</body>', application_inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
 
 for marker in [
@@ -88,6 +96,7 @@ for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './n
     assert src not in html
 assert 'cdn.jsdelivr.net/npm/@supabase/supabase-js' not in html
 assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
+assert html.index('data-fst-supabase="inline"') < html.index('supabase.createClient')
 
 class IdValidator(HTMLParser):
     def __init__(self):
