@@ -1,0 +1,11 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const html = fs.readFileSync('web/index.template.html', 'utf8');
+const css = fs.readFileSync('web/styles.css', 'utf8');
+for (const id of ['app-root','status-region']) assert.match(html, new RegExp(`id=["']${id}["']`));
+for (const testId of ['login-identifier','login-secret','login-submit']) assert.match(html, new RegExp(`data-testid=["']${testId}["']`));
+assert.doesNotMatch(html, /font-awesome|cdnjs|jsdelivr|unpkg/i);
+assert.match(css, /--fst-primary/);
+assert.match(css, /:focus-visible/);
+assert.match(css, /@media/);
+console.log('PASS: professional UI contract');
