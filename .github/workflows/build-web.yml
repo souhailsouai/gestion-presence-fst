@@ -58,6 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s web/index.html
+          node tests/web/final-bundle-order.postbuild.cjs
           grep -Fq 'data-fst-security-v2="inline"' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'VERSION_CONFLICT' web/index.html
