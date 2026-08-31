@@ -58,8 +58,8 @@ html = html.replace('</body>', inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
 
 for marker in [
-    'window.FSTOnlineRuntime=', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
-    'challengeAndVerify', 'VERSION_CONFLICT', 'Connexion Internet requise',
+    'window.FSTOnlineRuntime=', 'window.FSTSecurityV2', 'pin-login', 'password-login', 'save_attendance_sheet',
+    'VERSION_CONFLICT', 'Connexion Internet requise',
     'data-fst-pdf-engine="inline"', 'data-fst-security-v2="inline"',
     'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions',
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
@@ -67,6 +67,8 @@ for marker in [
     'window.FSTPdf=', 'Lecture seule'
 ]:
     assert marker in html, marker
+for forbidden in ['challengeAndVerify', 'MFA_REQUIRED', 'auth.mfa', 'aal2']:
+    assert forbidden not in security, forbidden
 for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js']:
     assert src not in html
 assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\']', html, re.I)
