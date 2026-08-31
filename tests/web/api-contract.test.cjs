@@ -1,0 +1,10 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const src = fs.readFileSync('web/api.js', 'utf8');
+assert.match(src, /pin-login/);
+assert.match(src, /setSession/);
+assert.match(src, /requireSingleObject/);
+assert.match(src, /SESSION_EXPIRED/);
+assert.doesNotMatch(src, /service[_-]?role/i);
+assert.doesNotMatch(src, /syncQueue|QUEUE_KEY/);
+console.log('PASS: centralized Supabase API contract');
