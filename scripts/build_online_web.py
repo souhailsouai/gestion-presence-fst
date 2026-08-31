@@ -1,65 +1,37 @@
 from pathlib import Path
-import base64
-import gzip
-import re
-import subprocess
-import tempfile
+from urllib.request import urlopen
 
 root = Path(__file__).resolve().parents[1]
 web = root / 'web'
-web.mkdir(parents=True, exist_ok=True)
-source = root / 'gestion_presence_tp_theme_institutionnel.html'
-out = web / 'index.html'
-out.write_bytes(source.read_bytes())
+vendor = web / 'vendor'
+vendor.mkdir(parents=True, exist_ok=True)
 
-part1 = (root / 'scripts' / 'web-superadmin.patch.part1').read_text(encoding='utf-8').strip()
-part2 = (root / 'scripts' / 'web-superadmin.patch.part2').read_text(encoding='utf-8').strip()
-patch_bytes = gzip.decompress(base64.b64decode(part1 + part2))
-with tempfile.NamedTemporaryFile(suffix='.patch', delete=False) as tmp:
-    tmp.write(patch_bytes)
-    patch_path = Path(tmp.name)
-try:
-    subprocess.run(['git', 'apply', '-p0', '--whitespace=nowarn', str(patch_path)], cwd=root, check=True)
-finally:
-    patch_path.unlink(missing_ok=True)
-
-html = out.read_text(encoding='utf-8')
-# The historical patch contains an older inline security runtime. Remove it so the
-# maintained web/security-v2.js is the only security implementation in the build.
-html = re.sub(
-    r'\s*<script\s+data-fst-security-v2=["\']inline["\'][^>]*>.*?</script>',
-    '',
-    html,
-    flags=re.I | re.S,
-)
-
-tags = [
-    '<script src="./online-runtime.js"></script>',
-    '<script src="./online-fixes.js"></script>',
-    '<script src="./security-v2.js"></script>',
-    '<script src="./no-mfa.js"></script>',
+required_sources = [
+    web / 'index.template.html',
+    web / 'styles.css',
+    web / 'ui.js',
+    web / 'api.js',
+    web / 'auth.js',
+    web / 'attendance.js',
+    web / 'administration.js',
+    web / 'reports.js',
+    web / 'app-shell.js',
 ]
-for tag in tags:
-    if tag not in html:
-        html = html.replace('</body>', f'\n{tag}\n</body>', 1)
-out.write_text(html, encoding='utf-8')
+for path in required_sources:
+    if not path.exists() or path.stat().st_size == 0:
+        raise SystemExit(f'missing Web source: {path}')
 
-markers = [
-    'teacher_directory',
-    'restorePersistentSession',
-    'ACTIVE_MODE_KEY',
-    '2026/2027',
-    *tags,
-]
-for marker in markers:
-    assert marker in html, marker
-assert 'challengeAndVerify' not in html
-assert 'auth.mfa.' not in html
+assets = {
+    vendor / 'supabase.min.js': 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js',
+    vendor / 'jspdf.umd.min.js': 'https://raw.githubusercontent.com/parallax/jsPDF/v4.2.1/dist/jspdf.umd.min.js',
+    vendor / 'jspdf.plugin.autotable.min.js': 'https://raw.githubusercontent.com/simonbengtsson/jsPDF-AutoTable/v5.0.8/dist/jspdf.plugin.autotable.min.js',
+}
+for path, url in assets.items():
+    if not path.exists() or path.stat().st_size < 1000:
+        with urlopen(url, timeout=60) as response:
+            payload = response.read()
+        if len(payload) < 1000:
+            raise SystemExit(f'invalid vendor asset: {url}')
+        path.write_bytes(payload)
 
-security = (web / 'security-v2.js').read_text(encoding='utf-8')
-for marker in ['pin-login', 'save_attendance_sheet', 'VERSION_CONFLICT']:
-    assert marker in security, marker
-no_mfa = (web / 'no-mfa.js').read_text(encoding='utf-8')
-for marker in ['loginTeacherNoMfa', 'restorePersistentSessionNoMfa', 'FSTMfaDisabled']:
-    assert marker in no_mfa, marker
-print(out)
+print('Web sources and pinned vendor assets are ready.')
