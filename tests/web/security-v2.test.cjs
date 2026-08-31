@@ -9,8 +9,6 @@ new Function(source);
 
 for (const marker of [
   "functions.invoke('pin-login'",
-  'auth.mfa.enroll',
-  'challengeAndVerify',
   "rpc('get_attendance_sheet'",
   "rpc('save_attendance_sheet'",
   'p_expected_revision',
@@ -22,8 +20,23 @@ for (const marker of [
   assert.ok(source.includes(marker), `missing security marker: ${marker}`);
 }
 
+for (const forbidden of [
+  'auth.mfa.',
+  'challengeAndVerify',
+  'ensureMfa',
+  'startEnrollment',
+  'openMfaManager',
+  'security-v2-error',
+  'security-v2-code',
+  'security-v2-cancel',
+  'Double authentification',
+  'double authentification',
+]) {
+  assert.equal(source.includes(forbidden), false, `MFA is disabled; forbidden marker remains: ${forbidden}`);
+}
+
 assert.equal(source.includes("signInWithPassword"), false, 'Web login must use the common server-side PIN exchange');
 assert.equal(source.includes('service_role'), false, 'A privileged key must never be embedded in the Web client');
 assert.equal(source.includes('SUPABASE_SERVICE_ROLE_KEY'), false, 'A privileged key must never be embedded in the Web client');
 
-console.log('PASS: Web V2 authentication, MFA, revision and idempotency contract');
+console.log('PASS: Web V2 authentication without MFA, revision and idempotency contract');
