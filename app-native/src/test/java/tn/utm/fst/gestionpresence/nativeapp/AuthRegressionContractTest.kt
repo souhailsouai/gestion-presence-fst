@@ -6,7 +6,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AuthRegressionContractTest {
-    private fun source(relative: String): String = File(relative).readText()
+    private fun source(relative: String): String {
+        var current = File(System.getProperty("user.dir")).absoluteFile
+        repeat(6) {
+            val candidate = File(current, relative)
+            if (candidate.isFile) return candidate.readText()
+            current = current.parentFile ?: return@repeat
+        }
+        error("Source file not found: $relative")
+    }
 
     @Test
     fun `profile parser accepts PostgREST array response`() {
