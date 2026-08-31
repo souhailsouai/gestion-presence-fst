@@ -27,6 +27,7 @@ tags = [
     '<script src="./online-runtime.js"></script>',
     '<script src="./online-fixes.js"></script>',
     '<script src="./security-v2.js"></script>',
+    '<script src="./no-mfa.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
@@ -44,6 +45,9 @@ for marker in markers:
     assert marker in html, marker
 
 security = (web / 'security-v2.js').read_text(encoding='utf-8')
-for marker in ['pin-login', 'challengeAndVerify', 'save_attendance_sheet', 'VERSION_CONFLICT']:
+for marker in ['pin-login', 'save_attendance_sheet', 'VERSION_CONFLICT']:
     assert marker in security, marker
+no_mfa = (web / 'no-mfa.js').read_text(encoding='utf-8')
+for marker in ['loginTeacherNoMfa', 'restorePersistentSessionNoMfa', 'FSTMfaDisabled']:
+    assert marker in no_mfa, marker
 print(out)
