@@ -60,9 +60,12 @@ jobs:
           test -s web/index.html
           grep -Fq 'data-fst-security-v2="inline"' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
-          grep -Fq 'challengeAndVerify' web/index.html
           grep -Fq 'VERSION_CONFLICT' web/index.html
+          grep -Fq 'data-fst-supabase="inline"' web/index.html
+          ! grep -Fq 'challengeAndVerify' web/index.html
+          ! grep -Fq 'auth.mfa.' web/index.html
           ! grep -Fq './security-v2.js' web/index.html
+          ! grep -Fq 'cdn.jsdelivr.net/npm/@supabase/supabase-js' web/index.html
           mkdir -p dist/web
           cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
           cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
@@ -72,6 +75,6 @@ jobs:
       - name: Upload secure Web application
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Web-v2.0.0
+          name: Gestion-Presence-FST-Web-v2.0.1
           path: dist/web/**
           if-no-files-found: error
