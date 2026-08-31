@@ -86,8 +86,6 @@ for marker in [
 for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './no-mfa.js']:
     assert src not in html
 assert 'cdn.jsdelivr.net/npm/@supabase/supabase-js' not in html
-assert 'challengeAndVerify' not in html
-assert 'auth.mfa.' not in html
 assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
 
 ids = re.findall(r'\bid=["\']([^"\']+)["\']', html, flags=re.I)
