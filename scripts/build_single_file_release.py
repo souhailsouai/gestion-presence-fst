@@ -1,5 +1,6 @@
 from pathlib import Path
 from urllib.request import urlopen
+from html.parser import HTMLParser
 import re
 
 root = Path(__file__).resolve().parents[1]
@@ -88,8 +89,22 @@ for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './n
 assert 'cdn.jsdelivr.net/npm/@supabase/supabase-js' not in html
 assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
 
-ids = re.findall(r'\bid=["\']([^"\']+)["\']', html, flags=re.I)
-duplicates = sorted({value for value in ids if ids.count(value) > 1})
-assert not duplicates, f'duplicate HTML ids: {duplicates}'
+class IdValidator(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.ids = []
+
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            if name.lower() == 'id' and value:
+                self.ids.append(value)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+
+validator = IdValidator()
+validator.feed(html)
+duplicates = sorted({value for value in validator.ids if validator.ids.count(value) > 1})
+assert not duplicates, f'duplicate live HTML ids: {duplicates}'
 
 print(html_path)
