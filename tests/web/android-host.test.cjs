@@ -24,7 +24,8 @@ assert.ok(sessionStore.includes('AndroidKeyStore'), 'Sessions must be protected 
 assert.ok(sessionStore.includes('AES/GCM/NoPadding'), 'Sessions must use authenticated AES-GCM encryption');
 assert.ok(apiClient.includes('/functions/v1/pin-login'), 'Authentication must use the shared online PIN endpoint');
 assert.ok(apiClient.includes('save_attendance_sheet'), 'Attendance writes must use the versioned shared RPC');
-assert.ok(apiClient.includes('/auth/v1/factors/'), 'MFA verification must use the shared Supabase Auth factors API');
+assert.ok(!apiClient.includes('/auth/v1/factors/'), 'MFA factor API must not be required when MFA is disabled');
+assert.ok(apiClient.includes('La double authentification est désactivée.'), 'Android client must explicitly disable MFA enrollment');
 assert.ok(workflow.includes(':app-native:testDebugUnitTest'), 'The native Android workflow must run unit tests');
 assert.ok(workflow.includes(':app-native:lintDebug'), 'The native Android workflow must run lint');
 assert.ok(workflow.includes(':app-native:assembleDebug'), 'The native Android workflow must build an installable APK');
