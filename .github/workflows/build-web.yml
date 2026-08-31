@@ -4,11 +4,9 @@ on:
   push:
     branches: [ main, release/final-cross-platform-2026-2027, 'fix/**' ]
     paths:
-      - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
       - 'scripts/build_online_web.py'
       - 'scripts/build_single_file_release.py'
-      - 'scripts/web-superadmin.patch.part*'
       - 'tests/web/**'
       - 'package.json'
       - 'package-lock.json'
@@ -46,11 +44,13 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Verify JavaScript syntax and contracts
+      - name: Verify rebuilt JavaScript and contracts
         shell: bash
         run: |
           set -euo pipefail
-          node --check web/security-v2.js
+          for source in web/ui.js web/api.js web/auth.js web/attendance.js web/administration.js web/reports.js web/app-shell.js; do
+            node --check "$source"
+          done
           for test in tests/web/*.test.cjs; do
             case "$test" in
               *standalone-browser-smoke.test.cjs) continue ;;
@@ -58,7 +58,7 @@ jobs:
             node "$test"
           done
 
-      - name: Build online Web application
+      - name: Prepare pinned Web dependencies
         run: python scripts/build_online_web.py
 
       - name: Build standalone Web release
@@ -69,27 +69,23 @@ jobs:
         run: |
           set -euo pipefail
           test -s web/index.html
+          test -s dist/web/Gestion-Presence-FST-Web-2026-2027.html
           node tests/web/final-bundle-order.postbuild.cjs
-          grep -Fq 'data-fst-security-v2="inline"' web/index.html
-          grep -Fq 'save_attendance_sheet' web/index.html
-          grep -Fq 'VERSION_CONFLICT' web/index.html
-          grep -Fq 'data-fst-supabase="inline"' web/index.html
-          ! grep -Fq './security-v2.js' web/index.html
-          ! grep -Fq 'cdn.jsdelivr.net/npm/@supabase/supabase-js' web/index.html
-          ! grep -Fq 'auth.mfa.' web/security-v2.js
-          ! grep -Fq 'challengeAndVerify' web/security-v2.js
-          mkdir -p dist/web
-          cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
-          cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
-          sha256sum dist/web/* > dist/web/SHA256SUMS.txt
+          node tests/web/final-artifact-security.test.cjs
+          grep -Fq 'save_attendance_sheet' dist/web/Gestion-Presence-FST-Web-2026-2027.html
+          grep -Fq 'VERSION_CONFLICT' dist/web/Gestion-Presence-FST-Web-2026-2027.html
+          grep -Fq 'data-testid="login-submit"' dist/web/Gestion-Presence-FST-Web-2026-2027.html
+          ! grep -Fq '<script src=' dist/web/Gestion-Presence-FST-Web-2026-2027.html
           sha256sum --check dist/web/SHA256SUMS.txt
 
-      - name: Reproduce standalone browser startup
+      - name: Verify standalone browser startup
         run: node tests/web/standalone-browser-smoke.test.cjs
 
       - name: Upload secure Web application
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Web-v2.0.1
-          path: dist/web/**
+          name: Gestion-Presence-FST-Web-v2.1.0
+          path: |
+            dist/web/Gestion-Presence-FST-Web-2026-2027.html
+            dist/web/SHA256SUMS.txt
           if-no-files-found: error
