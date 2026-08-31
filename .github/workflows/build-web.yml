@@ -2,14 +2,13 @@ name: Build Secure Web Application
 
 on:
   push:
-    branches: [ main, release/final-cross-platform-2026-2027, 'fix/**' ]
+    branches: [ main, release/final-cross-platform-2026-2027, 'fix/**', 'web/**' ]
     paths:
       - 'web/**'
       - 'scripts/build_online_web.py'
       - 'scripts/build_single_file_release.py'
       - 'tests/web/**'
       - 'package.json'
-      - 'package-lock.json'
       - '.github/workflows/build-web.yml'
   workflow_dispatch:
 
@@ -38,12 +37,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Web test dependencies
-        run: npm install
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
       - name: Verify rebuilt JavaScript and contracts
         shell: bash
         run: |
@@ -52,9 +45,6 @@ jobs:
             node --check "$source"
           done
           for test in tests/web/*.test.cjs; do
-            case "$test" in
-              *standalone-browser-smoke.test.cjs) continue ;;
-            esac
             node "$test"
           done
 
@@ -76,10 +66,8 @@ jobs:
           grep -Fq 'VERSION_CONFLICT' dist/web/Gestion-Presence-FST-Web-2026-2027.html
           grep -Fq 'data-testid="login-submit"' dist/web/Gestion-Presence-FST-Web-2026-2027.html
           ! grep -Fq '<script src=' dist/web/Gestion-Presence-FST-Web-2026-2027.html
+          ! grep -Eiq 'playwright|chromium' dist/web/Gestion-Presence-FST-Web-2026-2027.html
           sha256sum --check dist/web/SHA256SUMS.txt
-
-      - name: Verify standalone browser startup
-        run: node tests/web/standalone-browser-smoke.test.cjs
 
       - name: Upload secure Web application
         uses: actions/upload-artifact@v4
