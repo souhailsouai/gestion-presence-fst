@@ -8,7 +8,7 @@ Scope: Web application only. This design applies to the corrected standalone Web
 The Web application must:
 
 1. Use a canonical 24-hour `HH:MM` format for all editable and displayed times.
-2. Organize the student-management view by class, then by group, with visually distinct group styling.
+2. Organize the student-management view as a set of visually independent class lists; each class list contains only that class's students, subdivided by group when groups exist.
 3. Allow an authorized user to move a student between groups belonging to the same class family.
 4. Correct the student import flow so real CSV and Excel files are parsed safely without Unicode escape failures.
 5. Preserve the existing attendance/grade/session-closing behavior already corrected.
@@ -39,7 +39,7 @@ A Web helper will:
 
 Native `<input type="time">` may remain where practical for browser validation, but the application will not rely on locale-dependent browser presentation as the only formatting mechanism. Displayed text must always use the canonical formatter.
 
-## 4. Student management: class and group hierarchy
+## 4. Student management: one separate list per class, then groups
 
 ### Existing data model
 
@@ -52,27 +52,31 @@ No new group table is required.
 
 ### Visual organization
 
-The `Gestion des Étudiants` list will be rendered as:
+The `Gestion des Étudiants` view must not render all students in one global table. It will render **one visually separate list/block for each class**.
 
-- one outer block per class family, identified primarily by `track + classNumber`;
-- one subgroup section per `groupNumber` inside the class block;
-- students listed inside their subgroup.
+For example:
+
+- `MPI1-A` appears as its own independent class block/list;
+- `MPI1-B` appears as another independent class block/list;
+- `PC1-A` appears as another independent class block/list.
+
+Each class block has its own visible header containing the class name and its own student list. If that class contains logical subgroups such as G1, G2, and G3, those groups are displayed only inside that class block as separate colored subsections. Students from two different classes must never be merged into the same visual list even when they share a track or class number.
 
 Groups receive deterministic visual variants based on their group number. Styling must remain readable in the existing institutional theme and must not depend on random colors.
 
 ### Moving a student between groups
 
-Each student row will contain a `Groupe` selector listing only compatible group records from the same class family.
+Each student row will contain a `Groupe` selector listing only compatible group records that belong to the same visual class family. The selector must not offer groups from another class block.
 
 When the user changes the group:
 
 1. validate access to the source and target group;
 2. update only the student's `class_id` in Supabase;
 3. refresh authoritative Web state from Supabase;
-4. re-render the grouped student view;
+4. re-render the separate class lists and their group subsections;
 5. show a success or explicit failure message.
 
-A student cannot be moved to an unrelated track/class through this selector.
+A student cannot be moved to an unrelated class through this selector.
 
 ## 5. CSV and Excel import
 
@@ -135,7 +139,7 @@ Existing Supabase RLS remains authoritative.
 
 The Web layer must:
 
-- only present groups the current user is authorized to manage;
+- only present classes and groups the current user is authorized to manage;
 - never bypass RLS;
 - sanitize imported text before database writes;
 - reject unsupported file types and unreasonable file sizes;
@@ -147,7 +151,7 @@ The implementation should stay within the Web build pipeline, primarily:
 
 - `web/online-fixes.js` for import handling;
 - a focused Web module for canonical time helpers if separation improves testability;
-- a focused Web module or existing access-control/render layer for grouped student rendering and group changes;
+- a focused Web module or existing access-control/render layer for the separate per-class student lists, group styling, and group changes;
 - `scripts/build_single_file_release.py` if a bundled spreadsheet parser or new Web module must be inlined;
 - `tests/web/*.test.cjs` for regression coverage.
 
@@ -167,10 +171,11 @@ Tests must verify:
 
 Tests must verify:
 
-- students render under the correct class family;
-- groups render as separate visual sections;
+- every class renders as a separate visual list/block with its own header;
+- students from different classes never appear in the same visual list;
+- groups render as colored subsections inside the correct class list;
 - group styles are deterministic;
-- group selector exposes only compatible target groups;
+- group selector exposes only compatible groups from the same class;
 - changing group updates only `class_id` and refreshes authoritative state.
 
 ### Import
