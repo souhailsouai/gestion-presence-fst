@@ -15,6 +15,7 @@ time_path = root / 'web' / 'time-format.js'
 time_integration_path = root / 'web' / 'time-integration.js'
 student_import_path = root / 'web' / 'student-import.js'
 student_management_path = root / 'web' / 'student-management.js'
+class_structure_pdf_path = root / 'web' / 'class-structure-pdf.js'
 statistics_path = root / 'web' / 'statistics.js'
 report_path = root / 'web' / 'report-pdf.js'
 vendor = root / 'web' / 'vendor'
@@ -51,6 +52,7 @@ student_management = student_management_path.read_text(encoding='utf-8').strip()
 time_integration = time_integration_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
+class_structure_pdf = class_structure_pdf_path.read_text(encoding='utf-8').strip()
 
 inline = (
     '\n<script data-fst-pdf-engine="inline">\n' + jspdf + '\n' + autotable + '\n</script>\n'
@@ -68,6 +70,7 @@ inline = (
     '<script data-fst-time-integration="inline">\n' + time_integration + '\n</script>\n'
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
+    '<script data-fst-class-structure-pdf="inline">\n' + class_structure_pdf + '\n</script>\n'
 )
 html = html.replace('</body>', inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
@@ -78,11 +81,12 @@ for marker in [
     'data-fst-pdf-engine="inline"', 'data-fst-security-v2="inline"',
     'data-fst-excel-engine="inline"', 'data-fst-time-format="inline"',
     'data-fst-student-import="inline"', 'data-fst-student-management="inline"',
-    'data-fst-time-integration="inline"', 'window.FSTAccessControl=', 'grade_only',
-    'FSTSessionPermissions', 'FSTSessionEditing', 'FSTStudentImport', 'FSTStudentManagement',
-    'FSTTimeIntegration', 'student-class-block', 'XLSX.read', 'Statistiques et graphiques',
-    'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
-    'window.FSTPdf=', 'Lecture seule'
+    'data-fst-time-integration="inline"', 'data-fst-class-structure-pdf="inline"',
+    'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions', 'FSTSessionEditing',
+    'FSTStudentImport', 'FSTStudentManagement', 'FSTTimeIntegration', 'FSTClassStructure',
+    'student-class-block', 'XLSX.read', 'PDF de la classe', 'Notes par séance', 'Moyenne /20',
+    'Statistiques et graphiques', 'Répartition des notes', 'Comparaison par module',
+    'PDF statistiques', 'window.FSTPdf=', 'Lecture seule'
 ]:
     assert marker in html, marker
 for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js']:
