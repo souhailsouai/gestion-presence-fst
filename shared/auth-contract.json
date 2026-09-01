@@ -1,0 +1,15 @@
+{
+  "credential_modes": ["pin", "password"],
+  "session_fields": ["access_token", "refresh_token", "expires_in", "user_id", "role"],
+  "errors": [
+    "NETWORK_UNAVAILABLE",
+    "UNAUTHENTICATED",
+    "SESSION_EXPIRED",
+    "FORBIDDEN",
+    "VALIDATION_ERROR",
+    "VERSION_CONFLICT",
+    "RATE_LIMITED",
+    "SERVER_UNAVAILABLE",
+    "INTERNAL_ERROR"
+  ]
+}

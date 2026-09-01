@@ -2,7 +2,7 @@ name: Build Secure Web Application
 
 on:
   push:
-    branches: [ main, release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027, feat/simple-auth-native-windows ]
     paths:
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
@@ -60,8 +60,9 @@ jobs:
           test -s web/index.html
           grep -Fq 'data-fst-security-v2="inline"' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
-          grep -Fq 'challengeAndVerify' web/index.html
           grep -Fq 'VERSION_CONFLICT' web/index.html
+          ! grep -Fq 'challengeAndVerify' web/index.html
+          ! grep -Fq 'MFA_REQUIRED' web/index.html
           ! grep -Fq './security-v2.js' web/index.html
           mkdir -p dist/web
           cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
