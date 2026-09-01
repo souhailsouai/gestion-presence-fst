@@ -16,3 +16,8 @@ test('session editing layer locks completed teacher attendance but keeps grades 
   assert.match(js,/updateAttendanceComment/);
   assert.match(js,/updateAttendanceGrade/);
 });
+
+test('presence sheet renders an explicit message when the selected group has no students',()=>{
+  const js=fs.readFileSync('web/session-editing.js','utf8');
+  assert.match(js,/Aucun étudiant n(?:’|')est associé à ce groupe/);
+});
