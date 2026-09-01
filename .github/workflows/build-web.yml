@@ -2,7 +2,7 @@ name: Build Secure Web Application
 
 on:
   push:
-    branches: [ main, release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027, feat/web-time-students-import ]
     paths:
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
