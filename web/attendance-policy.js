@@ -6,11 +6,14 @@
   function classById(id){return (data.classes||[]).find(c=>String(c.id)===String(id));}
   window.fetchRemoteData=async function(){
     if(!currentTeacher)return{classes:[],students:[],sessions:[],attendance:[]};
-    const owner=currentTeacher.id,isAdmin=acl()?.isAdmin?.()===true;
+    const isAdmin=acl()?.isAdmin?.()===true;
     const classQ=supabaseClient.from('classes').select('*');
     const sessionQ=supabaseClient.from('sessions').select('*');
-    const studentQ=isAdmin?supabaseClient.from('students').select('*'):supabaseClient.from('students').select('*').eq('teacher_id',owner);
-    const attendanceQ=isAdmin?supabaseClient.from('attendance').select('*'):supabaseClient.from('attendance').select('*').eq('teacher_id',owner);
+    // Do not filter students by teacher_id here. RLS already restricts rows to groups
+    // assigned to the authenticated teacher; filtering by owner hides valid students
+    // when a group/student was created or reassigned by another authorized account.
+    const studentQ=supabaseClient.from('students').select('*');
+    const attendanceQ=isAdmin?supabaseClient.from('attendance').select('*'):supabaseClient.from('attendance').select('*').eq('teacher_id',currentTeacher.id);
     const [c,st,se,a]=await Promise.all([classQ,studentQ,sessionQ,attendanceQ,acl()?.refreshTeacherNames?.()]);
     const err=c.error||st.error||se.error||a.error;if(err)throw err;
     const mapped={
