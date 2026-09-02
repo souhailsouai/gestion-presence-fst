@@ -8,6 +8,13 @@ on:
       - 'supabase/tests/v515_*.sql'
       - '.github/fixtures/v515-ci-bootstrap.sql'
       - '.github/workflows/test-v515-database.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'supabase/migrations/2026090219*.sql'
+      - 'supabase/tests/v515_*.sql'
+      - '.github/fixtures/v515-ci-bootstrap.sql'
+      - '.github/workflows/test-v515-database.yml'
   workflow_dispatch:
 
 permissions:
