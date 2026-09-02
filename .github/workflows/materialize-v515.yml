@@ -1,0 +1,42 @@
+name: Materialize V5.15 implementation
+
+on:
+  push:
+    branches: [ feature/v5.15-session-selection ]
+    paths:
+      - '.github/workflows/materialize-v515.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v5.15-session-selection
+          fetch-depth: 0
+
+      - name: Materialize implementation sources
+        run: python scripts/materialize_v515.py
+
+      - name: Remove temporary materializer payload
+        shell: bash
+        run: |
+          rm -rf .v515
+          rm -f scripts/materialize_v515.py
+          rm -f .github/workflows/materialize-v515.yml
+
+      - name: Commit materialized V5.15 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'openai-v515-materializer'
+          git config user.email 'noreply@openai.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat: implement V5.15 planning and session selection'
+          git push origin HEAD:feature/v5.15-session-selection
