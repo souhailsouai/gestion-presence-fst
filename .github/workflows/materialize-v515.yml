@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   materialize:
@@ -23,6 +24,20 @@ jobs:
       - name: Materialize implementation sources
         run: python scripts/materialize_v515.py
 
+      - name: Verify materialized sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s web/v515-api.js
+          test -s web/v515-admin-ui.js
+          test -s supabase/migrations/20260902190000_v515_planning_schema.sql
+          node --check web/v515-api.js
+          node --check web/v515-teacher-ui.js
+          node --check web/v515-admin-ui.js
+          node --check web/v515-runtime.js
+          node --test tests/web/v515*.test.cjs
+          git diff --check
+
       - name: Remove temporary materializer payload
         shell: bash
         run: |
@@ -30,7 +45,7 @@ jobs:
           rm -f scripts/materialize_v515.py
           rm -f .github/workflows/materialize-v515.yml
 
-      - name: Commit materialized V5.15 implementation
+      - name: Create materialized commit
         shell: bash
         run: |
           set -euo pipefail
@@ -39,4 +54,7 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m 'feat: implement V5.15 planning and session selection'
-          git push origin HEAD:feature/v5.15-session-selection
+
+      - name: Push materialized commit
+        shell: bash
+        run: git push origin HEAD:feature/v5.15-session-selection
