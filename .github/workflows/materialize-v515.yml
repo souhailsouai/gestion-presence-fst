@@ -38,12 +38,13 @@ jobs:
           node --test tests/web/v515*.test.cjs
           git diff --check
 
-      - name: Remove temporary materializer payload
+      - name: Keep workflow files out of Actions-authored commit
         shell: bash
         run: |
+          set -euo pipefail
+          git restore --source=HEAD -- .github/workflows
           rm -rf .v515
           rm -f scripts/materialize_v515.py
-          rm -f .github/workflows/materialize-v515.yml
 
       - name: Create materialized commit
         shell: bash
