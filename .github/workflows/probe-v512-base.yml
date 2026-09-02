@@ -1,0 +1,46 @@
+name: Probe V5.12 Web Base
+
+on:
+  push:
+    branches: [ feature/windows-electron-v513 ]
+    paths: [ '.github/workflows/probe-v512-base.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout V5 planning branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/web-v5-planning
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build standalone
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_online_web.py
+          python scripts/build_single_file_release.py
+          wc -c web/index.html
+          sha256sum web/index.html
+          grep -o 'data-fst-v512-policy' web/index.html | wc -l || true
+          grep -o 'data-fst-v513-policy' web/index.html | wc -l || true
+
+      - name: Upload probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-v512-web-base
+          path: web/index.html
+          if-no-files-found: error
+          retention-days: 1
