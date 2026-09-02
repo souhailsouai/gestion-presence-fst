@@ -6,22 +6,80 @@ on:
       - feature/windows-electron-v513
     paths:
       - '.github/workflows/build-electron-v513.yml'
-      - 'bootstrap/windows-electron-v513-src.tar.gz.b64.part-*'
-      - 'docs/windows-v513-acceptance.md'
+      - 'desktop/windows-electron-v513/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  prepare-renderer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Windows branch
+        uses: actions/checkout@v4
+        with:
+          path: windows-src
+
+      - name: Checkout reproducible Web base
+        uses: actions/checkout@v4
+        with:
+          ref: feat/web-v5-planning
+          path: web-base
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build reproducible standalone base
+        shell: bash
+        working-directory: web-base
+        run: |
+          set -euo pipefail
+          python scripts/build_online_web.py
+          python scripts/build_single_file_release.py
+          actual="$(sha256sum web/index.html | awk '{print $1}')"
+          expected='5eb0cabbbcd3a26b8037a2b4d30890c7ec1a7f8e4afaf9e530630160b4a0592c'
+          test "$actual" = "$expected"
+          echo "Base SHA-256 verified: $actual"
+
+      - name: Reconstruct canonical V5.13 renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat windows-src/desktop/windows-electron-v513/renderer-patch/part-* > v513.patch.b64
+          base64 -d v513.patch.b64 > v513.patch.zst
+          patch_hash="$(sha256sum v513.patch.zst | awk '{print $1}')"
+          test "$patch_hash" = '05ae45adfe12561cb16c47033e1e83763ea51873bbc695bff2e3e990dabaf080'
+          zstd -d --patch-from=web-base/web/index.html v513.patch.zst -o canonical-v513.html
+          renderer_hash="$(sha256sum canonical-v513.html | awk '{print $1}')"
+          test "$renderer_hash" = '73daccbc12f1e9d0068a53a5d3f7052f3002a49963ce3842f3fa6040650538e8'
+          echo "V5.13 renderer SHA-256 verified: $renderer_hash"
+
+      - name: Upload canonical renderer
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-v513-renderer
+          path: canonical-v513.html
+          if-no-files-found: error
+          retention-days: 1
+
   build-windows:
+    needs: prepare-renderer
     runs-on: windows-latest
     timeout-minutes: 45
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
     steps:
-      - name: Checkout
+      - name: Checkout Windows branch
         uses: actions/checkout@v4
 
       - name: Setup Node 24
@@ -29,111 +87,62 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Reconstruct verified Electron source
+      - name: Download canonical renderer
+        uses: actions/download-artifact@v4
+        with:
+          name: canonical-v513-renderer
+          path: canonical-renderer
+
+      - name: Reconstruct Electron project
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $parts = Get-ChildItem 'bootstrap/windows-electron-v513-src.tar.gz.b64.part-*' | Sort-Object Name
-          if ($parts.Count -ne 9) { throw "Expected 9 bootstrap parts, found $($parts.Count)." }
-
-          $chunks = @()
-          foreach ($part in $parts) {
-            $chunk = ((Get-Content $part.FullName -Raw) -replace '\s','')
-            $invalid = [regex]::Matches($chunk, '[^A-Za-z0-9+/=]')
-            Write-Host "$($part.Name): len=$($chunk.Length) invalid=$($invalid.Count)"
-            $chunks += $chunk
-          }
-
-          if (-not $chunks[7].EndsWith('?')) { throw 'Expected the diagnosed trailing ? in part-007.' }
-          $chunks[7] = $chunks[7].Substring(0, $chunks[7].Length - 1)
-
-          $chosen = $null
-          for ($trim = 0; $trim -le 32; $trim++) {
-            if ($trim -ge $chunks[0].Length) { break }
-            $candidateChunks = @($chunks)
-            $candidateChunks[0] = $chunks[0].Substring(0, $chunks[0].Length - $trim)
-            $candidateB64 = ($candidateChunks -join '')
-            if (($candidateB64.Length % 4) -ne 0) { continue }
-            try {
-              $candidateBytes = [Convert]::FromBase64String($candidateB64)
-            } catch {
-              continue
-            }
-            [IO.File]::WriteAllBytes((Join-Path $PWD 'candidate.tar.gz'), $candidateBytes)
-            tar -tzf 'candidate.tar.gz' *> $null
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "Validated bootstrap repair: trim=$trim, base64Length=$($candidateB64.Length), archiveBytes=$($candidateBytes.Length)"
-              $chosen = $candidateBytes
-              break
-            }
-          }
-          if ($null -eq $chosen) { throw 'No structurally valid gzip/tar candidate found in bounded repair search.' }
-          [IO.File]::WriteAllBytes((Join-Path $PWD 'windows-electron-v513-src.tar.gz'), $chosen)
-
-          New-Item -ItemType Directory -Force -Path 'ci-electron-src' | Out-Null
-          tar -xzf 'windows-electron-v513-src.tar.gz' -C 'ci-electron-src'
-          if ($LASTEXITCODE -ne 0) { throw 'Source archive extraction failed.' }
-
-          $candidate = Get-ChildItem 'ci-electron-src' -Recurse -Filter 'package.json' -File |
-            Where-Object { (Get-Content $_.FullName -Raw) -match 'electron-builder' } |
-            Select-Object -First 1
-          if (-not $candidate) { throw 'Electron package.json not found after archive extraction.' }
-
-          $project = $candidate.Directory.FullName
-          New-Item -ItemType Directory -Force -Path 'desktop/windows-electron-v513' | Out-Null
-          Copy-Item -Path (Join-Path $project '*') -Destination 'desktop/windows-electron-v513' -Recurse -Force
-
-          $renderer = 'desktop/windows-electron-v513/renderer/Gestion_Presence_FST_TP_MPI_PC_WEB_V5_13.html'
-          if (-not (Test-Path $renderer)) { throw 'Canonical V5.13 renderer is missing from reconstructed source.' }
-          $rendererHash = (Get-FileHash $renderer -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = '73daccbc12f1e9d0068a53a5d3f7052f3002a49963ce3842f3fa6040650538e8'
-          if ($rendererHash -ne $expected) { throw "Renderer SHA-256 mismatch: $rendererHash" }
-          Write-Host "Renderer SHA-256 verified: $rendererHash"
+          $b64Path = 'desktop/windows-electron-v513/bootstrap/source-small.tar.gz.b64'
+          $b64 = (Get-Content $b64Path -Raw) -replace '\s',''
+          $bytes = [Convert]::FromBase64String($b64)
+          [IO.File]::WriteAllBytes((Join-Path $PWD 'source-small.tar.gz'), $bytes)
+          New-Item -ItemType Directory -Force -Path 'electron-project' | Out-Null
+          tar -xzf 'source-small.tar.gz' -C 'electron-project'
+          if ($LASTEXITCODE -ne 0) { throw 'Electron source extraction failed.' }
+          New-Item -ItemType Directory -Force -Path 'electron-project/renderer' | Out-Null
+          Copy-Item 'canonical-renderer/canonical-v513.html' 'electron-project/renderer/Gestion_Presence_FST_TP_MPI_PC_WEB_V5_13.html'
+          $hash = (Get-FileHash 'electron-project/renderer/Gestion_Presence_FST_TP_MPI_PC_WEB_V5_13.html' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '73daccbc12f1e9d0068a53a5d3f7052f3002a49963ce3842f3fa6040650538e8') { throw "Renderer SHA mismatch: $hash" }
+          Write-Host "Renderer SHA-256 verified: $hash"
 
       - name: Install dependencies
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if (Test-Path 'package-lock.json') {
-            npm ci --no-audit --no-fund
-          } else {
-            npm install --no-audit --no-fund
-          }
+        working-directory: electron-project
+        run: npm install --no-audit --no-fund
 
       - name: Verify canonical renderer
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
+        working-directory: electron-project
         run: npm run verify:renderer
 
       - name: Run Node tests
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
+        working-directory: electron-project
         run: npm test
 
       - name: Electron renderer smoke test
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
+        working-directory: electron-project
         run: npm run smoke:electron
-
-      - name: Write build metadata
-        shell: pwsh
-        working-directory: desktop/windows-electron-v513
-        run: node scripts/write-build-metadata.cjs
 
       - name: Build Setup and Portable EXEs
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
-        run: npx electron-builder --win nsis portable --x64 --publish never
+        working-directory: electron-project
+        run: npm run pack:win
 
       - name: Generate SHA256SUMS
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
+        working-directory: electron-project
         run: node scripts/hash-artifacts.cjs
 
       - name: Verify Windows artifacts
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
+        working-directory: electron-project
         run: |
           $ErrorActionPreference = 'Stop'
           $files = @('dist/Gestion Presence FST Setup.exe','dist/Gestion Presence FST Portable.exe')
@@ -146,12 +155,14 @@ jobs:
           }
           if (-not (Test-Path 'dist/SHA256SUMS.txt')) { throw 'Missing SHA256SUMS.txt' }
           if (-not (Test-Path 'build-metadata.json')) { throw 'Missing build-metadata.json' }
+          $metadata = Get-Content 'build-metadata.json' -Raw | ConvertFrom-Json
+          if ($metadata.rendererSha256 -ne '73daccbc12f1e9d0068a53a5d3f7052f3002a49963ce3842f3fa6040650538e8') { throw 'Build metadata renderer SHA mismatch.' }
           Get-Content 'dist/SHA256SUMS.txt'
           Get-Content 'build-metadata.json'
 
       - name: Stage release payload
         shell: pwsh
-        working-directory: desktop/windows-electron-v513
+        working-directory: electron-project
         run: |
           New-Item -ItemType Directory -Force -Path 'release-payload' | Out-Null
           Copy-Item 'dist/Gestion Presence FST Setup.exe' 'release-payload/'
@@ -163,6 +174,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Gestion-Presence-FST-Electron-v5.13.0
-          path: desktop/windows-electron-v513/release-payload/*
+          path: electron-project/release-payload/*
           if-no-files-found: error
           retention-days: 30
