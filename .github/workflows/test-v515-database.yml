@@ -1,0 +1,80 @@
+name: Test V5.15 Database Contract
+
+on:
+  push:
+    branches: [ feature/v5.15-session-selection, main ]
+    paths:
+      - 'supabase/migrations/2026090219*.sql'
+      - 'supabase/tests/v515_*.sql'
+      - '.github/fixtures/v515-ci-bootstrap.sql'
+      - '.github/workflows/test-v515-database.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'supabase/migrations/2026090219*.sql'
+      - 'supabase/tests/v515_*.sql'
+      - '.github/fixtures/v515-ci-bootstrap.sql'
+      - '.github/workflows/test-v515-database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v515-database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v515test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v515test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGPASSWORD: postgres
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: v515test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Bootstrap disposable V5 database contract
+        run: psql -v ON_ERROR_STOP=1 -f .github/fixtures/v515-ci-bootstrap.sql
+
+      - name: Apply V5.15 migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in \
+            supabase/migrations/20260902190000_v515_planning_schema.sql \
+            supabase/migrations/20260902191000_v515_rotation_rpcs.sql \
+            supabase/migrations/20260902192000_v515_assignment_rpcs.sql \
+            supabase/migrations/20260902192500_v515_config_rpcs.sql \
+            supabase/migrations/20260902193000_v515_rls_and_views.sql \
+            supabase/migrations/20260902194000_v515_finalize.sql
+          do
+            echo "Applying $migration"
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Run V5.15 SQL tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in supabase/tests/v515_*.sql; do
+            echo "Testing $test"
+            psql -v ON_ERROR_STOP=1 -f "$test"
+          done
