@@ -43,6 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           git restore --source=HEAD -- .github/workflows
+          rm -f .github/workflows/test-v515-database.yml
           rm -rf .v515
           rm -f scripts/materialize_v515.py
 
