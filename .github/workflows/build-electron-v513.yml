@@ -40,23 +40,66 @@ jobs:
           foreach ($part in $parts) {
             $chunk = ((Get-Content $part.FullName -Raw) -replace '\s','')
             $invalid = [regex]::Matches($chunk, '[^A-Za-z0-9+/=]')
-            $padding = [regex]::Matches($chunk, '=')
-            $firstEq = $chunk.IndexOf('=')
-            Write-Host "$($part.Name): len=$($chunk.Length) invalid=$($invalid.Count) padding=$($padding.Count) firstEq=$firstEq"
-            foreach ($m in $invalid | Select-Object -First 8) {
-              $start = [Math]::Max(0, $m.Index - 12)
-              $count = [Math]::Min(25, $chunk.Length - $start)
-              $ctx = $chunk.Substring($start, $count)
-              Write-Host "  invalid index=$($m.Index) code=$([int][char]$m.Value) context=$ctx"
-            }
+            Write-Host "$($part.Name): len=$($chunk.Length) invalid=$($invalid.Count)"
             $chunks += $chunk
           }
-          throw 'Bootstrap diagnostic complete; inspect per-part Base64 anomalies above.'
+
+          if (-not $chunks[7].EndsWith('?')) { throw 'Expected the diagnosed trailing ? in part-007.' }
+          $chunks[7] = $chunks[7].Substring(0, $chunks[7].Length - 1)
+
+          $chosen = $null
+          for ($trim = 0; $trim -le 32; $trim++) {
+            if ($trim -ge $chunks[0].Length) { break }
+            $candidateChunks = @($chunks)
+            $candidateChunks[0] = $chunks[0].Substring(0, $chunks[0].Length - $trim)
+            $candidateB64 = ($candidateChunks -join '')
+            if (($candidateB64.Length % 4) -ne 0) { continue }
+            try {
+              $candidateBytes = [Convert]::FromBase64String($candidateB64)
+            } catch {
+              continue
+            }
+            [IO.File]::WriteAllBytes((Join-Path $PWD 'candidate.tar.gz'), $candidateBytes)
+            tar -tzf 'candidate.tar.gz' *> $null
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Validated bootstrap repair: trim=$trim, base64Length=$($candidateB64.Length), archiveBytes=$($candidateBytes.Length)"
+              $chosen = $candidateBytes
+              break
+            }
+          }
+          if ($null -eq $chosen) { throw 'No structurally valid gzip/tar candidate found in bounded repair search.' }
+          [IO.File]::WriteAllBytes((Join-Path $PWD 'windows-electron-v513-src.tar.gz'), $chosen)
+
+          New-Item -ItemType Directory -Force -Path 'ci-electron-src' | Out-Null
+          tar -xzf 'windows-electron-v513-src.tar.gz' -C 'ci-electron-src'
+          if ($LASTEXITCODE -ne 0) { throw 'Source archive extraction failed.' }
+
+          $candidate = Get-ChildItem 'ci-electron-src' -Recurse -Filter 'package.json' -File |
+            Where-Object { (Get-Content $_.FullName -Raw) -match 'electron-builder' } |
+            Select-Object -First 1
+          if (-not $candidate) { throw 'Electron package.json not found after archive extraction.' }
+
+          $project = $candidate.Directory.FullName
+          New-Item -ItemType Directory -Force -Path 'desktop/windows-electron-v513' | Out-Null
+          Copy-Item -Path (Join-Path $project '*') -Destination 'desktop/windows-electron-v513' -Recurse -Force
+
+          $renderer = 'desktop/windows-electron-v513/renderer/Gestion_Presence_FST_TP_MPI_PC_WEB_V5_13.html'
+          if (-not (Test-Path $renderer)) { throw 'Canonical V5.13 renderer is missing from reconstructed source.' }
+          $rendererHash = (Get-FileHash $renderer -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = '73daccbc12f1e9d0068a53a5d3f7052f3002a49963ce3842f3fa6040650538e8'
+          if ($rendererHash -ne $expected) { throw "Renderer SHA-256 mismatch: $rendererHash" }
+          Write-Host "Renderer SHA-256 verified: $rendererHash"
 
       - name: Install dependencies
         shell: pwsh
         working-directory: desktop/windows-electron-v513
-        run: npm install --no-audit --no-fund
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path 'package-lock.json') {
+            npm ci --no-audit --no-fund
+          } else {
+            npm install --no-audit --no-fund
+          }
 
       - name: Verify canonical renderer
         shell: pwsh
