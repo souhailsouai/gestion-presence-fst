@@ -2,7 +2,7 @@ name: Build Synchronized Windows Application
 
 on:
   push:
-    branches: [ main, release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027, feature/v5.15-session-selection ]
     paths:
       - 'windows/GestionPresenceFSTOnline/**'
       - 'web/**'
@@ -43,11 +43,15 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Verify Web security contract
+      - name: Verify Web security and V5.15 contracts
         shell: pwsh
         run: |
           node --check web/security-v2.js
-          Get-ChildItem tests/web/*.test.cjs | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+          node --check web/v515-api.js
+          node --check web/v515-teacher-ui.js
+          node --check web/v515-admin-ui.js
+          node --check web/v515-runtime.js
+          node --test tests/web/*.test.cjs
 
       - name: Build embedded Web application
         shell: pwsh
@@ -56,6 +60,8 @@ jobs:
           python scripts/build_single_file_release.py
           if (-not (Select-String -Path web/index.html -Pattern 'data-fst-security-v2="inline"' -Quiet)) { throw 'Security runtime missing' }
           if (-not (Select-String -Path web/index.html -Pattern 'save_attendance_sheet' -Quiet)) { throw 'V2 attendance RPC missing' }
+          if (-not (Select-String -Path web/index.html -Pattern 'window.FSTV515=' -Quiet)) { throw 'V5.15 runtime missing' }
+          if (-not (Select-String -Path web/index.html -Pattern 'v515_finalize_cycle' -Quiet)) { throw 'V5.15 finalization RPC missing' }
 
       - name: Restore and compile Windows project
         shell: pwsh
@@ -76,16 +82,16 @@ jobs:
             -o dist/windows/publish
           $exe = Get-ChildItem dist/windows/publish/Gestion-Presence-FST-Windows.exe
           if (-not $exe -or $exe.Length -lt 1000000) { throw 'Windows executable missing or invalid' }
-          Copy-Item $exe.FullName dist/windows/Gestion-Presence-FST-Windows-v2.0.0.exe
-          Compress-Archive -Path dist/windows/publish/* -DestinationPath dist/windows/Gestion-Presence-FST-Windows-v2.0.0.zip -Force
-          Get-FileHash dist/windows/Gestion-Presence-FST-Windows-v2.0.0.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  Gestion-Presence-FST-Windows-v2.0.0.exe" } | Set-Content dist/windows/SHA256SUMS.txt
+          Copy-Item $exe.FullName dist/windows/Gestion-Presence-FST-Windows-v5.15.0.exe
+          Compress-Archive -Path dist/windows/publish/* -DestinationPath dist/windows/Gestion-Presence-FST-Windows-v5.15.0.zip -Force
+          Get-FileHash dist/windows/Gestion-Presence-FST-Windows-v5.15.0.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  Gestion-Presence-FST-Windows-v5.15.0.exe" } | Set-Content dist/windows/SHA256SUMS.txt
 
       - name: Upload synchronized Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Windows-v2.0.0
+          name: Gestion-Presence-FST-Windows-v5.15.0
           path: |
-            dist/windows/Gestion-Presence-FST-Windows-v2.0.0.exe
-            dist/windows/Gestion-Presence-FST-Windows-v2.0.0.zip
+            dist/windows/Gestion-Presence-FST-Windows-v5.15.0.exe
+            dist/windows/Gestion-Presence-FST-Windows-v5.15.0.zip
             dist/windows/SHA256SUMS.txt
           if-no-files-found: error
