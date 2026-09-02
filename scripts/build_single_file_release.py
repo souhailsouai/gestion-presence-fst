@@ -13,6 +13,10 @@ permissions_path = root / 'web' / 'session-permissions.js'
 editing_path = root / 'web' / 'session-editing.js'
 statistics_path = root / 'web' / 'statistics.js'
 report_path = root / 'web' / 'report-pdf.js'
+v515_api_path = root / 'web' / 'v515-api.js'
+v515_teacher_ui_path = root / 'web' / 'v515-teacher-ui.js'
+v515_admin_ui_path = root / 'web' / 'v515-admin-ui.js'
+v515_runtime_path = root / 'web' / 'v515-runtime.js'
 vendor = root / 'web' / 'vendor'
 vendor.mkdir(parents=True, exist_ok=True)
 
@@ -26,7 +30,7 @@ for path, url in assets.items():
             path.write_bytes(response.read())
 
 html = html_path.read_text(encoding='utf-8')
-for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js']:
+for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './v515-api.js', './v515-teacher-ui.js', './v515-admin-ui.js', './v515-runtime.js']:
     html = html.replace(f'<script src="{src}"></script>', '')
 html = re.sub(r'\s*<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', '', html, flags=re.I)
 
@@ -41,6 +45,10 @@ permissions = permissions_path.read_text(encoding='utf-8').strip()
 editing = editing_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
+v515_api = v515_api_path.read_text(encoding='utf-8').strip()
+v515_teacher_ui = v515_teacher_ui_path.read_text(encoding='utf-8').strip()
+v515_admin_ui = v515_admin_ui_path.read_text(encoding='utf-8').strip()
+v515_runtime = v515_runtime_path.read_text(encoding='utf-8').strip()
 
 inline = (
     '\n<script data-fst-pdf-engine="inline">\n' + jspdf + '\n' + autotable + '\n</script>\n'
@@ -53,6 +61,10 @@ inline = (
     '<script data-fst-session-editing="inline">\n' + editing + '\n</script>\n'
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
+    '<script data-fst-v515-api="inline">\n' + v515_api + '\n</script>\n'
+    '<script data-fst-v515-teacher-ui="inline">\n' + v515_teacher_ui + '\n</script>\n'
+    '<script data-fst-v515-admin-ui="inline">\n' + v515_admin_ui + '\n</script>\n'
+    '<script data-fst-v515-runtime="inline">\n' + v515_runtime + '\n</script>\n'
 )
 html = html.replace('</body>', inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
@@ -64,10 +76,10 @@ for marker in [
     'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions',
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
-    'window.FSTPdf=', 'Lecture seule'
+    'window.FSTPdf=', 'Lecture seule', 'window.FSTV515Api=', 'data-fst-v515-api="inline"', 'window.FSTV515TeacherUI=', 'data-fst-v515-teacher-ui="inline"', 'window.FSTV515AdminUI=', 'data-fst-v515-admin-ui="inline"', 'window.FSTV515=', 'data-fst-v515-runtime="inline"'
 ]:
     assert marker in html, marker
-for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js']:
+for src in ['./online-runtime.js', './online-fixes.js', './security-v2.js', './v515-api.js', './v515-teacher-ui.js', './v515-admin-ui.js', './v515-runtime.js']:
     assert src not in html
 assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\']', html, re.I)
 print(html_path)
