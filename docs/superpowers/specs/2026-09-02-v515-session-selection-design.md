@@ -11,6 +11,8 @@ V5.15 extends the existing V5 application rather than creating a separate applic
 
 The selected approach is modular evolution: retain the stable V5 core and add an independent `Planning / Choix des séances` subsystem inside the same application.
 
+V5.15 uses the existing application authentication and teacher identities. It does not create a second authentication store. A V5.15 teacher configuration references an existing teacher account; when the administrator adds a new teacher, the existing account-creation flow is used and the V5.15 quota/manipulation profile is attached to that account.
+
 ## 2. Goals
 
 V5.15 must:
@@ -23,7 +25,7 @@ V5.15 must:
 6. Allow an administrator to define arbitrary Week A / Week B class pairs for each timeslot.
 7. Allow the administrator to create arbitrary dates, start/end times, and rooms, including exceptional or catch-up sessions.
 8. Generate the manipulation rotation automatically.
-9. Let teachers request specific session positions consisting of class, date/time, group, and manipulation.
+9. Let teachers request specific session positions consisting of class, date/time, group, manipulation, and room.
 10. Allow several teachers to request the same position.
 11. Require administrator validation before an assignment becomes final.
 12. Allow direct administrator assignment when no request exists.
@@ -36,6 +38,7 @@ V5.15 must:
 ## 3. Explicit non-goals
 
 - No rewrite of stable V5 attendance or grade-entry rules.
+- No second teacher authentication system.
 - No automatic modification of already-realized or closed sessions.
 - No unrestricted manual editing of generated manipulation rotations.
 - No client-side-only enforcement of quotas or assignment constraints.
@@ -46,6 +49,8 @@ V5.15 must:
 ### Classes and groups
 
 Each class has a configurable group count from 1 to 6. Four groups is the default. Group identifiers are `G1` through `G6` as required by that class configuration.
+
+Each global class session contains one concrete session position per active group. Therefore a four-group class requires four simultaneous teacher assignments, one for each group position.
 
 ### Manipulations
 
@@ -63,6 +68,10 @@ Every group has one pedagogical TP session every two weeks. A recurring timeslot
 The administrator defines these pairs freely for each timeslot. The pairing is configuration data and is not hard-coded.
 
 Each class advances through its own manipulation cycle only when that class actually has its pedagogical session.
+
+### Rooms
+
+Room remains a property of each concrete session position. Generation reuses the existing V5 room configuration where a compatible mapping exists. Before a cycle is opened for teacher requests, the administrator may set or override the room for future positions. A room change never rewrites realized history.
 
 ## 5. Rotation engine
 
@@ -89,9 +98,11 @@ A cancelled session does not advance the rotation. A catch-up session inherits t
 
 ### Group-count changes
 
-Group count is freely configurable before a pedagogical cycle is opened. Once any session in a class cycle reaches `REALIZED`, changing that class's group count applies only to the next cycle. This prevents a mid-cycle change from creating duplicate manipulations or an incomplete six-manipulation path.
+Group count is freely configurable while a class cycle is in `DRAFT`.
 
-If the cycle is still entirely in `DRAFT` and no session has been realized, the administrator may change the group count and regenerate all future positions for that cycle. Historical finalized/realized data is never rewritten.
+After the cycle is opened for requests, group count cannot be edited directly. If no session has reached `FINALIZED` or `REALIZED`, the administrator may explicitly reset the cycle to `DRAFT`; this cancels pending requests, removes non-final draft assignments, records the reset in the audit log, and then permits regeneration with the new group count.
+
+Once any session in that class cycle reaches `FINALIZED` or `REALIZED`, a group-count change applies only to the next pedagogical cycle. Historical finalized/realized data is never rewritten.
 
 ### Exceptional rotation change
 
@@ -104,10 +115,10 @@ New V5.15 behavior is stored in additive tables rather than directly rewriting s
 Recommended structures:
 
 - `v515_class_config`: class, group count, active flag.
-- `v515_timeslots`: recurring or exceptional date/day, start time, end time, room, active flag.
+- `v515_timeslots`: recurring or exceptional date/day, start time, end time, active flag.
 - `v515_fortnight_pairs`: timeslot plus Week A class and Week B class.
 - `v515_rotation`: generated pedagogical-session/group/manipulation state.
-- `v515_teacher_config`: teacher, individual quota, active flag.
+- `v515_teacher_config`: reference to existing teacher identity, individual quota, active flag.
 - `v515_teacher_manipulations`: allowed `M1`-`M6` per teacher.
 - `v515_session_positions`: concrete class/date/time/group/manipulation/room positions.
 - `v515_requests`: teacher requests for a session position.
@@ -145,7 +156,7 @@ The administrator can:
 - create arbitrary dates, times, rooms, and timeslots;
 - define Week A / Week B class pairs per recurring timeslot;
 - generate and preview the automatic rotation;
-- add, edit, deactivate, or reactivate teachers;
+- add, edit, deactivate, or reactivate teachers through the existing teacher-account model;
 - set an individual quota for each teacher;
 - set allowed manipulations for each teacher;
 - review all competing requests for a position;
@@ -197,7 +208,9 @@ A V5.15 planning cycle follows:
 
 `DRAFT -> OPEN_FOR_REQUESTS -> ASSIGNMENT -> FINALIZED -> REALIZED`
 
-A realized session is immutable to automatic regeneration or movement.
+`FINALIZED` means the assignment is published to the operational planning and synchronized to the existing attendance/grades structures. `REALIZED` means the pedagogical session has actually taken place. A realized session is immutable to automatic regeneration or movement.
+
+A cycle may be reset from `OPEN_FOR_REQUESTS` or `ASSIGNMENT` to `DRAFT` only if it contains no `FINALIZED` or `REALIZED` session. The reset cancels pending requests and clears only non-final V5.15 draft assignments transactionally.
 
 Before finalization, `Vérifier le planning` checks at least:
 
@@ -208,7 +221,7 @@ Before finalization, `Vérifier le planning` checks at least:
 - no teacher quota is exceeded;
 - every validated assignment uses an allowed manipulation;
 - Week A / Week B alternation is respected;
-- no realized session was changed;
+- no finalized or realized session was changed;
 - every mandatory session position has a teacher.
 
 Finalization is blocked while any blocking error remains.
@@ -227,7 +240,7 @@ Supabase RLS and server-side RPCs are authoritative.
 
 A teacher may read eligible session positions, manage only their own pending requests, and read only their own request/assignment data except for explicitly public planning information.
 
-Only administrators may modify group counts, timeslot pairing, teacher quotas, teacher manipulation permissions, rotation exceptions, request decisions, direct assignments, and planning finalization.
+Only administrators may modify group counts, timeslot pairing, teacher quotas, teacher manipulation permissions, rotation exceptions, request decisions, direct assignments, cycle resets, and planning finalization.
 
 Critical authorization and integrity rules must not depend on hidden buttons or browser state.
 
@@ -241,6 +254,7 @@ The system records at least:
 - direct administrator assignments;
 - rotation exceptions;
 - group-count changes;
+- cycle resets;
 - finalization actions.
 
 Each audit event contains timestamp, actor, action, target, and relevant old/new values when applicable.
@@ -254,6 +268,7 @@ User-facing failures must be explicit and domain-specific, for example:
 - `Manipulation non autorisée pour cet enseignant.`
 - `Cette séance est déjà attribuée.`
 - `Rotation incohérente avec le cycle M1-M6.`
+- `Modification du nombre de groupes impossible après finalisation du cycle.`
 - `Finalisation impossible : des postes restent non couverts.`
 
 No partial write is retained after a failed transactional operation.
@@ -266,7 +281,7 @@ Test group counts 1 through 6 across a full six-session cycle. Verify each group
 
 ### Business-rule tests
 
-Test unlimited requests, competing requests, individual quotas, administrator validation, automatic competitor rejection, direct assignment, manipulation eligibility, teacher deactivation, overlapping-timeslot rejection, and pre-cycle versus post-realization group-count changes.
+Test unlimited requests, competing requests, individual quotas, administrator validation, automatic competitor rejection, direct assignment, manipulation eligibility, teacher deactivation, overlapping-timeslot rejection, cycle reset behavior, and pre-cycle versus post-finalization group-count changes.
 
 ### Security tests
 
