@@ -36,17 +36,23 @@ jobs:
           $parts = Get-ChildItem 'bootstrap/windows-electron-v513-src.tar.gz.b64.part-*' | Sort-Object Name
           if ($parts.Count -ne 9) { throw "Expected 9 bootstrap parts, found $($parts.Count)." }
 
-          $builder = [System.Text.StringBuilder]::new()
+          $chunks = @()
           foreach ($part in $parts) {
-            [void]$builder.Append((Get-Content $part.FullName -Raw))
+            $chunks += ((Get-Content $part.FullName -Raw) -replace '\s','')
           }
-          $b64 = $builder.ToString() -replace '\s',''
-          if (($b64.Length % 4) -ne 0) { throw "Base64 source length is invalid: $($b64.Length)." }
+          if ($chunks[0].Length -ne 16014) { throw "Unexpected part-000 length: $($chunks[0].Length)." }
+          $chunks[0] = $chunks[0].Substring(0, 16000)
+          $b64 = ($chunks -join '')
+          if (($b64.Length % 4) -ne 0) { throw "Base64 source length remains invalid after targeted repair: $($b64.Length)." }
           $bytes = [Convert]::FromBase64String($b64)
           [IO.File]::WriteAllBytes((Join-Path $PWD 'windows-electron-v513-src.tar.gz'), $bytes)
 
+          tar -tzf 'windows-electron-v513-src.tar.gz' | Select-Object -First 10
+          if ($LASTEXITCODE -ne 0) { throw 'Reconstructed source is not a valid gzip/tar archive.' }
+
           New-Item -ItemType Directory -Force -Path 'ci-electron-src' | Out-Null
           tar -xzf 'windows-electron-v513-src.tar.gz' -C 'ci-electron-src'
+          if ($LASTEXITCODE -ne 0) { throw 'Source archive extraction failed.' }
 
           $candidate = Get-ChildItem 'ci-electron-src' -Recurse -Filter 'package.json' -File |
             Where-Object { (Get-Content $_.FullName -Raw) -match 'electron-builder' } |
