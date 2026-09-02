@@ -2,7 +2,7 @@ name: Build Secure Web Application
 
 on:
   push:
-    branches: [ main, release/final-cross-platform-2026-2027 ]
+    branches: [ main, release/final-cross-platform-2026-2027, feature/v5.15-session-selection ]
     paths:
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
@@ -43,9 +43,11 @@ jobs:
         run: |
           set -euo pipefail
           node --check web/security-v2.js
-          for test in tests/web/*.test.cjs; do
-            node "$test"
-          done
+          node --check web/v515-api.js
+          node --check web/v515-teacher-ui.js
+          node --check web/v515-admin-ui.js
+          node --check web/v515-runtime.js
+          node --test tests/web/*.test.cjs
 
       - name: Build online Web application
         run: python scripts/build_online_web.py
@@ -62,9 +64,16 @@ jobs:
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'challengeAndVerify' web/index.html
           grep -Fq 'VERSION_CONFLICT' web/index.html
+          grep -Fq 'window.FSTV515Api=' web/index.html
+          grep -Fq 'window.FSTV515TeacherUI=' web/index.html
+          grep -Fq 'window.FSTV515AdminUI=' web/index.html
+          grep -Fq 'window.FSTV515=' web/index.html
+          grep -Fq 'v515_submit_request' web/index.html
+          grep -Fq 'v515_finalize_cycle' web/index.html
           ! grep -Fq './security-v2.js' web/index.html
+          ! grep -Fq './v515-runtime.js' web/index.html
           mkdir -p dist/web
-          cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
+          cp web/index.html dist/web/Gestion-Presence-FST-Web-v5.15.0.html
           cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
           sha256sum dist/web/* > dist/web/SHA256SUMS.txt
           sha256sum --check dist/web/SHA256SUMS.txt
@@ -72,6 +81,6 @@ jobs:
       - name: Upload secure Web application
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Web-v2.0.0
+          name: Gestion-Presence-FST-Web-v5.15.0
           path: dist/web/**
           if-no-files-found: error
