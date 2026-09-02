@@ -38,49 +38,25 @@ jobs:
 
           $chunks = @()
           foreach ($part in $parts) {
-            $chunks += ((Get-Content $part.FullName -Raw) -replace '\s','')
+            $chunk = ((Get-Content $part.FullName -Raw) -replace '\s','')
+            $invalid = [regex]::Matches($chunk, '[^A-Za-z0-9+/=]')
+            $padding = [regex]::Matches($chunk, '=')
+            $firstEq = $chunk.IndexOf('=')
+            Write-Host "$($part.Name): len=$($chunk.Length) invalid=$($invalid.Count) padding=$($padding.Count) firstEq=$firstEq"
+            foreach ($m in $invalid | Select-Object -First 8) {
+              $start = [Math]::Max(0, $m.Index - 12)
+              $count = [Math]::Min(25, $chunk.Length - $start)
+              $ctx = $chunk.Substring($start, $count)
+              Write-Host "  invalid index=$($m.Index) code=$([int][char]$m.Value) context=$ctx"
+            }
+            $chunks += $chunk
           }
-          if ($chunks[0].Length -ne 16014) { throw "Unexpected part-000 length: $($chunks[0].Length)." }
-          $chunks[0] = $chunks[0].Substring(0, 16000)
-          $b64 = ($chunks -join '')
-          if (($b64.Length % 4) -ne 0) { throw "Base64 source length remains invalid after targeted repair: $($b64.Length)." }
-          $bytes = [Convert]::FromBase64String($b64)
-          [IO.File]::WriteAllBytes((Join-Path $PWD 'windows-electron-v513-src.tar.gz'), $bytes)
-
-          tar -tzf 'windows-electron-v513-src.tar.gz' | Select-Object -First 10
-          if ($LASTEXITCODE -ne 0) { throw 'Reconstructed source is not a valid gzip/tar archive.' }
-
-          New-Item -ItemType Directory -Force -Path 'ci-electron-src' | Out-Null
-          tar -xzf 'windows-electron-v513-src.tar.gz' -C 'ci-electron-src'
-          if ($LASTEXITCODE -ne 0) { throw 'Source archive extraction failed.' }
-
-          $candidate = Get-ChildItem 'ci-electron-src' -Recurse -Filter 'package.json' -File |
-            Where-Object { (Get-Content $_.FullName -Raw) -match 'electron-builder' } |
-            Select-Object -First 1
-          if (-not $candidate) { throw 'Electron package.json not found after archive extraction.' }
-
-          $project = $candidate.Directory.FullName
-          New-Item -ItemType Directory -Force -Path 'desktop/windows-electron-v513' | Out-Null
-          Copy-Item -Path (Join-Path $project '*') -Destination 'desktop/windows-electron-v513' -Recurse -Force
-
-          $renderer = 'desktop/windows-electron-v513/renderer/Gestion_Presence_FST_TP_MPI_PC_WEB_V5_13.html'
-          if (-not (Test-Path $renderer)) { throw 'Canonical V5.13 renderer is missing from reconstructed source.' }
-          $rendererHash = (Get-FileHash $renderer -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = '73daccbc12f1e9d0068a53a5d3f7052f3002a49963ce3842f3fa6040650538e8'
-          if ($rendererHash -ne $expected) { throw "Renderer SHA-256 mismatch: $rendererHash" }
-          Write-Host "Renderer SHA-256 verified: $rendererHash"
+          throw 'Bootstrap diagnostic complete; inspect per-part Base64 anomalies above.'
 
       - name: Install dependencies
         shell: pwsh
         working-directory: desktop/windows-electron-v513
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if (Test-Path 'package-lock.json') {
-            npm ci --no-audit --no-fund
-          } else {
-            Write-Warning 'package-lock.json absent in bootstrap archive; using exact pinned top-level versions with npm install.'
-            npm install --no-audit --no-fund
-          }
+        run: npm install --no-audit --no-fund
 
       - name: Verify canonical renderer
         shell: pwsh
@@ -117,10 +93,7 @@ jobs:
         working-directory: desktop/windows-electron-v513
         run: |
           $ErrorActionPreference = 'Stop'
-          $files = @(
-            'dist/Gestion Presence FST Setup.exe',
-            'dist/Gestion Presence FST Portable.exe'
-          )
+          $files = @('dist/Gestion Presence FST Setup.exe','dist/Gestion Presence FST Portable.exe')
           foreach ($file in $files) {
             if (-not (Test-Path $file)) { throw "Missing artifact: $file" }
             $size = (Get-Item $file).Length
