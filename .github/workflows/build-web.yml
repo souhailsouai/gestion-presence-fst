@@ -11,6 +11,7 @@ on:
       - 'scripts/v16_html_transform.py'
       - 'scripts/web-superadmin.patch.part*'
       - 'tests/web/**'
+      - 'releases/v16/**'
       - '.github/workflows/build-web.yml'
   pull_request:
     branches: [ main ]
@@ -23,6 +24,7 @@ on:
       - 'scripts/web-superadmin.patch.part*'
       - 'tests/web/**'
       - 'supabase/migrations/**'
+      - 'releases/v16/**'
       - '.github/workflows/build-web.yml'
   workflow_dispatch:
 
