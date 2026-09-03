@@ -21,8 +21,7 @@ test('exports consume current in-memory filtered rows and active filters',()=>{
 
 test('generate controls expose loading and success error feedback',()=>{
   assert.match(source,/data-v16-generate-status/);
-  assert.match(source,/disabled\s*=\s*true/);
-  assert.match(source,/disabled\s*=\s*false/);
+  assert.match(source,/disabled\s*=\s*isBusy/);
   assert.match(source,/Génération en cours/);
   assert.match(source,/généré|générée/i);
   assert.match(source,/Erreur|impossible/i);
