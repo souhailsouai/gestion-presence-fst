@@ -14,10 +14,12 @@ test('V16 timetable module exposes real-session renderer and presence opener',()
 });
 
 test('presence opener activates Presence, selects exact session and reuses existing loader',()=>{
-  assert.match(source,/switchTab\s*\(\s*['"]presence['"]\s*\)/);
+  assert.match(source,/options\.switchTab\|\|root\.switchTab/);
+  assert.match(source,/switchFn\s*\(\s*['"]presence['"]\s*\)/);
   assert.match(source,/presence-session/);
   assert.match(source,/select\.value\s*=\s*String\(sessionId\)|\.value\s*=\s*String\(sessionId\)/);
-  assert.match(source,/loadPresenceSheet\s*\(/);
+  assert.match(source,/options\.loadPresenceSheet\|\|root\.loadPresenceSheet/);
+  assert.match(source,/loadFn\s*\(\s*\)/);
   assert.doesNotMatch(source,/from\s*\(\s*['"]attendance['"]\s*\)/);
   assert.doesNotMatch(source,/fetchRemoteData\s*\(/);
 });
@@ -36,4 +38,12 @@ test('module replaces the legacy recurring timetable renderer when loaded in bro
   assert.match(source,/renderMyTimetable/);
   assert.match(source,/renderTimetableSessions/);
   assert.match(source,/emploi-content/);
+});
+
+test('online and standalone builders include the timetable presence module',()=>{
+  const online=fs.readFileSync('scripts/build_online_web.py','utf8');
+  const standalone=fs.readFileSync('scripts/build_single_file_release.py','utf8');
+  assert.match(online,/v16-timetable-presence-link\.js/);
+  assert.match(standalone,/v16-timetable-presence-link\.js/);
+  assert.match(standalone,/data-fst-v16-timetable-presence-link="inline"/);
 });
