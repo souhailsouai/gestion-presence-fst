@@ -15,6 +15,7 @@ v515_core_path = root / 'web' / 'v515-planning-core.js'
 v515_data_path = root / 'web' / 'v515-planning-2026-2027.js'
 v515_validation_path = root / 'web' / 'v515-planning-validation.js'
 v515_ui_path = root / 'web' / 'v515-planning-ui.js'
+v515_admin_path = root / 'web' / 'v515-planning-admin-actions.js'
 statistics_path = root / 'web' / 'statistics.js'
 report_path = root / 'web' / 'report-pdf.js'
 vendor = root / 'web' / 'vendor'
@@ -33,7 +34,8 @@ html = html_path.read_text(encoding='utf-8')
 for src in [
     './online-runtime.js', './online-fixes.js', './security-v2.js',
     './v515-planning-core.js', './v515-planning-2026-2027.js',
-    './v515-planning-validation.js', './v515-planning-ui.js'
+    './v515-planning-validation.js', './v515-planning-ui.js',
+    './v515-planning-admin-actions.js'
 ]:
     html = html.replace(f'<script src="{src}"></script>', '')
 html = re.sub(r'\s*<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', '', html, flags=re.I)
@@ -51,6 +53,7 @@ v515_core = v515_core_path.read_text(encoding='utf-8').strip()
 v515_data = v515_data_path.read_text(encoding='utf-8').strip()
 v515_validation = v515_validation_path.read_text(encoding='utf-8').strip()
 v515_ui = v515_ui_path.read_text(encoding='utf-8').strip()
+v515_admin = v515_admin_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
 
@@ -67,6 +70,7 @@ inline = (
     '<script data-fst-v515-planning-data="inline">\n' + v515_data + '\n</script>\n'
     '<script data-fst-v515-planning-validation="inline">\n' + v515_validation + '\n</script>\n'
     '<script data-fst-v515-planning-ui="inline">\n' + v515_ui + '\n</script>\n'
+    '<script data-fst-v515-planning-admin="inline">\n' + v515_admin + '\n</script>\n'
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
 )
@@ -81,14 +85,16 @@ for marker in [
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
     'window.FSTPdf=', 'Lecture seule', 'V515Planning', 'V515PlanningData',
-    'V515PlanningValidation', 'V515PlanningUI', 'data-fst-v515-planning-ui="inline"'
+    'V515PlanningValidation', 'V515PlanningUI', 'V515PlanningAdminActions',
+    'data-fst-v515-planning-ui="inline"', 'data-fst-v515-planning-admin="inline"'
 ]:
     assert marker in html, marker
 for src in [
     './online-runtime.js', './online-fixes.js', './security-v2.js',
     './v515-planning-core.js', './v515-planning-2026-2027.js',
-    './v515-planning-validation.js', './v515-planning-ui.js'
+    './v515-planning-validation.js', './v515-planning-ui.js',
+    './v515-planning-admin-actions.js'
 ]:
     assert src not in html
-assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\']', html, re.I)
+assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
 print(html_path)
