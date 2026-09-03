@@ -47,7 +47,12 @@
       d.pair,4,6
     );
     for(const row of built){
-      const posts=row.isTeachingSession?row.posts.map(p=>Object.assign({},p,{room:manipulationRooms[p.manipulation],teacherId:null})):[];
+      const posts=row.isTeachingSession?(row.groups||[]).map(g=>({
+        groupNo:g.groupNo,
+        manipulation:g.manipulation,
+        room:manipulationRooms[g.manipulation],
+        teacherId:null
+      })):[];
       calendarRows.push(Object.assign({},row,{pair:d.pair.slice(),posts,allowedTeachers:row.isTeachingSession?teacherPools[d.weekday].slice():[]}));
     }
   }
