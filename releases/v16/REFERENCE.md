@@ -9,7 +9,8 @@ This directory records the verified V16 candidate built from the immutable V5.13
 - Candidate artifact filename: `Gestion-Presence-FST-Web-2026-2027.html`
 - Candidate artifact SHA-256: `761348c31e62609d9179d036b79cf1ef93db39419ffe530135566c654f15fea7`
 - GitHub Actions artifact: `Gestion-Presence-FST-Web-V16-candidate`
-- Verified workflow run: `33797768961`
+- Verified workflow run: `33798083675`
+- Verified artifact ID: `9909964463`
 - Planning source: `Emploi_du_temps_TP_MPI1_PC1_2026_2027_Avec_Enseignants.pdf`
 - Academic year: 2026/2027
 - Semester: 1
@@ -36,9 +37,9 @@ V16 includes:
 
 ## Build verification
 
-Workflow run `33797768961` completed JavaScript syntax checks, all Web contract/regression tests, online build, standalone build, final artifact verification, SHA-256 verification and artifact upload successfully.
+Workflow run `33798083675` completed JavaScript syntax checks, all Web contract/regression tests, online build, standalone build, final artifact verification, SHA-256 verification and artifact upload successfully.
 
-The standalone artifact checksum above was read from the workflow-generated `SHA256SUMS.txt` contained in artifact ID `9909866386`.
+The standalone artifact checksum above was read from the workflow-generated `SHA256SUMS.txt` contained in artifact ID `9909964463`.
 
 ## Deployment rule
 
