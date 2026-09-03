@@ -43,17 +43,17 @@ test('ending a membership is Admin-only and preserves all old attendance facts',
   assert.match(membership,/active\s*=\s*false/i);
   assert.match(membership,/v16_student_membership_ended/i);
   assert.doesNotMatch(membership,/update\s+(?:public\.)?attendance\s+set/i);
-  for(const field of ['student_id','session_id','grade','status']){
-    assert.doesNotMatch(membership,new RegExp(`attendance[\\s\\S]{0,120}${field}\\s*=`,'i'));
-  }
+  for(const field of ['student_id','session_id','grade','status'])assert.doesNotMatch(membership,new RegExp(`attendance[\\s\\S]{0,120}${field}\\s*=`,'i'));
 });
 
-test('membership table allows authenticated reads but no direct teacher writes',()=>{
+test('membership table is readable to authenticated users but mutations are RLS Admin-only',()=>{
   assert.match(membership,/enable row level security/i);
-  assert.match(membership,/grant select on public\.v16_student_group_memberships to authenticated/i);
+  assert.match(membership,/grant select,insert,update,delete on public\.v16_student_group_memberships to authenticated/i);
   assert.match(membership,/create policy v16_student_memberships_read/i);
-  assert.doesNotMatch(membership,/create policy[^;]+for insert to authenticated/i);
-  assert.doesNotMatch(membership,/grant (?:insert|update|delete)[^;]+v16_student_group_memberships[^;]+authenticated/i);
+  assert.match(membership,/create policy v16_student_memberships_admin_insert[\s\S]+for insert to authenticated[\s\S]+private\.is_admin\(\)/i);
+  assert.match(membership,/create policy v16_student_memberships_admin_update[\s\S]+for update to authenticated[\s\S]+private\.is_admin\(\)/i);
+  assert.match(membership,/create policy v16_student_memberships_admin_delete[\s\S]+for delete to authenticated[\s\S]+private\.is_admin\(\)/i);
+  assert.doesNotMatch(membership,/teacher_id\s*=\s*\(select auth\.uid\(\)\)/i);
   assert.match(membership,/revoke execute on function public\.v16_set_student_group/i);
   assert.match(membership,/grant execute on function public\.v16_set_student_group/i);
 });
