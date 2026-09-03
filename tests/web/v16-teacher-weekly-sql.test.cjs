@@ -3,7 +3,9 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 
 const policyPath='supabase/migrations/20260903170000_v16_teacher_weekly_policy.sql';
+const swapPath='supabase/migrations/20260903170100_v16_teacher_permutations.sql';
 const sql=fs.existsSync(policyPath)?fs.readFileSync(policyPath,'utf8'):'';
+const swap=fs.existsSync(swapPath)?fs.readFileSync(swapPath,'utf8'):'';
 
 test('V16 weekly teacher policy migration defines an Admin-only verifier',()=>{
   assert.ok(sql.length>0,'weekly policy migration missing');
@@ -44,4 +46,48 @@ test('weekly policy uses Africa Tunis locking and audits verification',()=>{
   assert.match(sql,/private\.v515_audit/i);
   assert.match(sql,/v16_teacher_week_verified/i);
   assert.match(sql,/jsonb_build_object\s*\(\s*'ok'/i);
+});
+
+test('V16 permutation migration exposes an Admin-only weekly/future swap RPC',()=>{
+  assert.ok(swap.length>0,'teacher permutation migration missing');
+  assert.match(swap,/create or replace function public\.v16_swap_teachers\s*\(/i);
+  for(const marker of ['p_teacher_a uuid','p_day_a integer','p_teacher_b uuid','p_day_b integer','p_effective_date date','p_scope text','p_context text default \'real\'']){
+    assert.match(swap,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'),marker);
+  }
+  assert.match(swap,/p_scope\s+not in\s*\(\s*'week'\s*,\s*'future'\s*\)/i);
+  assert.match(swap,/security invoker/i);
+  assert.match(swap,/set search_path\s*=\s*''/i);
+  assert.match(swap,/private\.is_admin\(\)/i);
+});
+
+test('teacher swap protects started sessions and limits week/future scope',()=>{
+  assert.match(swap,/timezone\s*\(\s*'Africa\/Tunis'\s*,\s*now\(\)\s*\)/i);
+  assert.match(swap,/SESSION_ALREADY_STARTED/i);
+  assert.match(swap,/p_effective_date/i);
+  assert.match(swap,/p_scope\s*=\s*'week'/i);
+  assert.match(swap,/p_scope\s*=\s*'future'/i);
+  assert.match(swap,/session_date\s*>=\s*p_effective_date/i);
+});
+
+test('teacher swap validates candidate weekly totals before persisting',()=>{
+  assert.match(swap,/create temporary table/i);
+  assert.match(swap,/on commit drop/i);
+  assert.match(swap,/DAY_TEACHER_COUNT/i);
+  assert.match(swap,/WEEK_TEACHER_COUNT/i);
+  assert.match(swap,/TEACHER_WEEKDAY_COUNT/i);
+  assert.match(swap,/TEACHER_DUPLICATE_DAY/i);
+  assert.match(swap,/TEACHER_TIME_CONFLICT/i);
+  assert.match(swap,/if jsonb_array_length\(v_blockers\)>0 then/i);
+  const firstUpdate=swap.search(/update\s+public\.v515_assignments/i);
+  const blockerGate=swap.search(/if jsonb_array_length\(v_blockers\)>0 then/i);
+  assert.ok(firstUpdate>blockerGate,'real assignment update must occur only after candidate validation');
+});
+
+test('teacher swap updates linked legacy plans and writes audit event',()=>{
+  assert.match(swap,/update\s+public\.session_plans/i);
+  assert.match(swap,/legacy_plan_id/i);
+  assert.match(swap,/private\.v515_audit/i);
+  assert.match(swap,/v16_teacher_swap_applied/i);
+  assert.match(swap,/revoke execute on function public\.v16_swap_teachers/i);
+  assert.match(swap,/grant execute on function public\.v16_swap_teachers/i);
 });
