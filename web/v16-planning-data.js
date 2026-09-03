@@ -7,6 +7,15 @@
   if(!seed)throw new Error('V515PlanningData is required');
 
   const manipulationRooms=Object.freeze(Object.assign({},seed.manipulationRooms));
+  const thursdayFix={
+    '2026-10-15':['MPI1-C',['M3','M4','M5','M6']],
+    '2026-10-22':['MPI1-D',['M3','M4','M5','M6']],
+    '2026-10-29':['MPI1-C',['M4','M5','M6','M1']],
+    '2026-11-12':['MPI1-D',['M4','M5','M6','M1']],
+    '2026-11-19':['MPI1-C',['M5','M6','M1','M2']],
+    '2026-11-26':['MPI1-D',['M5','M6','M1','M2']],
+    '2026-12-03':['MPI1-C',['M6','M1','M2','M3']]
+  };
 
   function splitSlot(slot){
     const parts=String(slot||'').split('-');
@@ -15,6 +24,14 @@
 
   function normalizeRow(row){
     const slot=splitSlot(row.slot);
+    const fix=thursdayFix[row.date];
+    if(fix){
+      return {
+        date:row.date,weekday:'thursday',start:slot.start,end:slot.end,className:fix[0],
+        isTeachingSession:true,reason:null,
+        groups:fix[1].map((manipulation,index)=>({groupNo:index+1,manipulation,room:manipulationRooms[manipulation]}))
+      };
+    }
     return {
       date:row.date,
       weekday:row.weekday,
