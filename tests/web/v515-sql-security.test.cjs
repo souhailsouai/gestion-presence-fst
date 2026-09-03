@@ -4,6 +4,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 
 const dir='supabase/migrations';
+const pdfPolicyPath=path.join(dir,'20260903150700_v515_pdf_schedule_policy.sql');
 const names=fs.readdirSync(dir).filter(n=>n.includes('v515_')).sort();
 const core=fs.readFileSync(path.join(dir,'20260903150000_v515_planning_core.sql'),'utf8');
 const grants=fs.readFileSync(path.join(dir,'20260903150100_v515_planning_grants.sql'),'utf8');
@@ -12,7 +13,7 @@ const seed=fs.readFileSync(path.join(dir,'20260903150300_v515_planning_2026_2027
 const admin=fs.readFileSync(path.join(dir,'20260903150400_v515_admin_configuration.sql'),'utf8');
 const integration=fs.readFileSync(path.join(dir,'20260903150500_v515_legacy_integration.sql'),'utf8');
 const cleanup=fs.readFileSync(path.join(dir,'20260903150600_v515_request_cleanup.sql'),'utf8');
-const pdfPolicy=fs.readFileSync(path.join(dir,'20260903150700_v515_pdf_schedule_policy.sql'),'utf8');
+const pdfPolicy=fs.existsSync(pdfPolicyPath)?fs.readFileSync(pdfPolicyPath,'utf8'):'';
 
 test('V5.15 migrations have unique ordered versions',()=>{
   assert.deepEqual(names,[
@@ -41,6 +42,7 @@ test('ownership, admin and assignment invariants are server-side',()=>{
 });
 
 test('PDF fixes manipulation rooms and keeps day teacher pool admin-editable',()=>{
+  assert.ok(fs.existsSync(pdfPolicyPath),'PDF schedule policy migration must exist');
   assert.match(pdfPolicy,/\('M1','C'\)/);
   assert.match(pdfPolicy,/\('M2','B'\)/);
   assert.match(pdfPolicy,/\('M3','D'\)/);
