@@ -12,17 +12,19 @@ const seed=fs.readFileSync(path.join(dir,'20260903150300_v515_planning_2026_2027
 const admin=fs.readFileSync(path.join(dir,'20260903150400_v515_admin_configuration.sql'),'utf8');
 const integration=fs.readFileSync(path.join(dir,'20260903150500_v515_legacy_integration.sql'),'utf8');
 const cleanup=fs.readFileSync(path.join(dir,'20260903150600_v515_request_cleanup.sql'),'utf8');
+const pdfPolicy=fs.readFileSync(path.join(dir,'20260903150700_v515_pdf_schedule_policy.sql'),'utf8');
 
 test('V5.15 migrations have unique ordered versions',()=>{
   assert.deepEqual(names,[
     '20260903150000_v515_planning_core.sql','20260903150100_v515_planning_grants.sql','20260903150200_v515_planning_rpcs.sql',
     '20260903150300_v515_planning_2026_2027.sql','20260903150400_v515_admin_configuration.sql','20260903150500_v515_legacy_integration.sql',
-    '20260903150600_v515_request_cleanup.sql'
+    '20260903150600_v515_request_cleanup.sql','20260903150700_v515_pdf_schedule_policy.sql'
   ]);
 });
 
 test('all V5.15 exposed tables enable RLS',()=>{
   for(const t of ['cycles','class_pairs','groups','manipulations','sessions','teacher_constraints','requests','assignments','waivers','audit_log'])assert.match(core,new RegExp(`alter table public\\.v515_${t} enable row level security`,'i'),t);
+  assert.match(pdfPolicy,/alter table public\.v515_teacher_day_pool enable row level security/i);
 });
 
 test('ownership, admin and assignment invariants are server-side',()=>{
@@ -36,6 +38,25 @@ test('ownership, admin and assignment invariants are server-side',()=>{
   assert.match(rpcs,/pg_advisory_xact_lock/);
   assert.match(rpcs,/hashtextextended\('v515-teacher\|'/);
   assert.match(rpcs,/hashtextextended\('v515-room\|'/);
+});
+
+test('PDF fixes manipulation rooms and keeps day teacher pool admin-editable',()=>{
+  assert.match(pdfPolicy,/\('M1','C'\)/);
+  assert.match(pdfPolicy,/\('M2','B'\)/);
+  assert.match(pdfPolicy,/\('M3','D'\)/);
+  assert.match(pdfPolicy,/\('M4','D'\)/);
+  assert.match(pdfPolicy,/\('M5','A'\)/);
+  assert.match(pdfPolicy,/\('M6','A'\)/);
+  assert.match(pdfPolicy,/v515_teacher_day_pool/);
+  assert.match(pdfPolicy,/Khaoula Rais/);
+  assert.match(pdfPolicy,/Souhail Souai/);
+  assert.match(pdfPolicy,/Nadia Bouaziz/);
+  assert.match(pdfPolicy,/Olfa Turki/);
+  assert.match(pdfPolicy,/Tarek Sbeouelji/);
+  assert.match(pdfPolicy,/Mouna Triki/);
+  assert.match(pdfPolicy,/ROOM_NOT_ALLOWED/);
+  assert.match(pdfPolicy,/TEACHER_NOT_ALLOWED_TODAY/);
+  assert.match(pdfPolicy,/v515_set_teacher_day_pool/);
 });
 
 test('room and legacy presence-plan linkage are explicit',()=>{
@@ -67,6 +88,7 @@ test('privileged functions are not executable by anon or PUBLIC',()=>{
   assert.match(rpcs,/revoke execute on function private\.v515_audit/);
   assert.match(integration,/revoke execute on function public\.v515_materialize_session_plans/);
   assert.match(cleanup,/revoke execute on function private\.v515_reject_competing_requests/);
+  assert.match(pdfPolicy,/revoke execute on function public\.v515_set_teacher_day_pool/);
   assert.match(rpcs,/security definer set search_path=''/i);
 });
 
@@ -84,6 +106,6 @@ test('seed is safe to re-run only while still an empty draft',()=>{
 });
 
 test('no service_role secret is introduced in V5.15 implementation',()=>{
-  const combined=[core,grants,rpcs,seed,admin,integration,cleanup,fs.readFileSync('web/v515-planning-core.js','utf8'),fs.readFileSync('web/v515-planning-2026-2027.js','utf8')].join('\n');
+  const combined=[core,grants,rpcs,seed,admin,integration,cleanup,pdfPolicy,fs.readFileSync('web/v515-planning-core.js','utf8'),fs.readFileSync('web/v515-planning-2026-2027.js','utf8')].join('\n');
   assert.doesNotMatch(combined,/service_role/i);
 });
