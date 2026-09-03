@@ -63,4 +63,10 @@ def apply_v16_shell(html: str) -> str:
             raise ValueError('Point d’insertion Rapports introuvable.')
         html = html.replace(report_marker, V16_PLANNING_PANEL + report_marker, 1)
 
+    app_marker = '<div class="container" id="app-container"'
+    if app_marker not in html:
+        raise ValueError('Conteneur principal V5.13 introuvable.')
+    if 'data-app-version="V16"' not in html:
+        html = html.replace(app_marker, '<div class="container" id="app-container" data-app-version="V16"', 1)
+
     return html
