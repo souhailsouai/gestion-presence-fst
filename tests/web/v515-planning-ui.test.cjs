@@ -22,7 +22,8 @@ test('teacher and admin V5.15 actions call server RPCs',()=>{
 test('Admin assignment UI requires a room for validation and direct assignment',()=>{
   assert.match(admin,/p_room:room/);
   assert.match(admin,/v515-direct-room/);
-  assert.match(admin,/Salle A/);
+  assert.match(admin,/\['A','B','C','D'\]/);
+  assert.match(admin,/Salle \$\{r\}/);
   assert.match(admin,/Activer dans présence/);
 });
 
