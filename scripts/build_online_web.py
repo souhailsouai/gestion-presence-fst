@@ -27,6 +27,10 @@ tags = [
     '<script src="./online-runtime.js"></script>',
     '<script src="./online-fixes.js"></script>',
     '<script src="./security-v2.js"></script>',
+    '<script src="./v515-planning-core.js"></script>',
+    '<script src="./v515-planning-2026-2027.js"></script>',
+    '<script src="./v515-planning-validation.js"></script>',
+    '<script src="./v515-planning-ui.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
