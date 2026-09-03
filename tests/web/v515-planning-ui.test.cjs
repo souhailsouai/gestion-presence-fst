@@ -19,11 +19,17 @@ test('teacher and admin V5.15 actions call server RPCs',()=>{
   for(const rpc of ['v515_validate_request','v515_assign_teacher','v515_materialize_session_plans'])assert.match(admin,new RegExp(rpc),rpc);
 });
 
-test('Admin assignment UI requires a room for validation and direct assignment',()=>{
+test('Admin assignment UI derives the fixed PDF room from manipulation and only changes teacher choice',()=>{
+  assert.match(admin,/manipulationRooms/);
+  assert.match(admin,/M1:'C'/);
+  assert.match(admin,/M2:'B'/);
+  assert.match(admin,/M3:'D'/);
+  assert.match(admin,/M4:'D'/);
+  assert.match(admin,/M5:'A'/);
+  assert.match(admin,/M6:'A'/);
+  assert.doesNotMatch(admin,/v515-direct-room/);
+  assert.doesNotMatch(admin,/roomSelect\(/);
   assert.match(admin,/p_room:room/);
-  assert.match(admin,/v515-direct-room/);
-  assert.match(admin,/\['A','B','C','D'\]/);
-  assert.match(admin,/Salle \$\{r\}/);
   assert.match(admin,/Activer dans présence/);
 });
 
