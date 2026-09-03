@@ -8,8 +8,23 @@ on:
       - 'web/**'
       - 'scripts/build_online_web.py'
       - 'scripts/build_single_file_release.py'
+      - 'scripts/v16_html_transform.py'
       - 'scripts/web-superadmin.patch.part*'
       - 'tests/web/**'
+      - 'releases/v16/**'
+      - '.github/workflows/build-web.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'gestion_presence_tp_theme_institutionnel.html'
+      - 'web/**'
+      - 'scripts/build_online_web.py'
+      - 'scripts/build_single_file_release.py'
+      - 'scripts/v16_html_transform.py'
+      - 'scripts/web-superadmin.patch.part*'
+      - 'tests/web/**'
+      - 'supabase/migrations/**'
+      - 'releases/v16/**'
       - '.github/workflows/build-web.yml'
   workflow_dispatch:
 
@@ -43,6 +58,9 @@ jobs:
         run: |
           set -euo pipefail
           node --check web/security-v2.js
+          for file in web/v515-*.js web/v16-*.js; do
+            node --check "$file"
+          done
           for test in tests/web/*.test.cjs; do
             node "$test"
           done
@@ -59,10 +77,16 @@ jobs:
           set -euo pipefail
           test -s web/index.html
           grep -Fq 'data-fst-security-v2="inline"' web/index.html
+          grep -Fq 'data-fst-v515-planning-core="inline"' web/index.html
+          grep -Fq 'data-fst-v16-planning-data="inline"' web/index.html
+          grep -Fq 'data-fst-v16-planning-state="inline"' web/index.html
+          grep -Fq 'data-fst-v16-planning-ui="inline"' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'challengeAndVerify' web/index.html
           grep -Fq 'VERSION_CONFLICT' web/index.html
           ! grep -Fq './security-v2.js' web/index.html
+          ! grep -Fq './v16-planning-ui.js' web/index.html
+          ! grep -Fq 'data-fst-v515-planning-ui="inline"' web/index.html
           mkdir -p dist/web
           cp web/index.html dist/web/Gestion-Presence-FST-Web-2026-2027.html
           cp gestion_presence_tp_theme_institutionnel.html dist/web/Gestion-Presence-FST-HTML-Reference-2026-2027.html
@@ -72,6 +96,6 @@ jobs:
       - name: Upload secure Web application
         uses: actions/upload-artifact@v4
         with:
-          name: Gestion-Presence-FST-Web-v2.0.0
+          name: Gestion-Presence-FST-Web-V16-candidate
           path: dist/web/**
           if-no-files-found: error

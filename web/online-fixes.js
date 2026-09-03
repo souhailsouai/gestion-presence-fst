@@ -21,6 +21,7 @@
   if(typeof onlineDoLogin==='function'){
     window.doLogin=async function(profile,mode){
       const result=await onlineDoLogin(profile,mode);
+      window.V16ActiveRole?.configure({isAdmin:Boolean(profile?.isAdmin),initialRole:mode==='admin'?'admin':'teacher'});
       localStorage.removeItem('presence_profile_cache');
       localStorage.removeItem('attendanceSupabase_syncQueue');
       return result;
@@ -77,4 +78,39 @@
     };
     reader.readAsText(file);
   };
+
+  async function renderV16StudentGroups(){
+    if(!window.V16StudentGroups?.renderIntoStudentsView)return false;
+    try{return await window.V16StudentGroups.renderIntoStudentsView({supabaseClient,currentTeacher,data});}
+    catch(error){console.error('V16 student groups',error);return false;}
+  }
+
+  function mountV16TestMode(){
+    if(!window.V16TestMode?.mount)return false;
+    try{
+      return window.V16TestMode.mount({
+        supabaseClient,
+        isAdmin:Boolean(currentTeacher?.isAdmin),
+        activeRole:window.V16ActiveRole?.get?.()||currentTeacher?.activeMode||'teacher',
+        activeRoleApi:window.V16ActiveRole
+      });
+    }catch(error){console.error('V16 test mode',error);return false;}
+  }
+
+  const baseSwitchTab=window.switchTab;
+  if(typeof baseSwitchTab==='function'){
+    window.switchTab=function(tabName){
+      const result=baseSwitchTab.apply(this,arguments);
+      if(tabName==='etudiants')setTimeout(()=>{void renderV16StudentGroups();},0);
+      if(tabName==='planning-v16')setTimeout(()=>{mountV16TestMode();},0);
+      return result;
+    };
+  }
+
+  window.addEventListener?.('v16:role-changed',()=>{
+    if(document.getElementById('planning-v16')?.classList.contains('active'))mountV16TestMode();
+  });
+
+  window.renderV16StudentGroups=renderV16StudentGroups;
+  window.mountV16TestMode=mountV16TestMode;
 })();
