@@ -13,9 +13,9 @@ permissions_path = root / 'web' / 'session-permissions.js'
 editing_path = root / 'web' / 'session-editing.js'
 v515_core_path = root / 'web' / 'v515-planning-core.js'
 v515_data_path = root / 'web' / 'v515-planning-2026-2027.js'
-v515_validation_path = root / 'web' / 'v515-planning-validation.js'
-v515_ui_path = root / 'web' / 'v515-planning-ui.js'
-v515_admin_path = root / 'web' / 'v515-planning-admin-actions.js'
+v16_data_path = root / 'web' / 'v16-planning-data.js'
+v16_state_path = root / 'web' / 'v16-planning-state.js'
+v16_ui_path = root / 'web' / 'v16-planning-ui.js'
 statistics_path = root / 'web' / 'statistics.js'
 report_path = root / 'web' / 'report-pdf.js'
 vendor = root / 'web' / 'vendor'
@@ -34,8 +34,7 @@ html = html_path.read_text(encoding='utf-8')
 external_modules = [
     './online-runtime.js', './online-fixes.js', './security-v2.js',
     './v515-planning-core.js', './v515-planning-2026-2027.js',
-    './v515-planning-validation.js', './v515-planning-ui.js',
-    './v515-planning-admin-actions.js'
+    './v16-planning-data.js', './v16-planning-state.js', './v16-planning-ui.js'
 ]
 for src in external_modules:
     html = html.replace(f'<script src="{src}"></script>', '')
@@ -52,9 +51,9 @@ permissions = permissions_path.read_text(encoding='utf-8').strip()
 editing = editing_path.read_text(encoding='utf-8').strip()
 v515_core = v515_core_path.read_text(encoding='utf-8').strip()
 v515_data = v515_data_path.read_text(encoding='utf-8').strip()
-v515_validation = v515_validation_path.read_text(encoding='utf-8').strip()
-v515_ui = v515_ui_path.read_text(encoding='utf-8').strip()
-v515_admin = v515_admin_path.read_text(encoding='utf-8').strip()
+v16_data = v16_data_path.read_text(encoding='utf-8').strip()
+v16_state = v16_state_path.read_text(encoding='utf-8').strip()
+v16_ui = v16_ui_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
 
@@ -69,9 +68,9 @@ inline = (
     '<script data-fst-session-editing="inline">\n' + editing + '\n</script>\n'
     '<script data-fst-v515-planning-core="inline">\n' + v515_core + '\n</script>\n'
     '<script data-fst-v515-planning-data="inline">\n' + v515_data + '\n</script>\n'
-    '<script data-fst-v515-planning-validation="inline">\n' + v515_validation + '\n</script>\n'
-    '<script data-fst-v515-planning-ui="inline">\n' + v515_ui + '\n</script>\n'
-    '<script data-fst-v515-planning-admin="inline">\n' + v515_admin + '\n</script>\n'
+    '<script data-fst-v16-planning-data="inline">\n' + v16_data + '\n</script>\n'
+    '<script data-fst-v16-planning-state="inline">\n' + v16_state + '\n</script>\n'
+    '<script data-fst-v16-planning-ui="inline">\n' + v16_ui + '\n</script>\n'
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
 )
@@ -86,11 +85,14 @@ for marker in [
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
     'window.FSTPdf=', 'Lecture seule', 'V515Planning', 'V515PlanningData',
-    'V515PlanningValidation', 'V515PlanningUI', 'V515PlanningAdminActions',
-    'data-fst-v515-planning-ui="inline"', 'data-fst-v515-planning-admin="inline"'
+    'V16PlanningData', 'V16PlanningState', 'V16PlanningUI',
+    'data-fst-v16-planning-data="inline"', 'data-fst-v16-planning-state="inline"',
+    'data-fst-v16-planning-ui="inline"'
 ]:
     assert marker in html, marker
 for src in external_modules:
     assert not re.search(r'<script[^>]+src=["\']' + re.escape(src) + r'["\'][^>]*></script>', html, re.I), src
+assert 'data-fst-v515-planning-ui="inline"' not in html
+assert 'data-fst-v515-planning-admin="inline"' not in html
 assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\']', html, re.I)
 print(html_path)
