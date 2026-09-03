@@ -15,6 +15,7 @@ v515_core_path = root / 'web' / 'v515-planning-core.js'
 v515_data_path = root / 'web' / 'v515-planning-2026-2027.js'
 v16_data_path = root / 'web' / 'v16-planning-data.js'
 v16_state_path = root / 'web' / 'v16-planning-state.js'
+v16_permutations_path = root / 'web' / 'v16-teacher-permutations.js'
 v16_ui_path = root / 'web' / 'v16-planning-ui.js'
 statistics_path = root / 'web' / 'statistics.js'
 report_path = root / 'web' / 'report-pdf.js'
@@ -34,7 +35,7 @@ html = html_path.read_text(encoding='utf-8')
 external_modules = [
     './online-runtime.js', './online-fixes.js', './security-v2.js',
     './v515-planning-core.js', './v515-planning-2026-2027.js',
-    './v16-planning-data.js', './v16-planning-state.js', './v16-planning-ui.js'
+    './v16-planning-data.js', './v16-planning-state.js', './v16-teacher-permutations.js', './v16-planning-ui.js'
 ]
 for src in external_modules:
     html = html.replace(f'<script src="{src}"></script>', '')
@@ -53,6 +54,7 @@ v515_core = v515_core_path.read_text(encoding='utf-8').strip()
 v515_data = v515_data_path.read_text(encoding='utf-8').strip()
 v16_data = v16_data_path.read_text(encoding='utf-8').strip()
 v16_state = v16_state_path.read_text(encoding='utf-8').strip()
+v16_permutations = v16_permutations_path.read_text(encoding='utf-8').strip()
 v16_ui = v16_ui_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
@@ -70,6 +72,7 @@ inline = (
     '<script data-fst-v515-planning-data="inline">\n' + v515_data + '\n</script>\n'
     '<script data-fst-v16-planning-data="inline">\n' + v16_data + '\n</script>\n'
     '<script data-fst-v16-planning-state="inline">\n' + v16_state + '\n</script>\n'
+    '<script data-fst-v16-teacher-permutations="inline">\n' + v16_permutations + '\n</script>\n'
     '<script data-fst-v16-planning-ui="inline">\n' + v16_ui + '\n</script>\n'
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
@@ -85,9 +88,9 @@ for marker in [
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
     'window.FSTPdf=', 'Lecture seule', 'V515Planning', 'V515PlanningData',
-    'V16PlanningData', 'V16PlanningState', 'V16PlanningUI',
+    'V16PlanningData', 'V16PlanningState', 'V16TeacherPermutations', 'V16PlanningUI',
     'data-fst-v16-planning-data="inline"', 'data-fst-v16-planning-state="inline"',
-    'data-fst-v16-planning-ui="inline"'
+    'data-fst-v16-teacher-permutations="inline"', 'data-fst-v16-planning-ui="inline"'
 ]:
     assert marker in html, marker
 for src in external_modules:
