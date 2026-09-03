@@ -5,6 +5,7 @@ import re
 root = Path(__file__).resolve().parents[1]
 html_path = root / 'web' / 'index.html'
 runtime_path = root / 'web' / 'online-runtime.js'
+active_role_path = root / 'web' / 'v16-active-role.js'
 fixes_path = root / 'web' / 'online-fixes.js'
 security_path = root / 'web' / 'security-v2.js'
 access_path = root / 'web' / 'access-control.js'
@@ -34,7 +35,7 @@ for path, url in assets.items():
 
 html = html_path.read_text(encoding='utf-8')
 external_modules = [
-    './online-runtime.js', './online-fixes.js', './security-v2.js',
+    './online-runtime.js', './v16-active-role.js', './online-fixes.js', './security-v2.js',
     './v515-planning-core.js', './v515-planning-2026-2027.js',
     './v16-planning-data.js', './v16-planning-state.js', './v16-teacher-permutations.js',
     './v16-student-groups.js', './v16-planning-ui.js'
@@ -46,6 +47,7 @@ html = re.sub(r'\s*<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\']
 jspdf = (vendor / 'jspdf.umd.min.js').read_text(encoding='utf-8').strip()
 autotable = (vendor / 'jspdf.plugin.autotable.min.js').read_text(encoding='utf-8').strip()
 runtime = runtime_path.read_text(encoding='utf-8').strip()
+active_role = active_role_path.read_text(encoding='utf-8').strip()
 fixes = fixes_path.read_text(encoding='utf-8').strip()
 security = security_path.read_text(encoding='utf-8').strip()
 access = access_path.read_text(encoding='utf-8').strip()
@@ -65,6 +67,7 @@ report = report_path.read_text(encoding='utf-8').strip()
 inline = (
     '\n<script data-fst-pdf-engine="inline">\n' + jspdf + '\n' + autotable + '\n</script>\n'
     '<script data-fst-online-runtime="inline">\n' + runtime + '\n</script>\n'
+    '<script data-fst-v16-active-role="inline">\n' + active_role + '\n</script>\n'
     '<script data-fst-online-fixes="inline">\n' + fixes + '\n</script>\n'
     '<script data-fst-security-v2="inline">\n' + security + '\n</script>\n'
     '<script data-fst-access-control="inline">\n' + access + '\n</script>\n'
@@ -85,9 +88,9 @@ html = html.replace('</body>', inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
 
 for marker in [
-    'window.FSTOnlineRuntime=', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
+    'window.FSTOnlineRuntime=', 'V16ActiveRole', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
     'challengeAndVerify', 'VERSION_CONFLICT', 'Connexion Internet requise',
-    'data-fst-pdf-engine="inline"', 'data-fst-security-v2="inline"',
+    'data-fst-pdf-engine="inline"', 'data-fst-v16-active-role="inline"', 'data-fst-security-v2="inline"',
     'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions',
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
