@@ -5,6 +5,7 @@
   function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function teacherName(state,id){return state.teachers?.find(t=>t.id===id)?.full_name||id;}
   function sessionLabel(s){return `${String(s.session_date||'')} — ${s.class_name||''}`;}
+  function roomSelect(id){return `<select id="${id}">${['A','B','C','D'].map(r=>`<option value="${r}">Salle ${r}</option>`).join('')}</select>`;}
   async function rpc(name,args){const c=client();if(!c)throw new Error('Connexion Supabase indisponible.');const {data,error}=await c.rpc(name,args||{});if(error)throw error;return data;}
   function notify(m,t='info'){if(typeof showAlert==='function')showAlert(m,t);else alert(m);}
 
@@ -21,22 +22,27 @@
         posts.push({session:s,groupNo:g,manipulation:root.V515Planning.manipulationFor(g,s.class_occurrence,6)});
       }
     }
+    const notMaterialized=assignments.filter(a=>!a.legacy_plan_id).length;
     const panel=document.createElement('div');panel.id='v515-admin-assignment-panel';panel.style.cssText='margin:18px 0;padding:14px;border:1px solid #d7dce1;border-radius:8px';
     panel.innerHTML=`<h5>Validation des demandes et affectation directe</h5>`+
-      (pending.length?`<div><strong>Demandes en attente</strong>${pending.map(r=>{const s=sessions.find(x=>x.id===r.session_id);return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #eee"><span>${esc(teacherName(state,r.teacher_id))} — ${esc(sessionLabel(s||{}))} — G${Number(r.group_no)} ${esc(r.manipulation_code)}</span><button class="btn btn-sm btn-success" data-v515-validate-request="${r.id}">Valider</button></div>`;}).join('')}</div>`:'<div class="alert alert-info">Aucune demande en attente.</div>')+
-      `<div style="margin-top:14px"><strong>Affectation directe Admin</strong><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><select id="v515-direct-post">${posts.map((p,i)=>`<option value="${i}">${esc(sessionLabel(p.session))} — G${p.groupNo} ${p.manipulation}</option>`).join('')}</select><select id="v515-direct-teacher">${(state.teachers||[]).map(t=>`<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select><button class="btn btn-sm btn-primary" data-v515-direct-assign ${posts.length&&state.teachers?.length?'':'disabled'}>Affecter</button></div></div>`;
+      (pending.length?`<div><strong>Demandes en attente</strong>${pending.map(r=>{const s=sessions.find(x=>x.id===r.session_id);return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #eee"><span>${esc(teacherName(state,r.teacher_id))} — ${esc(sessionLabel(s||{}))} — G${Number(r.group_no)} ${esc(r.manipulation_code)}</span>${roomSelect('v515-request-room-'+r.id)}<button class="btn btn-sm btn-success" data-v515-validate-request="${r.id}">Valider</button></div>`;}).join('')}</div>`:'<div class="alert alert-info">Aucune demande en attente.</div>')+
+      `<div style="margin-top:14px"><strong>Affectation directe Admin</strong><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><select id="v515-direct-post">${posts.map((p,i)=>`<option value="${i}">${esc(sessionLabel(p.session))} — G${p.groupNo} ${p.manipulation}</option>`).join('')}</select><select id="v515-direct-teacher">${(state.teachers||[]).map(t=>`<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select>${roomSelect('v515-direct-room')}<button class="btn btn-sm btn-primary" data-v515-direct-assign ${posts.length&&state.teachers?.length?'':'disabled'}>Affecter</button></div></div>`+
+      (state.cycle.status==='assignments_finalized'?`<div style="margin-top:16px;border-top:1px solid #ddd;padding-top:12px"><strong>Intégration présence/notes</strong><p>${notMaterialized?`${notMaterialized} affectation(s) ne sont pas encore activées dans le planning de présence.`:'Le planning V5.15 est activé dans le module présence.'}</p>${notMaterialized?'<button class="btn btn-success" data-v515-materialize>Activer dans présence</button>':''}</div>`:'');
     host.insertBefore(panel,host.querySelector('h5[style]')||host.lastChild);
 
     for(const b of panel.querySelectorAll('[data-v515-validate-request]'))b.addEventListener('click',async()=>{
-      try{const r=await rpc('v515_validate_request',{p_request_id:b.dataset.v515ValidateRequest});if(!r?.ok)throw new Error(r?.message||'Validation impossible.');notify('Demande validée.','success');await root.V515PlanningUI.render();}catch(e){notify(e.message||String(e),'danger');}
+      try{const room=document.getElementById('v515-request-room-'+b.dataset.v515ValidateRequest).value;const r=await rpc('v515_validate_request',{p_request_id:b.dataset.v515ValidateRequest,p_room:room});if(!r?.ok)throw new Error(r?.message||'Validation impossible.');notify('Demande validée et salle affectée.','success');await root.V515PlanningUI.render();}catch(e){notify(e.message||String(e),'danger');}
     });
     panel.querySelector('[data-v515-direct-assign]')?.addEventListener('click',async()=>{
       try{
-        const idx=Number(document.getElementById('v515-direct-post').value),post=posts[idx],teacherId=document.getElementById('v515-direct-teacher').value;
-        if(!post||!teacherId)throw new Error('Poste ou enseignant invalide.');
-        const r=await rpc('v515_assign_teacher',{p_session_id:post.session.id,p_group_no:post.groupNo,p_manipulation_code:post.manipulation,p_teacher_id:teacherId});
+        const idx=Number(document.getElementById('v515-direct-post').value),post=posts[idx],teacherId=document.getElementById('v515-direct-teacher').value,room=document.getElementById('v515-direct-room').value;
+        if(!post||!teacherId||!room)throw new Error('Poste, enseignant ou salle invalide.');
+        const r=await rpc('v515_assign_teacher',{p_session_id:post.session.id,p_group_no:post.groupNo,p_manipulation_code:post.manipulation,p_teacher_id:teacherId,p_room:room});
         if(!r?.ok)throw new Error(r?.message||'Affectation impossible.');notify('Affectation directe enregistrée.','success');await root.V515PlanningUI.render();
       }catch(e){notify(e.message||String(e),'danger');}
+    });
+    panel.querySelector('[data-v515-materialize]')?.addEventListener('click',async()=>{
+      try{const r=await rpc('v515_materialize_session_plans',{p_cycle_id:state.cycle.id});if(!r?.ok)throw new Error(r?.message||'Activation impossible.');notify(`${r.plans} plan(s) V5.15 activé(s) dans présence.`, 'success');await root.V515PlanningUI.render();}catch(e){notify(e.message||String(e),'danger');}
     });
   }
 
