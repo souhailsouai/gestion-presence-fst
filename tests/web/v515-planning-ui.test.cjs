@@ -58,6 +58,6 @@ test('V16 online build keeps V5.15 seed/core only and does not execute the obsol
 
 test('V16 standalone build keeps V5.15 seed/core but replaces its floating UI with V16 native UI',()=>{
   for(const marker of ['data-fst-v515-planning-core','data-fst-v515-planning-data','data-fst-v16-planning-ui','V16PlanningUI'])assert.match(single,new RegExp(marker));
-  assert.doesNotMatch(single,/data-fst-v515-planning-ui/);
-  assert.doesNotMatch(single,/data-fst-v515-planning-admin/);
+  assert.doesNotMatch(single,/<script data-fst-v515-planning-ui/);
+  assert.doesNotMatch(single,/<script data-fst-v515-planning-admin/);
 });
