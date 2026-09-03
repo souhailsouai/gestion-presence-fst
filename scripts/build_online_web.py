@@ -35,6 +35,7 @@ tags = [
     '<script src="./v16-planning-data.js"></script>',
     '<script src="./v16-planning-state.js"></script>',
     '<script src="./v16-teacher-permutations.js"></script>',
+    '<script src="./v16-student-groups.js"></script>',
     '<script src="./v16-planning-ui.js"></script>',
 ]
 for tag in tags:
