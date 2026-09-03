@@ -31,12 +31,13 @@ for path, url in assets.items():
             path.write_bytes(response.read())
 
 html = html_path.read_text(encoding='utf-8')
-for src in [
+external_modules = [
     './online-runtime.js', './online-fixes.js', './security-v2.js',
     './v515-planning-core.js', './v515-planning-2026-2027.js',
     './v515-planning-validation.js', './v515-planning-ui.js',
     './v515-planning-admin-actions.js'
-]:
+]
+for src in external_modules:
     html = html.replace(f'<script src="{src}"></script>', '')
 html = re.sub(r'\s*<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', '', html, flags=re.I)
 
@@ -89,12 +90,7 @@ for marker in [
     'data-fst-v515-planning-ui="inline"', 'data-fst-v515-planning-admin="inline"'
 ]:
     assert marker in html, marker
-for src in [
-    './online-runtime.js', './online-fixes.js', './security-v2.js',
-    './v515-planning-core.js', './v515-planning-2026-2027.js',
-    './v515-planning-validation.js', './v515-planning-ui.js',
-    './v515-planning-admin-actions.js'
-]:
-    assert src not in html
-assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\'][^>]*></script>', html, re.I)
+for src in external_modules:
+    assert not re.search(r'<script[^>]+src=["\']' + re.escape(src) + r'["\'][^>]*></script>', html, re.I), src
+assert not re.search(r'<script[^>]+src=["\'][^"\']*(?:html2canvas|jspdf)[^"\']*["\']', html, re.I)
 print(html_path)
