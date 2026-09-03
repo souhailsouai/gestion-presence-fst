@@ -4,6 +4,8 @@ import gzip
 import subprocess
 import tempfile
 
+from v16_html_transform import apply_v16_shell
+
 root = Path(__file__).resolve().parents[1]
 web = root / 'web'
 web.mkdir(parents=True, exist_ok=True)
@@ -23,6 +25,7 @@ finally:
     patch_path.unlink(missing_ok=True)
 
 html = out.read_text(encoding='utf-8')
+html = apply_v16_shell(html)
 tags = [
     '<script src="./online-runtime.js"></script>',
     '<script src="./online-fixes.js"></script>',
@@ -43,6 +46,8 @@ markers = [
     'restorePersistentSession',
     'ACTIVE_MODE_KEY',
     '2026/2027',
+    'data-v16-navigation="true"',
+    'id="planning-v16" class="tab-content"',
     *tags,
 ]
 for marker in markers:
