@@ -19,6 +19,7 @@ v16_data_path = root / 'web' / 'v16-planning-data.js'
 v16_state_path = root / 'web' / 'v16-planning-state.js'
 v16_permutations_path = root / 'web' / 'v16-teacher-permutations.js'
 v16_student_groups_path = root / 'web' / 'v16-student-groups.js'
+v16_timetable_link_path = root / 'web' / 'v16-timetable-presence-link.js'
 v16_export_model_path = root / 'web' / 'v16-planning-export-model.js'
 v16_pdf_path = root / 'web' / 'v16-planning-pdf.js'
 v16_xlsx_path = root / 'web' / 'v16-planning-xlsx.js'
@@ -43,8 +44,8 @@ external_modules = [
     './online-runtime.js', './v16-active-role.js', './v16-test-mode.js', './online-fixes.js', './security-v2.js',
     './v515-planning-core.js', './v515-planning-2026-2027.js',
     './v16-planning-data.js', './v16-planning-state.js', './v16-teacher-permutations.js',
-    './v16-student-groups.js', './vendor/xlsx.full.min.js', './v16-planning-export-model.js',
-    './v16-planning-pdf.js', './v16-planning-xlsx.js', './v16-planning-ui.js'
+    './v16-student-groups.js', './v16-timetable-presence-link.js', './vendor/xlsx.full.min.js',
+    './v16-planning-export-model.js', './v16-planning-pdf.js', './v16-planning-xlsx.js', './v16-planning-ui.js'
 ]
 for src in external_modules:
     html = html.replace(f'<script src="{src}"></script>', '')
@@ -68,6 +69,7 @@ v16_data = v16_data_path.read_text(encoding='utf-8').strip()
 v16_state = v16_state_path.read_text(encoding='utf-8').strip()
 v16_permutations = v16_permutations_path.read_text(encoding='utf-8').strip()
 v16_student_groups = v16_student_groups_path.read_text(encoding='utf-8').strip()
+v16_timetable_link = v16_timetable_link_path.read_text(encoding='utf-8').strip()
 v16_export_model = v16_export_model_path.read_text(encoding='utf-8').strip()
 v16_pdf = v16_pdf_path.read_text(encoding='utf-8').strip()
 v16_xlsx = v16_xlsx_path.read_text(encoding='utf-8').strip()
@@ -93,6 +95,7 @@ inline = (
     '<script data-fst-v16-planning-state="inline">\n' + v16_state + '\n</script>\n'
     '<script data-fst-v16-teacher-permutations="inline">\n' + v16_permutations + '\n</script>\n'
     '<script data-fst-v16-student-groups="inline">\n' + v16_student_groups + '\n</script>\n'
+    '<script data-fst-v16-timetable-presence-link="inline">\n' + v16_timetable_link + '\n</script>\n'
     '<script data-fst-v16-planning-export-model="inline">\n' + v16_export_model + '\n</script>\n'
     '<script data-fst-v16-planning-pdf="inline">\n' + v16_pdf + '\n</script>\n'
     '<script data-fst-v16-planning-xlsx="inline">\n' + v16_xlsx + '\n</script>\n'
@@ -111,12 +114,12 @@ for marker in [
     'FSTSessionEditing', 'FSTStatistics', 'Statistiques et graphiques',
     'Répartition des notes', 'Comparaison par module', 'PDF statistiques',
     'window.FSTPdf=', 'Lecture seule', 'V515Planning', 'V515PlanningData',
-    'V16PlanningData', 'V16PlanningState', 'V16TeacherPermutations', 'V16StudentGroups',
+    'V16PlanningData', 'V16PlanningState', 'V16TeacherPermutations', 'V16StudentGroups', 'V16TimetablePresenceLink',
     'V16PlanningExportModel', 'V16PlanningPdf', 'V16PlanningXlsx', 'V16PlanningUI',
     'data-fst-v16-planning-data="inline"', 'data-fst-v16-planning-state="inline"',
     'data-fst-v16-teacher-permutations="inline"', 'data-fst-v16-student-groups="inline"',
-    'data-fst-v16-planning-export-model="inline"', 'data-fst-v16-planning-pdf="inline"',
-    'data-fst-v16-planning-xlsx="inline"', 'data-fst-v16-planning-ui="inline"'
+    'data-fst-v16-timetable-presence-link="inline"', 'data-fst-v16-planning-export-model="inline"',
+    'data-fst-v16-planning-pdf="inline"', 'data-fst-v16-planning-xlsx="inline"', 'data-fst-v16-planning-ui="inline"'
 ]:
     assert marker in html, marker
 for src in external_modules:
