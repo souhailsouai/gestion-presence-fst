@@ -11,11 +11,13 @@ const rpcs=fs.readFileSync(path.join(dir,'20260903150200_v515_planning_rpcs.sql'
 const seed=fs.readFileSync(path.join(dir,'20260903150300_v515_planning_2026_2027.sql'),'utf8');
 const admin=fs.readFileSync(path.join(dir,'20260903150400_v515_admin_configuration.sql'),'utf8');
 const integration=fs.readFileSync(path.join(dir,'20260903150500_v515_legacy_integration.sql'),'utf8');
+const cleanup=fs.readFileSync(path.join(dir,'20260903150600_v515_request_cleanup.sql'),'utf8');
 
 test('V5.15 migrations have unique ordered versions',()=>{
   assert.deepEqual(names,[
     '20260903150000_v515_planning_core.sql','20260903150100_v515_planning_grants.sql','20260903150200_v515_planning_rpcs.sql',
-    '20260903150300_v515_planning_2026_2027.sql','20260903150400_v515_admin_configuration.sql','20260903150500_v515_legacy_integration.sql'
+    '20260903150300_v515_planning_2026_2027.sql','20260903150400_v515_admin_configuration.sql','20260903150500_v515_legacy_integration.sql',
+    '20260903150600_v515_request_cleanup.sql'
   ]);
 });
 
@@ -53,10 +55,18 @@ test('cycle closure uses actual completed attendance sessions and rejects duplic
   assert.match(rpcs,/DUPLICATE_MANIPULATION/);
 });
 
+test('competing pending requests are rejected after a post is assigned',()=>{
+  assert.match(cleanup,/after insert on public\.v515_assignments/);
+  assert.match(cleanup,/status='rejected'/);
+  assert.match(cleanup,/session_id=new\.session_id/);
+  assert.match(cleanup,/group_no=new\.group_no/);
+});
+
 test('privileged functions are not executable by anon or PUBLIC',()=>{
   for(const fn of ['v515_request_assignment','v515_cancel_request','v515_assign_teacher','v515_validate_request','v515_finalize_assignments','v515_close_cycle'])assert.match(rpcs,new RegExp(`revoke execute on function public\\.${fn}\\(`,'i'),fn);
   assert.match(rpcs,/revoke execute on function private\.v515_audit/);
   assert.match(integration,/revoke execute on function public\.v515_materialize_session_plans/);
+  assert.match(cleanup,/revoke execute on function private\.v515_reject_competing_requests/);
   assert.match(rpcs,/security definer set search_path=''/i);
 });
 
@@ -74,6 +84,6 @@ test('seed is safe to re-run only while still an empty draft',()=>{
 });
 
 test('no service_role secret is introduced in V5.15 implementation',()=>{
-  const combined=[core,grants,rpcs,seed,admin,integration,fs.readFileSync('web/v515-planning-core.js','utf8'),fs.readFileSync('web/v515-planning-2026-2027.js','utf8')].join('\n');
+  const combined=[core,grants,rpcs,seed,admin,integration,cleanup,fs.readFileSync('web/v515-planning-core.js','utf8'),fs.readFileSync('web/v515-planning-2026-2027.js','utf8')].join('\n');
   assert.doesNotMatch(combined,/service_role/i);
 });
