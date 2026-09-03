@@ -77,4 +77,25 @@
     };
     reader.readAsText(file);
   };
+
+  async function renderV16StudentGroups(){
+    if(!window.V16StudentGroups?.renderIntoStudentsView)return false;
+    try{
+      return await window.V16StudentGroups.renderIntoStudentsView({supabaseClient,currentTeacher,data});
+    }catch(error){
+      console.error('V16 student groups',error);
+      return false;
+    }
+  }
+
+  const baseSwitchTab=window.switchTab;
+  if(typeof baseSwitchTab==='function'){
+    window.switchTab=function(tabName){
+      const result=baseSwitchTab.apply(this,arguments);
+      if(tabName==='etudiants')setTimeout(()=>{void renderV16StudentGroups();},0);
+      return result;
+    };
+  }
+
+  window.renderV16StudentGroups=renderV16StudentGroups;
 })();
