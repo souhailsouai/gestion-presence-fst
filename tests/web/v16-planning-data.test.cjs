@@ -26,13 +26,19 @@ test('V16 official adapter preserves the Monday rotation and fixed rooms', () =>
   assert.deepEqual(third.groups.map(x => x.room), ['B', 'D', 'D', 'A']);
 });
 
-test('V16 official adapter keeps holidays and rests as non-teaching rows', () => {
+test('V16 treats 15 October as a normal Thursday TP session and advances the alternation', () => {
   const holiday = row('2026-10-15');
-  assert.equal(holiday.isTeachingSession, false);
-  assert.match(holiday.reason, /JOUR FERIE/i);
-  assert.deepEqual(holiday.groups, []);
+  assert.equal(holiday.isTeachingSession, true);
+  assert.equal(holiday.className, 'MPI1-C');
+  assert.equal(holiday.reason, null);
+  assert.deepEqual(holiday.groups.map(x => x.manipulation), ['M3', 'M4', 'M5', 'M6']);
+  assert.deepEqual(holiday.groups.map(x => x.room), ['D', 'D', 'A', 'A']);
 
-  const rest = row('2026-11-02');
+  const nextThursday = row('2026-10-22');
+  assert.equal(nextThursday.className, 'MPI1-D');
+  assert.deepEqual(nextThursday.groups.map(x => x.manipulation), ['M3', 'M4', 'M5', 'M6']);
+
+  const rest = row('2026-11-05');
   assert.equal(rest.isTeachingSession, false);
   assert.equal(rest.reason, 'REPOS');
   assert.deepEqual(rest.groups, []);
