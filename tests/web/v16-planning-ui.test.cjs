@@ -26,6 +26,15 @@ test('V16 planning UI has explicit loading, empty and error states',()=>{
   assert.match(ui,/Erreur de chargement/i);
 });
 
+test('V16 auto-init reads V5.13 lexical Supabase and teacher globals, not only window properties',()=>{
+  assert.match(ui,/function runtimeClient\(\)/);
+  assert.match(ui,/typeof supabaseClient/);
+  assert.match(ui,/function runtimeTeacher\(\)/);
+  assert.match(ui,/typeof currentTeacher/);
+  assert.match(ui,/supabaseClient:runtimeClient\(\)/);
+  assert.match(ui,/currentTeacher:runtimeTeacher\(\)/);
+});
+
 test('V16 build bundles V16 modules in dependency order and excludes old floating UI',()=>{
   const modules=['v515-planning-core.js','v515-planning-2026-2027.js','v16-planning-data.js','v16-planning-state.js','v16-planning-ui.js'];
   let last=-1;
