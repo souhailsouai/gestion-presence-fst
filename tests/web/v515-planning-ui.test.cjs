@@ -48,11 +48,16 @@ test('Admin assignment UI derives the fixed PDF room from manipulation and only 
   assert.match(admin,/Activer dans présence/);
 });
 
-test('online build loads V5.15 modules in dependency order',()=>{
-  const modules=['v515-planning-core.js','v515-planning-2026-2027.js','v515-planning-validation.js','v515-planning-ui.js','v515-planning-admin-actions.js'];
-  let last=-1;for(const m of modules){const pos=online.indexOf(m);assert.ok(pos>last,m);last=pos;}
+test('V16 online build keeps V5.15 seed/core only and does not execute the obsolete floating UI',()=>{
+  assert.match(online,/v515-planning-core\.js/);
+  assert.match(online,/v515-planning-2026-2027\.js/);
+  assert.doesNotMatch(online,/v515-planning-ui\.js/);
+  assert.doesNotMatch(online,/v515-planning-admin-actions\.js/);
+  assert.match(online,/v16-planning-ui\.js/);
 });
 
-test('standalone build inlines V5.15 modules and asserts final markers',()=>{
-  for(const marker of ['data-fst-v515-planning-core','data-fst-v515-planning-data','data-fst-v515-planning-validation','data-fst-v515-planning-ui','data-fst-v515-planning-admin','V515PlanningUI','V515PlanningAdminActions'])assert.match(single,new RegExp(marker));
+test('V16 standalone build keeps V5.15 seed/core but replaces its floating UI with V16 native UI',()=>{
+  for(const marker of ['data-fst-v515-planning-core','data-fst-v515-planning-data','data-fst-v16-planning-ui','V16PlanningUI'])assert.match(single,new RegExp(marker));
+  assert.doesNotMatch(single,/data-fst-v515-planning-ui/);
+  assert.doesNotMatch(single,/data-fst-v515-planning-admin/);
 });
