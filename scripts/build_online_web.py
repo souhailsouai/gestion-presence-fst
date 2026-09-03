@@ -29,6 +29,7 @@ html = apply_v16_shell(html)
 tags = [
     '<script src="./online-runtime.js"></script>',
     '<script src="./v16-active-role.js"></script>',
+    '<script src="./v16-test-mode.js"></script>',
     '<script src="./online-fixes.js"></script>',
     '<script src="./security-v2.js"></script>',
     '<script src="./v515-planning-core.js"></script>',
