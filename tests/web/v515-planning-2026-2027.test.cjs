@@ -37,6 +37,19 @@ test('four classes remain 5/6 with the approved missing sequence',()=>{
   }
 });
 
-test('room assignments are deliberately not imported from contradictory workbook notes',()=>{
-  assert.equal(data.calendarRows.every(r=>r.roomAssignments===null),true);
+test('PDF manipulation rooms are fixed',()=>{
+  assert.deepEqual(data.manipulationRooms,{M1:'C',M2:'B',M3:'D',M4:'D',M5:'A',M6:'A'});
+  for(const row of data.calendarRows.filter(r=>r.isTeachingSession)){
+    for(const post of row.posts){
+      assert.equal(post.room,data.manipulationRooms[post.manipulation],`${row.date} G${post.groupNo}`);
+    }
+  }
+});
+
+test('PDF daily teacher pools are preserved but do not fix teacher-to-manipulation assignment',()=>{
+  assert.deepEqual(data.teacherPools.monday,['Khaoula Rais','Souhail Souai','Nadia Bouaziz','Olfa Turki']);
+  assert.deepEqual(data.teacherPools.thursday,['Khaoula Rais','Souhail Souai','Tarek Sbeouelji','Mouna Triki']);
+  assert.deepEqual(data.teacherPools.friday,['Nadia Bouaziz','Olfa Turki','Tarek Sbeouelji','Mouna Triki']);
+  assert.equal(data.calendarRows.filter(r=>r.isTeachingSession).every(r=>Array.isArray(r.allowedTeachers)&&r.allowedTeachers.length===4),true);
+  assert.equal(data.calendarRows.filter(r=>r.isTeachingSession).every(r=>r.posts.every(p=>p.teacherId==null)),true);
 });
