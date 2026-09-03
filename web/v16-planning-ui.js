@@ -10,6 +10,14 @@
   let teachers=[];
   let initialized=false;
 
+  function runtimeClient(){
+    try{return typeof supabaseClient!=='undefined'?supabaseClient:(root.supabaseClient||null);}catch(_){return root.supabaseClient||null;}
+  }
+
+  function runtimeTeacher(){
+    try{return typeof currentTeacher!=='undefined'?currentTeacher:(root.currentTeacher||null);}catch(_){return root.currentTeacher||null;}
+  }
+
   function esc(value){
     return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
@@ -138,8 +146,8 @@
     if(!container)return false;
     if(!dataApi||!stateApi){container.innerHTML='<div class="alert alert-danger">Erreur de chargement : modules V16 indisponibles.</div>';return false;}
     context={
-      supabaseClient:options.supabaseClient||root.supabaseClient||null,
-      currentTeacher:options.currentTeacher||root.currentTeacher||null
+      supabaseClient:options.supabaseClient||runtimeClient(),
+      currentTeacher:options.currentTeacher||runtimeTeacher()
     };
     container.innerHTML='<div class="alert alert-info">Chargement du planning interactif…</div>';
     try{
@@ -160,7 +168,7 @@
 
   function autoInit(){
     if(initialized)return;
-    init({supabaseClient:root.supabaseClient,currentTeacher:root.currentTeacher});
+    init({supabaseClient:runtimeClient(),currentTeacher:runtimeTeacher()});
   }
 
   if(typeof document!=='undefined'){
