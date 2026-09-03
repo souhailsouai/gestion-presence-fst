@@ -1,0 +1,44 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+
+function read(path){return fs.existsSync(path)?fs.readFileSync(path,'utf8'):'';}
+const ui=read('web/v16-teacher-permutations.js');
+const planning=read('web/v16-planning-ui.js');
+const online=read('scripts/build_online_web.py');
+const single=read('scripts/build_single_file_release.py');
+
+test('Admin permutation UI exposes the approved interactive controls',()=>{
+  for(const marker of [
+    'Permuter','v16-swap-teacher-a','v16-swap-day-a','v16-swap-teacher-b','v16-swap-day-b',
+    'v16-swap-scope','Cette semaine','Toutes les semaines futures','v16-swap-effective-date',
+    'v16-swap-summary','v16-swap-confirm'
+  ])assert.match(ui,new RegExp(marker,'i'),marker);
+  assert.match(ui,/v16_swap_teachers/);
+  assert.match(ui,/v16_verify_teacher_week/);
+});
+
+test('permutation module renders only for active Admin role',()=>{
+  assert.match(ui,/activeMode\s*===\s*['"]admin['"]/);
+  assert.match(ui,/isAdmin/);
+  assert.match(ui,/return\s+['"]{2}/);
+  assert.match(planning,/v16-admin-permutations/);
+  assert.match(planning,/V16TeacherPermutations/);
+});
+
+test('permutation UI provides live policy summary before confirmation',()=>{
+  assert.match(ui,/4\s*\/\s*jour/i);
+  assert.match(ui,/2\s*jours\s*\/\s*semaine/i);
+  assert.match(ui,/addEventListener\(['"]change['"]/);
+  assert.match(ui,/renderSummary/);
+  assert.match(ui,/confirm/i);
+});
+
+test('V16 build loads permutation module after planning state and before planning UI',()=>{
+  const statePos=online.indexOf('v16-planning-state.js');
+  const permPos=online.indexOf('v16-teacher-permutations.js');
+  const uiPos=online.indexOf('v16-planning-ui.js');
+  assert.ok(statePos>=0&&permPos>statePos&&uiPos>permPos);
+  assert.match(single,/data-fst-v16-teacher-permutations/);
+  assert.match(single,/V16TeacherPermutations/);
+});
