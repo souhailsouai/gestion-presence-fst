@@ -31,6 +31,7 @@ tags = [
     '<script src="./v515-planning-2026-2027.js"></script>',
     '<script src="./v515-planning-validation.js"></script>',
     '<script src="./v515-planning-ui.js"></script>',
+    '<script src="./v515-planning-admin-actions.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
