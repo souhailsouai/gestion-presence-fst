@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.request import urlopen
 import base64
 import gzip
 import subprocess
@@ -9,9 +10,17 @@ from v16_html_transform import apply_v16_shell
 root = Path(__file__).resolve().parents[1]
 web = root / 'web'
 web.mkdir(parents=True, exist_ok=True)
+vendor = web / 'vendor'
+vendor.mkdir(parents=True, exist_ok=True)
 source = root / 'gestion_presence_tp_theme_institutionnel.html'
 out = web / 'index.html'
 out.write_bytes(source.read_bytes())
+
+xlsx_path = vendor / 'xlsx.full.min.js'
+xlsx_url = 'https://raw.githubusercontent.com/SheetJS/sheetjs/v0.18.5/dist/xlsx.full.min.js'
+if not xlsx_path.exists() or xlsx_path.stat().st_size < 1000:
+    with urlopen(xlsx_url, timeout=60) as response:
+        xlsx_path.write_bytes(response.read())
 
 part1 = (root / 'scripts' / 'web-superadmin.patch.part1').read_text(encoding='utf-8').strip()
 part2 = (root / 'scripts' / 'web-superadmin.patch.part2').read_text(encoding='utf-8').strip()
@@ -38,6 +47,10 @@ tags = [
     '<script src="./v16-planning-state.js"></script>',
     '<script src="./v16-teacher-permutations.js"></script>',
     '<script src="./v16-student-groups.js"></script>',
+    '<script src="./vendor/xlsx.full.min.js"></script>',
+    '<script src="./v16-planning-export-model.js"></script>',
+    '<script src="./v16-planning-pdf.js"></script>',
+    '<script src="./v16-planning-xlsx.js"></script>',
     '<script src="./v16-planning-ui.js"></script>',
 ]
 for tag in tags:
