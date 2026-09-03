@@ -1,10 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
+const cp = require('node:child_process');
 
-const root = path.join(__dirname, '..', '..');
-const html = fs.readFileSync(path.join(root, 'gestion_presence_tp_theme_institutionnel.html'), 'utf8');
+function buildV16() {
+  cp.execFileSync('python', ['scripts/build_online_web.py'], {stdio: 'pipe'});
+  return fs.readFileSync('web/index.html', 'utf8');
+}
 
 function navEntries(source) {
   const navMatch = source.match(/<!-- Navigation -->([\s\S]*?)<!-- Contenu -->/i);
@@ -16,7 +18,8 @@ function navEntries(source) {
     }));
 }
 
-test('V16 navigation follows the approved native order', () => {
+test('V16 delivered navigation follows the approved native order', () => {
+  const html = buildV16();
   const entries = navEntries(html);
   assert.deepEqual(
     entries.map(x => x.text),
@@ -28,7 +31,8 @@ test('V16 navigation follows the approved native order', () => {
   );
 });
 
-test('V16 planning is a native tab and the floating V5.15 launcher is absent', () => {
+test('V16 planning is a native delivered tab and the floating V5.15 launcher is absent', () => {
+  const html = buildV16();
   assert.ok(html.includes('id="planning-v16" class="tab-content"'));
   assert.ok(html.includes("switchTab('planning-v16')"));
   assert.equal(html.includes('Planning V5.15'), false);
