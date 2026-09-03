@@ -47,6 +47,7 @@ tags = [
     '<script src="./v16-planning-state.js"></script>',
     '<script src="./v16-teacher-permutations.js"></script>',
     '<script src="./v16-student-groups.js"></script>',
+    '<script src="./v16-timetable-presence-link.js"></script>',
     '<script src="./vendor/xlsx.full.min.js"></script>',
     '<script src="./v16-planning-export-model.js"></script>',
     '<script src="./v16-planning-pdf.js"></script>',
