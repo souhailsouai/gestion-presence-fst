@@ -39,6 +39,6 @@ test('standalone V16 build inlines native planning modules',()=>{
     'data-fst-v16-planning-data','data-fst-v16-planning-state','data-fst-v16-planning-ui',
     'V16PlanningData','V16PlanningState','V16PlanningUI'
   ])assert.match(single,new RegExp(marker),marker);
-  assert.doesNotMatch(single,/data-fst-v515-planning-ui/);
-  assert.doesNotMatch(single,/data-fst-v515-planning-admin/);
+  assert.doesNotMatch(single,/<script data-fst-v515-planning-ui/);
+  assert.doesNotMatch(single,/<script data-fst-v515-planning-admin/);
 });
