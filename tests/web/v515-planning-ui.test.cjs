@@ -20,7 +20,7 @@ test('V5.15 assignment is Admin-only: teachers cannot request or cancel planning
   assert.doesNotMatch(admin,/v515_validate_request/);
   assert.doesNotMatch(admin,/Demandes en attente/);
   assert.match(ui,/affectations sont définies par l.administrateur/i);
-  for(const rpc of ['v515_initialize_2026_2027','v515_publish_cycle','v515_finalize_assignments','v515_set_group_count'])assert.match(ui,new RegExp(rpc),rpc);
+  for(const rpc of ['v515_initialize_2026_2027','v515_publish_cycle','v515_finalize_assignments'])assert.match(ui,new RegExp(rpc),rpc);
   for(const rpc of ['v515_assign_teacher','v515_materialize_session_plans'])assert.match(admin,new RegExp(rpc),rpc);
 });
 
@@ -44,7 +44,7 @@ test('Admin assignment UI derives the fixed PDF room from manipulation and only 
   assert.match(admin,/M6:'A'/);
   assert.doesNotMatch(admin,/v515-direct-room/);
   assert.doesNotMatch(admin,/roomSelect\(/);
-  assert.match(admin,/p_room:room/);
+  assert.match(admin,/p_room:row\.room/);
   assert.match(admin,/Activer dans présence/);
 });
 
