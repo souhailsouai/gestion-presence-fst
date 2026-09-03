@@ -21,6 +21,7 @@
   if(typeof onlineDoLogin==='function'){
     window.doLogin=async function(profile,mode){
       const result=await onlineDoLogin(profile,mode);
+      window.V16ActiveRole?.configure({isAdmin:Boolean(profile?.isAdmin),initialRole:mode==='admin'?'admin':'teacher'});
       localStorage.removeItem('presence_profile_cache');
       localStorage.removeItem('attendanceSupabase_syncQueue');
       return result;
