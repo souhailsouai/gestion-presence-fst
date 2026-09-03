@@ -12,13 +12,13 @@ declare v_year uuid;v_missing text;v_started integer;v_count integer;v_a record;
  if v_year is null then return jsonb_build_object('ok',false,'code','ACADEMIC_YEAR_MISSING','message','Année universitaire introuvable.');end if;
  select string_agg(x.target_name,', ' order by x.target_name) into v_missing from (select distinct s.class_name||'-G'||a.group_no target_name from public.v515_assignments a join public.v515_sessions s on s.id=a.session_id left join public.classes c on c.name=s.class_name||'-G'||a.group_no and c.deleted_at is null where a.cycle_id=p_cycle_id and c.id is null)x;
  if v_missing is not null then return jsonb_build_object('ok',false,'code','LEGACY_CLASS_MISSING','message','Classes/groupes manquants pour présence : '||v_missing||'.');end if;
- select count(*) into v_started from public.session_plans sp join public.classes c on c.id=sp.class_id where sp.plan_date between (select min(session_date) from public.v515_sessions where cycle_id=p_cycle_id) and (select max(session_date) from public.v515_sessions where cycle_id=p_cycle_id) and c.name ~ '^(MPI1-(A|B|C|D|E)|PC1-A)-G[1-6]$' and sp.session_id is not null and sp.deleted_at is null;
+ select count(*) into v_started from public.session_plans sp join public.classes c on c.id=sp.class_id where sp.plan_date in(select session_date from public.v515_sessions where cycle_id=p_cycle_id) and c.name ~ '^(MPI1-(A|B|C|D|E)|PC1-A)-G[1-6]$' and sp.session_id is not null and sp.deleted_at is null;
  if v_started>0 then return jsonb_build_object('ok',false,'code','LEGACY_PLAN_STARTED','message','Activation impossible : '||v_started||' séance(s) existante(s) ont déjà été démarrées.');end if;
 
- -- Archive only the future, unstarted legacy plans in the V5.15 scope. This removes obsolete
- -- holiday/rest plans and the former 3-group rotation without touching started/history rows.
+ -- Replace only unstarted legacy plans on dates explicitly present in the approved V5.15 calendar.
+ -- This removes obsolete holiday/rest entries without touching history or unrelated rattrapage dates.
  update public.session_plans sp set deleted_at=now(),revision=revision+1,updated_at=now(),updated_by=auth.uid()
- from public.classes c where c.id=sp.class_id and sp.plan_date between (select min(session_date) from public.v515_sessions where cycle_id=p_cycle_id) and (select max(session_date) from public.v515_sessions where cycle_id=p_cycle_id) and c.name ~ '^(MPI1-(A|B|C|D|E)|PC1-A)-G[1-6]$' and sp.session_id is null;
+ from public.classes c where c.id=sp.class_id and sp.plan_date in(select session_date from public.v515_sessions where cycle_id=p_cycle_id) and c.name ~ '^(MPI1-(A|B|C|D|E)|PC1-A)-G[1-6]$' and sp.session_id is null;
 
  for v_a in select a.id assignment_id,a.teacher_id,a.room,a.group_no,a.manipulation_code,s.class_name,s.session_date,s.start_time,s.end_time from public.v515_assignments a join public.v515_sessions s on s.id=a.session_id where a.cycle_id=p_cycle_id order by s.session_date,s.class_name,a.group_no loop
    select id into v_class from public.classes where name=v_a.class_name||'-G'||v_a.group_no and deleted_at is null limit 1;
