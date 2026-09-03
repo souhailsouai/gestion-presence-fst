@@ -6,6 +6,13 @@
   'use strict';
   if(!planning)throw new Error('V515Planning is required');
 
+  const manipulationRooms={M1:'C',M2:'B',M3:'D',M4:'D',M5:'A',M6:'A'};
+  const teacherPools={
+    monday:['Khaoula Rais','Souhail Souai','Nadia Bouaziz','Olfa Turki'],
+    thursday:['Khaoula Rais','Souhail Souai','Tarek Sbeouelji','Mouna Triki'],
+    friday:['Nadia Bouaziz','Olfa Turki','Tarek Sbeouelji','Mouna Triki']
+  };
+
   const definitions=[
     {
       weekday:'monday',slot:'13:45-17:30',pair:['MPI1-A','MPI1-E'],
@@ -39,12 +46,15 @@
       d.rows.map(([date,isTeachingSession,reason])=>({date,isTeachingSession,reason:reason||null,weekday:d.weekday,slot:d.slot})),
       d.pair,4,6
     );
-    for(const row of built)calendarRows.push(Object.assign({},row,{pair:d.pair.slice(),roomAssignments:null}));
+    for(const row of built){
+      const posts=row.isTeachingSession?row.posts.map(p=>Object.assign({},p,{room:manipulationRooms[p.manipulation],teacherId:null})):[];
+      calendarRows.push(Object.assign({},row,{pair:d.pair.slice(),posts,allowedTeachers:row.isTeachingSession?teacherPools[d.weekday].slice():[]}));
+    }
   }
 
   const expectedClasses=['MPI1-A','MPI1-E','MPI1-C','MPI1-D','MPI1-B','PC1-A'];
   const completeness={};
   for(const className of expectedClasses)completeness[className]=planning.completeness(calendarRows,className,4,6);
 
-  return {academicYear:'2026/2027',semester:1,groupCount:4,manipulationCount:6,definitions,calendarRows,completeness};
+  return {academicYear:'2026/2027',semester:1,groupCount:4,manipulationCount:6,manipulationRooms,teacherPools,definitions,calendarRows,completeness};
 });
