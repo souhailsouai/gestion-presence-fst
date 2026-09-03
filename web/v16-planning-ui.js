@@ -1,17 +1,18 @@
 (function(root,factory){
-  const api=factory(root.V16PlanningData,root.V16PlanningState,root.V16TeacherPermutations,root);
+  const api=factory(root.V16PlanningData,root.V16PlanningState,root.V16TeacherPermutations,root.V16PlanningExportModel,root.V16PlanningPdf,root.V16PlanningXlsx,root);
   if(typeof module==='object'&&module.exports)module.exports=api;
   else root.V16PlanningUI=api;
-})(typeof globalThis!=='undefined'?globalThis:this,function(dataApi,stateApi,permutationsApi,host){
+})(typeof globalThis!=='undefined'?globalThis:this,function(dataApi,stateApi,permutationsApi,exportModelApi,planningPdfApi,planningXlsxApi,host){
   'use strict';
   let context={supabaseClient:null,currentTeacher:null};
   let planningState={rows:[]};
   let teachers=[];
   let initialized=false;
+  let lastFiltered=[];
 
   function runtimeClient(){try{return typeof supabaseClient!=='undefined'?supabaseClient:(host.supabaseClient||null);}catch(_){return host.supabaseClient||null;}}
   function runtimeTeacher(){try{return typeof currentTeacher!=='undefined'?currentTeacher:(host.currentTeacher||null);}catch(_){return host.currentTeacher||null;}}
-  function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));}
+  function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function fmtDate(value){const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?`${m[3]}/${m[2]}/${m[1]}`:String(value||'');}
   function dayLabel(day){return ({monday:'Lundi',thursday:'Jeudi',friday:'Vendredi'})[day]||day||'—';}
   function teacherName(id){if(!id)return 'Non affecté';return teachers.find(t=>String(t.id)===String(id))?.full_name||String(id);}
@@ -31,10 +32,16 @@
       <div class="form-group"><label for="v16-filter-from">Du</label><input id="v16-filter-from" class="form-control" type="date"></div>
       <div class="form-group"><label for="v16-filter-to">Au</label><input id="v16-filter-to" class="form-control" type="date"></div>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 14px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 14px;align-items:center">
       <span class="badge badge-info">Séances : <strong id="v16-session-count">0</strong></span>
       <span class="badge badge-info">Affectations : <strong id="v16-assignment-count">0</strong></span>
       <button type="button" class="btn btn-sm btn-secondary" id="v16-clear-filters"><i class="fas fa-filter-circle-xmark"></i> Réinitialiser les filtres</button>
+      <div style="display:flex;gap:6px;align-items:center;margin-left:auto" data-v16-generate-menu>
+        <strong>Générer</strong>
+        <button type="button" class="btn btn-sm btn-primary" data-v16-generate-pdf><i class="fas fa-file-pdf"></i> PDF</button>
+        <button type="button" class="btn btn-sm btn-success" data-v16-generate-xlsx><i class="fas fa-file-excel"></i> Excel (.xlsx)</button>
+      </div>
+      <span id="v16-generate-status" data-v16-generate-status style="font-size:.85rem"></span>
     </div>
     <div id="v16-admin-permutations"></div>
     <div class="table-responsive" aria-live="polite"><table class="table" data-v16-planning-table="true">
@@ -53,8 +60,36 @@
     }
     body.innerHTML=out.join('');
   }
-  function refresh(){const filtered=stateApi.filterPlanning(planningState,readFilters()),summary=stateApi.planningSummary(filtered);const sessions=document.getElementById('v16-session-count'),assignments=document.getElementById('v16-assignment-count');if(sessions)sessions.textContent=String(summary.sessionCount);if(assignments)assignments.textContent=String(summary.assignmentCount);renderRows(filtered);return filtered;}
+  function refresh(){
+    const filtered=stateApi.filterPlanning(planningState,readFilters()),summary=stateApi.planningSummary(filtered);
+    lastFiltered=filtered;
+    const sessions=document.getElementById('v16-session-count'),assignments=document.getElementById('v16-assignment-count');if(sessions)sessions.textContent=String(summary.sessionCount);if(assignments)assignments.textContent=String(summary.assignmentCount);renderRows(filtered);return filtered;
+  }
   function bindFilters(){for(const control of document.querySelectorAll('#v16-planning-root select,#v16-planning-root input'))control.addEventListener('change',refresh);document.getElementById('v16-clear-filters')?.addEventListener('click',()=>{for(const control of document.querySelectorAll('#v16-planning-root select,#v16-planning-root input'))control.value='';refresh();});}
+
+  function exportModel(){
+    const builder=exportModelApi?.buildPlanningExportModel||host.V16PlanningExportModel?.buildPlanningExportModel;
+    if(!builder)throw new Error('Modèle d’export V16 indisponible.');
+    return builder(lastFiltered,{teachers,filters:readFilters(),academicYear:'2026/2027',semester:'Semestre 1',context:host.V16TestMode?.getContext?.()||'real'});
+  }
+  function setGenerating(isBusy,text){
+    const pdf=document.querySelector('[data-v16-generate-pdf]'),xlsx=document.querySelector('[data-v16-generate-xlsx]'),status=document.querySelector('[data-v16-generate-status]');
+    if(pdf)pdf.disabled=isBusy?true:false;if(xlsx)xlsx.disabled=isBusy?true:false;if(status)status.textContent=text||'';
+  }
+  async function generate(kind){
+    setGenerating(true,'Génération en cours…');
+    try{
+      const model=exportModel();
+      if(kind==='pdf')await Promise.resolve((planningPdfApi||host.V16PlanningPdf).generate(model));
+      else await Promise.resolve((planningXlsxApi||host.V16PlanningXlsx).generate(model));
+      setGenerating(false,kind==='pdf'?'PDF généré.':'Excel généré.');
+      return true;
+    }catch(error){setGenerating(false,`Erreur : ${error?.message||error}`);return false;}
+  }
+  function bindGenerate(){
+    document.querySelector('[data-v16-generate-pdf]')?.addEventListener('click',()=>{void generate('pdf');});
+    document.querySelector('[data-v16-generate-xlsx]')?.addEventListener('click',()=>{void generate('xlsx');});
+  }
 
   async function remoteAssignments(client){
     if(!client)return {assignments:[],teachers:[]};
@@ -76,12 +111,12 @@
     context={supabaseClient:options.supabaseClient||runtimeClient(),currentTeacher:options.currentTeacher||runtimeTeacher()};
     container.innerHTML='<div class="alert alert-info">Chargement du planning interactif…</div>';
     try{
-      const remote=await remoteAssignments(context.supabaseClient);teachers=remote.teachers;planningState=stateApi.createPlanningState(dataApi.rows(),remote.assignments);container.innerHTML=shell(planningState.rows);bindFilters();initialized=true;refresh();
+      const remote=await remoteAssignments(context.supabaseClient);teachers=remote.teachers;planningState=stateApi.createPlanningState(dataApi.rows(),remote.assignments);container.innerHTML=shell(planningState.rows);bindFilters();bindGenerate();initialized=true;refresh();
       if(permutationsApi?.render)permutationsApi.render({supabaseClient:context.supabaseClient,currentTeacher:context.currentTeacher,teachers,planningState,onApplied:async()=>{initialized=false;await init(context);}});
       return true;
     }catch(error){initialized=false;container.innerHTML=`<div class="alert alert-danger"><strong>Erreur de chargement.</strong> ${esc(error?.message||error)}</div>`;return false;}
   }
   function autoInit(){if(initialized)return;init({supabaseClient:runtimeClient(),currentTeacher:runtimeTeacher()});}
   if(typeof document!=='undefined'){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',autoInit);else autoInit();}
-  return {init,refresh};
+  return {init,refresh,generate};
 });
