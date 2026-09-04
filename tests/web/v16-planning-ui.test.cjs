@@ -20,6 +20,11 @@ test('V16 planning UI exposes all approved interactive filters and counters',()=
   assert.match(ui,/planningSummary/);
 });
 
+test('planning HTML escaping uses a complete quote entity',()=>{
+  assert.match(ui,/&quot;/);
+  assert.doesNotMatch(ui,/&quot(?!;)/);
+});
+
 test('V16 planning UI has explicit loading, empty and error states',()=>{
   assert.match(ui,/Chargement du planning/i);
   assert.match(ui,/Aucune séance ne correspond/i);
