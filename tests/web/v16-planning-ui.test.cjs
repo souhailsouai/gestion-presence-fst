@@ -47,6 +47,10 @@ test('planning loader reads all persisted structural fields and TEST context',()
   assert.match(ui,/V16TestMode/);
 });
 
+test('RÉEL TEST context switch clears unsaved manual weeks before reloading',()=>{
+  assert.match(ui,/v16:context-changed[\s\S]+resetDirty/);
+});
+
 test('teacher selector is restricted to the six teachers configured for the active cycle',()=>{
   assert.match(ui,/v515_teacher_constraints/);
   assert.match(ui,/teacher_id/);
