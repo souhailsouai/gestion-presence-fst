@@ -25,7 +25,6 @@ begin
     raise exception 'INVALID_CYCLE_STATE: cycle must be published or assignments_finalized';
   end if;
 
-  -- Structural dates that differ from the old materialized calendar.
   if exists(
     select 1 from public.v515_sessions s
     where s.cycle_id=v_cycle_id
@@ -44,51 +43,42 @@ begin
     join public.attendance att on att.session_id=sp.session_id
     where a.cycle_id=v_cycle_id
       and vs.session_date in ('2026-10-15','2026-10-22','2026-10-29','2026-11-12','2026-11-19','2026-11-26','2026-12-03')
-      and (
-        att.status is not null
-        or att.grade is not null
-        or nullif(btrim(coalesce(att.comment,'')),'') is not null
-      )
+      and (att.status is not null or att.grade is not null or nullif(btrim(coalesce(att.comment,'')),'') is not null)
   ) then
     raise exception 'HISTORICAL_PRESENCE_DATA: attendance/grade/comment exists on an affected structural session';
   end if;
 
-  -- 15/10/2026: JOUR FERIE — Fête de l''Évacuation — aucun TP.
-  -- Delete only future structural assignments/materialized plans for that date.
-  delete from public.session_plans sp
-  using public.v515_assignments a,public.v515_sessions s
-  where a.legacy_plan_id=sp.id
-    and a.session_id=s.id
-    and s.cycle_id=v_cycle_id
-    and s.session_date='2026-10-15';
+  -- Preserve mapped legacy plan IDs before deleting the 15/10 assignments.
+  create temporary table v16_holiday_legacy_plans(legacy_plan_id uuid primary key) on commit drop;
+  insert into v16_holiday_legacy_plans(legacy_plan_id)
+  select a.legacy_plan_id
+  from public.v515_assignments a
+  join public.v515_sessions s on s.id=a.session_id
+  where s.cycle_id=v_cycle_id and s.session_date='2026-10-15' and a.legacy_plan_id is not null;
 
   delete from public.v515_assignments a
   using public.v515_sessions s
-  where a.session_id=s.id
-    and s.cycle_id=v_cycle_id
-    and s.session_date='2026-10-15';
+  where a.session_id=s.id and s.cycle_id=v_cycle_id and s.session_date='2026-10-15';
 
+  delete from public.session_plans sp
+  using v16_holiday_legacy_plans x
+  where sp.id=x.legacy_plan_id;
+
+  -- 15/10/2026: JOUR FERIE — Fête de l''Évacuation — aucun TP.
   update public.v515_sessions
-  set is_teaching_session=false,
-      class_name=null,
+  set is_teaching_session=false,class_name=null,
       non_teaching_reason='JOUR FERIE - Fete de l''Evacuation',
-      effective_session_index=null,
-      class_occurrence=null,
-      lifecycle_status='published',
-      updated_at=now()
+      effective_session_index=null,class_occurrence=null,
+      lifecycle_status='published',updated_at=now()
   where cycle_id=v_cycle_id and session_date='2026-10-15';
 
   -- DS / REPOS week: no TP.
   update public.v515_sessions
-  set is_teaching_session=false,
-      class_name=null,
+  set is_teaching_session=false,class_name=null,
       non_teaching_reason='DS - aucun TP',
-      effective_session_index=null,
-      class_occurrence=null,
-      lifecycle_status='published',
-      updated_at=now()
-  where cycle_id=v_cycle_id
-    and session_date in ('2026-11-02','2026-11-05','2026-11-06');
+      effective_session_index=null,class_occurrence=null,
+      lifecycle_status='published',updated_at=now()
+  where cycle_id=v_cycle_id and session_date in ('2026-11-02','2026-11-05','2026-11-06');
 
   -- Approved Thursday alternation after the holiday. The holiday does not advance the occurrence.
   update public.v515_sessions set class_name='MPI1-C',class_occurrence=3,effective_session_index=5,updated_at=now() where cycle_id=v_cycle_id and session_date='2026-10-22';
@@ -100,18 +90,15 @@ begin
 
   -- Never invent teachers or rooms. Existing future rows must already have a valid Admin-approved manual plan.
   if exists(
-    select 1
-    from public.v515_sessions s
+    select 1 from public.v515_sessions s
     join public.v515_assignments a on a.session_id=s.id
-    where s.cycle_id=v_cycle_id and s.is_teaching_session
-      and s.session_date>='2026-09-14'
+    where s.cycle_id=v_cycle_id and s.is_teaching_session and s.session_date>='2026-09-14'
     group by s.id
     having count(a.id)<>4 or count(distinct a.teacher_id)<>4 or count(distinct a.room)<>4
   ) then
     raise exception 'VALID_MANUAL_PLAN_REQUIRED: fix teacher/room assignments in TEST before production reconciliation (ROOM_TIME_CONFLICT possible)';
   end if;
 
-  -- Every active week must satisfy normal or holiday-reduced teacher distribution.
   for v_week in
     select distinct date_trunc('week',session_date)::date week_start
     from public.v515_sessions
@@ -130,9 +117,7 @@ begin
     and session_date in ('2026-10-15','2026-10-22','2026-10-29','2026-11-02','2026-11-05','2026-11-06','2026-11-12','2026-11-19','2026-11-26','2026-12-03');
 
   perform private.v515_audit(
-    v_cycle_id,
-    'v16_official_calendar_reconciled',
-    null,
+    v_cycle_id,'v16_official_calendar_reconciled',null,
     'Calendrier V16 officiel réconcilié après validation manuelle.',
     jsonb_build_object('affected_calendar_rows',v_affected,'holiday','2026-10-15','ds_dates',jsonb_build_array('2026-11-02','2026-11-05','2026-11-06'))
   );
