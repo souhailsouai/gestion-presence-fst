@@ -1,49 +1,44 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const api = require('../../web/v16-planning-data.js');
+const rows = api.rows();
+const byDate = date => rows.find(r => r.date === date);
+const manips = date => byDate(date).groups.map(g => g.manipulation);
 
-const data = require('../../web/v16-planning-data.js');
-
-function row(date) {
-  return data.rows().find(x => x.date === date);
-}
-
-test('V16 official adapter preserves the Monday rotation and fixed rooms', () => {
-  const first = row('2026-09-14');
-  assert.equal(first.className, 'MPI1-A');
-  assert.equal(first.weekday, 'monday');
-  assert.equal(first.start, '13:45');
-  assert.equal(first.end, '17:30');
-  assert.deepEqual(first.groups, [
-    {groupNo: 1, manipulation: 'M1', room: 'C'},
-    {groupNo: 2, manipulation: 'M2', room: 'B'},
-    {groupNo: 3, manipulation: 'M3', room: 'D'},
-    {groupNo: 4, manipulation: 'M4', room: 'D'}
-  ]);
-
-  const third = row('2026-09-28');
-  assert.equal(third.className, 'MPI1-A');
-  assert.deepEqual(third.groups.map(x => x.manipulation), ['M2', 'M3', 'M4', 'M5']);
-  assert.deepEqual(third.groups.map(x => x.room), ['B', 'D', 'D', 'A']);
+test('15 October is a public holiday without TP', () => {
+  const row = byDate('2026-10-15');
+  assert.equal(row.isTeachingSession, false);
+  assert.equal(row.className, null);
+  assert.match(row.reason, /f[eé]ri[eé]|Evacuation/i);
 });
 
-test('V16 treats 15 October as a normal Thursday TP session and advances the alternation', () => {
-  const holiday = row('2026-10-15');
-  assert.equal(holiday.isTeachingSession, true);
-  assert.equal(holiday.className, 'MPI1-C');
-  assert.equal(holiday.reason, null);
-  assert.deepEqual(holiday.groups.map(x => x.manipulation), ['M3', 'M4', 'M5', 'M6']);
-  assert.deepEqual(holiday.groups.map(x => x.room), ['D', 'D', 'A', 'A']);
-
-  const nextThursday = row('2026-10-22');
-  assert.equal(nextThursday.className, 'MPI1-D');
-  assert.deepEqual(nextThursday.groups.map(x => x.manipulation), ['M3', 'M4', 'M5', 'M6']);
-
-  const rest = row('2026-11-05');
-  assert.equal(rest.isTeachingSession, false);
-  assert.equal(rest.reason, 'REPOS');
-  assert.deepEqual(rest.groups, []);
+test('approved slots are exact', () => {
+  assert.deepEqual([byDate('2026-09-14').start, byDate('2026-09-14').end], ['13:45','17:30']);
+  assert.deepEqual([byDate('2026-09-17').start, byDate('2026-09-17').end], ['13:30','17:30']);
+  assert.deepEqual([byDate('2026-09-18').start, byDate('2026-09-18').end], ['13:30','17:30']);
 });
 
-test('V16 room mapping is immutable and complete', () => {
-  assert.deepEqual(data.manipulationRooms, {M1:'C', M2:'B', M3:'D', M4:'D', M5:'A', M6:'A'});
+test('MPI1-A approved six occurrences are preserved', () => {
+  assert.deepEqual(manips('2026-09-14'), ['M1','M2','M3','M4']);
+  assert.deepEqual(manips('2026-09-28'), ['M2','M3','M4','M1']);
+  assert.deepEqual(manips('2026-10-12'), ['M3','M4','M1','M2']);
+  assert.deepEqual(manips('2026-10-26'), ['M4','M1','M2','M3']);
+  assert.deepEqual(manips('2026-11-16'), ['M5','M6','M5','M6']);
+  assert.deepEqual(manips('2026-11-30'), ['M6','M5','M6','M5']);
+});
+
+test('Thursday alternation skips the holiday without advancing class occurrence', () => {
+  assert.equal(byDate('2026-10-22').className, 'MPI1-C');
+  assert.deepEqual(manips('2026-10-22'), ['M3','M4','M1','M2']);
+  assert.equal(byDate('2026-10-29').className, 'MPI1-D');
+  assert.deepEqual(manips('2026-10-29'), ['M3','M4','M1','M2']);
+});
+
+test('there are 32 teaching sessions and DS days are non-teaching', () => {
+  assert.equal(rows.filter(r => r.isTeachingSession).length, 32);
+  for (const date of ['2026-11-02','2026-11-05','2026-11-06']) assert.equal(byDate(date).isTeachingSession, false);
+});
+
+test('V16 seed leaves rooms unselected for Admin', () => {
+  for (const row of rows.filter(r => r.isTeachingSession)) assert.deepEqual(row.groups.map(g => g.room), [null,null,null,null]);
 });
