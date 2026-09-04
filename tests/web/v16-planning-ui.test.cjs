@@ -50,8 +50,8 @@ test('teacher selector is restricted to the six teachers configured for the acti
 
 test('manual editor supersedes permutation panel when available',()=>{
   assert.match(ui,/V16PlanningEditor/);
-  assert.match(ui,/planningEditorApi/);
-  assert.match(ui,/planningEditorApi\?\.render|planningEditorApi\.render/);
+  assert.match(ui,/editorApi/);
+  assert.match(ui,/editorApi\?\.render|editorApi\.render/);
   assert.doesNotMatch(ui,/permutationsApi\?\.render\(/);
 });
 
