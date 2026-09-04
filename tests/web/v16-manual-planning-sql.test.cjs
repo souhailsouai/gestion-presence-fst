@@ -7,6 +7,7 @@ const deferredPath = 'supabase/migrations/20260904170200_v16_deferred_manip_hist
 const sql = fs.existsSync(realPath) ? fs.readFileSync(realPath,'utf8') : '';
 const testSql = fs.existsSync(testPath) ? fs.readFileSync(testPath,'utf8') : '';
 const deferredSql = fs.existsSync(deferredPath) ? fs.readFileSync(deferredPath,'utf8') : '';
+const effectiveTestSql = testSql + '\n' + deferredSql;
 
 test('manual planning removes same-session manipulation uniqueness', () => {
   assert.match(sql, /drop constraint if exists v515_assignments_session_id_manipulation_code_key/i);
@@ -60,22 +61,23 @@ test('week type counts distinct teaching dates and REAL save synchronizes mapped
   assert.match(sql, /update public\.session_plans sp[\s\S]+teacher_id=a\.teacher_id[\s\S]+manipulation=a\.manipulation_code[\s\S]+room=a\.room/i);
 });
 
-test('TEST migration clones REAL structural planning only', () => {
-  assert.match(testSql, /create or replace function public\.v16_clone_real_to_test\s*\(/i);
-  assert.match(testSql, /real_session_id/i);
-  assert.match(testSql, /real_assignment_id/i);
-  assert.match(testSql, /teacher_id/i);
-  assert.match(testSql, /manipulation_code/i);
-  assert.match(testSql, /room/i);
-  assert.doesNotMatch(testSql, /insert into public\.v16_test_attendance/i);
+test('TEST migrations clone REAL structural planning only', () => {
+  assert.match(effectiveTestSql, /create or replace function public\.v16_clone_real_to_test\s*\(/i);
+  assert.match(effectiveTestSql, /real_session_id/i);
+  assert.match(effectiveTestSql, /real_assignment_id/i);
+  assert.match(effectiveTestSql, /teacher_id/i);
+  assert.match(effectiveTestSql, /manipulation_code/i);
+  assert.match(effectiveTestSql, /room/i);
+  assert.doesNotMatch(effectiveTestSql, /insert into public\.v16_test_attendance/i);
 });
 
-test('TEST clone excludes the holiday and seeds manipulations from official class occurrence patterns',()=>{
-  assert.match(testSql,/session_date\s*<>\s*'2026-10-15'/i);
-  assert.match(testSql,/class_occurrence/i);
-  assert.match(testSql,/when\s+1\s+then[\s\S]*M1[\s\S]*M2[\s\S]*M3[\s\S]*M4/i);
-  assert.match(testSql,/when\s+5\s+then[\s\S]*M5[\s\S]*M6/i);
-  assert.match(testSql,/when\s+6\s+then[\s\S]*M6[\s\S]*M5/i);
+test('effective TEST clone excludes the holiday and seeds manipulations from official class occurrence patterns',()=>{
+  assert.match(deferredSql,/session_date\s*<>\s*'2026-10-15'/i);
+  assert.match(deferredSql,/class_occurrence/i);
+  assert.match(deferredSql,/when\s+1\s+then[\s\S]*M1[\s\S]*M2[\s\S]*M3[\s\S]*M4/i);
+  assert.match(deferredSql,/when\s+5\s+then[\s\S]*M5[\s\S]*M6/i);
+  assert.match(deferredSql,/when\s+6\s+then[\s\S]*M6[\s\S]*M5/i);
+  assert.match(deferredSql,/REAL_CALENDAR_NOT_RECONCILED/i);
 });
 
 test('TEST week save and TEST to REAL apply all structural fields', () => {
@@ -88,8 +90,8 @@ test('TEST week save and TEST to REAL apply all structural fields', () => {
 });
 
 test('TEST planning RPCs are Admin-only security invoker', () => {
-  assert.match(testSql, /security invoker/i);
-  assert.match(testSql, /private\.is_admin\(\)/i);
-  assert.match(testSql, /revoke execute on function public\.v16_clone_real_to_test\(date\) from public,anon/i);
+  assert.match(effectiveTestSql, /security invoker/i);
+  assert.match(effectiveTestSql, /private\.is_admin\(\)/i);
+  assert.match(effectiveTestSql, /revoke execute on function public\.v16_clone_real_to_test\(date\) from public,anon/i);
   assert.match(testSql, /revoke execute on function public\.v16_save_test_week_plan\(date,jsonb\) from public,anon/i);
 });
