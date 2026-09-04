@@ -17,13 +17,28 @@
     }
   };
 
+  async function refreshV16PlanningAdminUi(){
+    try{
+      if(window.V16PlanningUI?.init){
+        await window.V16PlanningUI.init({supabaseClient,currentTeacher});
+      }
+      mountV16TestMode();
+      return true;
+    }catch(error){
+      console.error('V16 planning admin UI',error);
+      return false;
+    }
+  }
+
   const onlineDoLogin=window.doLogin;
   if(typeof onlineDoLogin==='function'){
     window.doLogin=async function(profile,mode){
       const result=await onlineDoLogin(profile,mode);
-      window.V16ActiveRole?.configure({isAdmin:Boolean(profile?.isAdmin),initialRole:mode==='admin'?'admin':'teacher'});
+      const isAdmin=Boolean(profile?.role==='admin'||currentTeacher?.isAdmin);
+      window.V16ActiveRole?.configure({isAdmin,initialRole:mode==='admin'?'admin':'teacher'});
       localStorage.removeItem('presence_profile_cache');
       localStorage.removeItem('attendanceSupabase_syncQueue');
+      if(document.getElementById('planning-v16')?.classList.contains('active'))await refreshV16PlanningAdminUi();
       return result;
     };
   }
@@ -102,13 +117,13 @@
     window.switchTab=function(tabName){
       const result=baseSwitchTab.apply(this,arguments);
       if(tabName==='etudiants')setTimeout(()=>{void renderV16StudentGroups();},0);
-      if(tabName==='planning-v16')setTimeout(()=>{mountV16TestMode();},0);
+      if(tabName==='planning-v16')setTimeout(()=>{void window.V16PlanningUI?.init({supabaseClient,currentTeacher}).then(()=>mountV16TestMode());},0);
       return result;
     };
   }
 
   window.addEventListener?.('v16:role-changed',()=>{
-    if(document.getElementById('planning-v16')?.classList.contains('active'))mountV16TestMode();
+    if(document.getElementById('planning-v16')?.classList.contains('active'))void refreshV16PlanningAdminUi();
   });
 
   window.renderV16StudentGroups=renderV16StudentGroups;
