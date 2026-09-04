@@ -49,6 +49,30 @@ test('preview compares teacher manipulation and room fields using real assignmen
   assert.match(source,/realById/);
 });
 
+test('preview scopes counts and structural changes to the requested effective date',async()=>{
+  const tables={
+    v16_test_assignments:[
+      {test_session_id:'ts-before',real_assignment_id:'r-before',group_no:1,teacher_id:'t1',manipulation_code:'M1',room:'A'},
+      {test_session_id:'ts-after',real_assignment_id:'r-after',group_no:1,teacher_id:'t2-new',manipulation_code:'M2',room:'B'}
+    ],
+    v16_test_sessions:[
+      {id:'ts-before',session_date:'2026-09-20'},
+      {id:'ts-after',session_date:'2026-10-05'}
+    ],
+    v515_assignments:[
+      {id:'r-before',session_id:'rs-before',group_no:1,teacher_id:'t1',manipulation_code:'M1',room:'A'},
+      {id:'r-after',session_id:'rs-after',group_no:1,teacher_id:'t2-old',manipulation_code:'M2',room:'B'}
+    ]
+  };
+  const client={from(name){return {select:async()=>({data:tables[name]||[],error:null})};}};
+  api.configure({isAdmin:true,activeRole:'admin',supabaseClient:client,context:'test'});
+  const preview=await api.previewApply('2026-10-01');
+  assert.equal(preview.current_count,1);
+  assert.equal(preview.proposed_count,1);
+  assert.equal(preview.structural_changes,1);
+  assert.equal(preview.weeks,1);
+});
+
 test('TEST to REAL keeps the compatibility RPC name',()=>{
   assert.match(source,/v16_apply_test_teacher_plan/);
 });
