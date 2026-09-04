@@ -28,6 +28,15 @@ test('safe TEST apply blocks calendar mismatch before touching REAL structural f
   assert.doesNotMatch(sql,/ta\.real_session_id/i);
 });
 
+test('safe TEST apply rejects unmapped TEST assignments before REAL update',()=>{
+  const apply=sql.match(/create or replace function public\.v16_apply_test_teacher_plan[\s\S]*?\n\$\$;/i)?.[0]||'';
+  assert.match(apply,/UNMAPPED_TEST_ASSIGNMENT/i);
+  assert.match(apply,/ta\.real_assignment_id is null|ra\.id is null/i);
+  const blockerIndex=apply.search(/UNMAPPED_TEST_ASSIGNMENT/i);
+  const updateIndex=apply.search(/update\s+public\.v515_assignments/i);
+  assert.ok(blockerIndex>=0&&updateIndex>=0&&blockerIndex<updateIndex,'unmapped guard must run before REAL update');
+});
+
 test('safe apply updates only structural planning and keeps started-session guards',()=>{
   assert.match(sql,/teacher_id=ta\.teacher_id[\s\S]+manipulation_code=ta\.manipulation_code[\s\S]+room=ta\.room/i);
   assert.match(sql,/SESSION_ALREADY_STARTED/i);
