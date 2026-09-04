@@ -14,6 +14,13 @@ test('reconciliation is an explicit guarded transaction for the finalized 2026/2
   assert.match(sql,/session_id\s+is\s+not\s+null/i);
 });
 
+test('cycle identity lookup is UUID-safe and reads the unique row only after counting it',()=>{
+  assert.doesNotMatch(sql,/min\s*\(\s*id\s*\)/i);
+  assert.match(sql,/select\s+count\(\*\)[\s\S]+into\s+v_cycle_count[\s\S]+from\s+public\.v515_cycles/i);
+  assert.match(sql,/if\s+v_cycle_count\s*<>\s*1[\s\S]+CYCLE_IDENTITY_INVALID/i);
+  assert.match(sql,/select\s+id\s*,\s*status\s+into\s+v_cycle_id\s*,\s*v_cycle_status[\s\S]+from\s+public\.v515_cycles/i);
+});
+
 test('calendar reconciliation converts 15 October to holiday and shifts Thursday identity without advancing the holiday',()=>{
   assert.match(sql,/2026-10-15/);
   assert.match(sql,/is_teaching_session\s*=\s*false/i);
