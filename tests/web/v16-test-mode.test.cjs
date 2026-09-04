@@ -37,9 +37,11 @@ test('context is constrained to real or test and TEST clone/reset use isolated R
   assert.match(source,/v16:context-changed/);
 });
 
-test('preview compares teacher manipulation and room fields',()=>{
+test('preview compares teacher manipulation and room fields using real assignment ids',()=>{
   assert.match(source,/teacher_id,group_no,manipulation_code,room,test_session_id,real_assignment_id/);
-  assert.match(source,/teacher_id,group_no,manipulation_code,room,session_id/);
+  assert.match(source,/teacher_id,group_no,manipulation_code,room,session_id,id/);
+  assert.match(source,/real_assignment_id/);
+  assert.match(source,/realById/);
 });
 
 test('TEST to REAL keeps the compatibility RPC name',()=>{
