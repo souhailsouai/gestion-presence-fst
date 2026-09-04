@@ -119,6 +119,16 @@ test('preview reports weekly teacher-distribution blockers before TEST to REAL a
   assert.ok(preview.blockers.some(b=>['MAX_TWO_DAYS_PER_TEACHER','TEACHER_WEEKDAY_COUNT'].includes(b.code)));
 });
 
+test('preview uses the read-only server preflight as the authoritative TEST to REAL check',async()=>{
+  const calls=[];
+  const expected={ok:false,effective_date:'2026-10-01',current_count:8,proposed_count:8,structural_changes:2,weeks:2,blockers:[{code:'SESSION_ALREADY_STARTED'}],warnings:[]};
+  const client={rpc:async(name,args)=>{calls.push({name,args});return {data:expected,error:null};}};
+  api.configure({isAdmin:true,activeRole:'admin',supabaseClient:client,context:'test'});
+  const preview=await api.previewApply('2026-10-01');
+  assert.deepEqual(calls,[{name:'v16_preview_test_apply',args:{p_effective_date:'2026-10-01'}}]);
+  assert.deepEqual(preview,expected);
+});
+
 test('TEST to REAL keeps the compatibility RPC name',()=>{
   assert.match(source,/v16_apply_test_teacher_plan/);
 });
