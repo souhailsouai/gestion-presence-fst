@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
-const path='supabase/migrations/20260904170200_v16_test_calendar_safety.sql';
+const path='supabase/migrations/20260904170300_v16_test_calendar_safety.sql';
 const sql=fs.existsSync(path)?fs.readFileSync(path,'utf8'):'';
 
 test('TEST clone projects the approved Thursday calendar and unresolved duplicate rooms',()=>{
