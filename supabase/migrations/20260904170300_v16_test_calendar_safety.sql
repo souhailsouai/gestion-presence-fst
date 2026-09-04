@@ -241,6 +241,17 @@ begin
     select 1
     from public.v16_test_assignments ta
     join public.v16_test_sessions ts on ts.id=ta.test_session_id
+    left join public.v515_assignments ra on ra.id=ta.real_assignment_id
+    where ts.session_date>=p_effective_date
+      and (ta.real_assignment_id is null or ra.id is null)
+  ) then
+    return jsonb_build_object('ok',false,'code','UNMAPPED_TEST_ASSIGNMENT','message','Une affectation TEST ne correspond à aucune affectation RÉEL.','affected_sessions',0);
+  end if;
+
+  if exists(
+    select 1
+    from public.v16_test_assignments ta
+    join public.v16_test_sessions ts on ts.id=ta.test_session_id
     join public.v515_assignments ra on ra.id=ta.real_assignment_id
     join public.v515_sessions rs on rs.id=ts.real_session_id
     left join public.session_plans sp on sp.id=ra.legacy_plan_id
