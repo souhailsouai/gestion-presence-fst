@@ -5,11 +5,13 @@ const realPath = 'supabase/migrations/20260904170000_v16_manual_planning_rules.s
 const testPath = 'supabase/migrations/20260904170100_v16_test_manual_planning.sql';
 const deferredPath = 'supabase/migrations/20260904170200_v16_deferred_manip_history.sql';
 const safetyPath = 'supabase/migrations/20260904170300_v16_test_calendar_safety.sql';
+const concurrencyPath = 'supabase/migrations/20260904170400_v16_manip_history_concurrency.sql';
 const sql = fs.existsSync(realPath) ? fs.readFileSync(realPath,'utf8') : '';
 const testSql = fs.existsSync(testPath) ? fs.readFileSync(testPath,'utf8') : '';
 const deferredSql = fs.existsSync(deferredPath) ? fs.readFileSync(deferredPath,'utf8') : '';
 const safetySql = fs.existsSync(safetyPath) ? fs.readFileSync(safetyPath,'utf8') : '';
-const effectiveTestSql = testSql + '\n' + deferredSql + '\n' + safetySql;
+const concurrencySql = fs.existsSync(concurrencyPath) ? fs.readFileSync(concurrencyPath,'utf8') : '';
+const effectiveTestSql = testSql + '\n' + deferredSql + '\n' + safetySql + '\n' + concurrencySql;
 
 test('manual planning removes same-session manipulation uniqueness', () => {
   assert.match(sql, /drop constraint if exists v515_assignments_session_id_manipulation_code_key/i);
@@ -31,9 +33,11 @@ test('manual planning enforces manipulation history server-side', () => {
   assert.match(sql, /REPEATED_GROUP_MANIPULATION/i);
 });
 
-test('manipulation history uses transaction locks so concurrent saves cannot create duplicates',()=>{
-  assert.match(sql,/pg_advisory_xact_lock\([\s\S]+v16-real-manip/i);
-  assert.match(safetySql,/pg_advisory_xact_lock\([\s\S]+v16-test-manip/i);
+test('effective manipulation history uses transaction locks so concurrent saves cannot create duplicates',()=>{
+  assert.match(concurrencySql,/create or replace function private\.v16_enforce_real_group_manip_history/i);
+  assert.match(concurrencySql,/pg_advisory_xact_lock\([\s\S]+v16-real-manip/i);
+  assert.match(concurrencySql,/create or replace function private\.v16_enforce_test_group_manip_history/i);
+  assert.match(concurrencySql,/pg_advisory_xact_lock\([\s\S]+v16-test-manip/i);
 });
 
 test('manipulation history is deferred so atomic multi-row week updates are order-independent',()=>{
