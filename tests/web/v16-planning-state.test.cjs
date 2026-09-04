@@ -62,8 +62,8 @@ test('filters by class and group while keeping only matching posts', () => {
 
 test('combines weekday and manipulation filters', () => {
   const result = stateApi.filterPlanning(state, {weekday:'monday', manipulation:'M1'});
-  assert.equal(result.length, 1);
-  assert.equal(result[0].date,'2026-09-21');
+  assert.deepEqual(result.map(r=>r.date),['2026-09-14','2026-09-21']);
+  assert.ok(result.every(r=>r.groups.every(g=>g.manipulation==='M1')));
 });
 
 test('filters teacher, room, ISO week and date range', () => {
