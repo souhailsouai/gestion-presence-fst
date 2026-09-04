@@ -12,6 +12,10 @@
 
   function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function valid(value){return value==='real'||value==='test';}
+  function weekStart(value){
+    const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '';
+    const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));const day=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()-(day-1));return d.toISOString().slice(0,10);
+  }
   function persisted(){try{const v=root.localStorage?.getItem(KEY);return valid(v)?v:'real';}catch(_){return 'real';}}
   function persist(value){try{root.localStorage?.setItem(KEY,value);}catch(_){/* noop */}}
   function emit(){
@@ -63,24 +67,33 @@
   }
   async function previewApply(effectiveDate,options={}){
     if(!allowed())throw new Error('Accès Admin requis.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDate||'')))throw new Error('Date d’effet requise.');
     const c=options.supabaseClient||runtimeClient();
     if(!c)throw new Error('Connexion Supabase indisponible.');
-    const [testRes,realRes]=await Promise.all([
+    const [testRes,testSessionsRes,realRes]=await Promise.all([
       c.from('v16_test_assignments').select('teacher_id,group_no,manipulation_code,room,test_session_id,real_assignment_id'),
+      c.from('v16_test_sessions').select('id,session_date'),
       c.from('v515_assignments').select('teacher_id,group_no,manipulation_code,room,session_id,id')
     ]);
     if(testRes.error)throw testRes.error;
+    if(testSessionsRes.error)throw testSessionsRes.error;
     if(realRes.error)throw realRes.error;
+    const sessionDates=new Map((testSessionsRes.data||[]).map(s=>[String(s.id),String(s.session_date||'')]));
+    const scoped=(testRes.data||[]).filter(t=>{
+      const date=sessionDates.get(String(t.test_session_id||''))||'';
+      return date&&date>=effectiveDate;
+    });
     const realById=new Map((realRes.data||[]).map(r=>[String(r.id),r]));
     let structuralChanges=0;
-    for(const t of testRes.data||[]){
+    for(const t of scoped){
       const r=realById.get(String(t.real_assignment_id||''));
       if(!r)continue;
       if(String(t.teacher_id)!==String(r.teacher_id)||t.manipulation_code!==r.manipulation_code||t.room!==r.room)structuralChanges+=1;
     }
-    const proposed=(testRes.data||[]).length;
-    const current=(realRes.data||[]).length;
-    return {ok:true,effective_date:effectiveDate,current_count:current,proposed_count:proposed,structural_changes:structuralChanges,weeks:null,blockers:[],warnings:[]};
+    const proposed=scoped.length;
+    const current=scoped.filter(t=>realById.has(String(t.real_assignment_id||''))).length;
+    const weeks=new Set(scoped.map(t=>weekStart(sessionDates.get(String(t.test_session_id||'')))).filter(Boolean)).size;
+    return {ok:true,effective_date:effectiveDate,current_count:current,proposed_count:proposed,structural_changes:structuralChanges,weeks,blockers:[],warnings:[]};
   }
   async function applyToReal(effectiveDate,options={}){
     if(!allowed())throw new Error('Accès Admin requis.');
