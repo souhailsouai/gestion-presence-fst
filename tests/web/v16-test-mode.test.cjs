@@ -37,6 +37,11 @@ test('context is constrained to real or test and TEST clone/reset use isolated R
   assert.match(source,/v16:context-changed/);
 });
 
+test('successful RÉEL to TEST clone emits a context refresh event',()=>{
+  const clone=source.match(/async function cloneRealToTest[\s\S]*?\n  }/)?.[0]||'';
+  assert.match(clone,/emit\(\)/);
+});
+
 test('preview compares teacher manipulation and room fields using real assignment ids',()=>{
   assert.match(source,/teacher_id,group_no,manipulation_code,room,test_session_id,real_assignment_id/);
   assert.match(source,/teacher_id,group_no,manipulation_code,room,session_id,id/);
