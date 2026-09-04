@@ -38,3 +38,11 @@ test('V16 planning is a native delivered tab and the floating V5.15 launcher is 
   assert.equal(html.includes('Planning V5.15'), false);
   assert.equal(html.includes('v515-launcher'), false);
 });
+
+test('V16 mobile More menu exposes Planning des séances', () => {
+  const html = buildV16();
+  const mobileMenu = html.match(/mobile-more-panel[\s\S]*?document\.body\.appendChild\(s\)/i);
+  assert.ok(mobileMenu, 'Mobile More menu not found');
+  assert.ok(mobileMenu[0].includes('data-tab="planning-v16"'));
+  assert.ok(mobileMenu[0].includes('Planning des séances'));
+});
