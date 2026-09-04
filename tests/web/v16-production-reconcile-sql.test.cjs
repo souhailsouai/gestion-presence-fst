@@ -1,0 +1,48 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path='supabase/ops/2026-09-04_v16_official_calendar_reconcile.sql';
+const sql=fs.existsSync(path)?fs.readFileSync(path,'utf8'):'';
+
+test('reconciliation is an explicit guarded transaction for the finalized 2026/2027 cycle',()=>{
+  assert.match(sql,/\bbegin\s*;/i);
+  assert.match(sql,/\bcommit\s*;/i);
+  assert.match(sql,/academic_year\s*=\s*'2026\/2027'/i);
+  assert.match(sql,/semester\s*=\s*1/i);
+  assert.match(sql,/assignments_finalized/i);
+  assert.match(sql,/SESSION_ALREADY_STARTED/i);
+  assert.match(sql,/session_id\s+is\s+not\s+null/i);
+});
+
+test('calendar reconciliation converts 15 October to holiday and shifts Thursday identity without advancing the holiday',()=>{
+  assert.match(sql,/2026-10-15/);
+  assert.match(sql,/is_teaching_session\s*=\s*false/i);
+  assert.match(sql,/JOUR F[ÉE]RI[ÉE]/i);
+  assert.match(sql,/2026-10-22[\s\S]+MPI1-C[\s\S]+class_occurrence[\s\S]+3/i);
+  assert.match(sql,/2026-10-29[\s\S]+MPI1-D[\s\S]+class_occurrence[\s\S]+3/i);
+  assert.match(sql,/2026-11-12[\s\S]+MPI1-C[\s\S]+class_occurrence[\s\S]+4/i);
+  assert.match(sql,/2026-12-03[\s\S]+MPI1-D[\s\S]+class_occurrence[\s\S]+5/i);
+});
+
+test('DS dates stay non teaching and 15 October future structural rows are removed only when safe',()=>{
+  for(const date of ['2026-11-02','2026-11-05','2026-11-06'])assert.match(sql,new RegExp(date.replaceAll('-','-')));
+  assert.match(sql,/delete\s+from\s+public\.v515_assignments[\s\S]+2026-10-15/i);
+  assert.match(sql,/deleted_at\s*=\s*now\(\)/i);
+});
+
+test('reconciliation remaps unstarted presence plans to corrected class groups and preserves structural choices',()=>{
+  assert.match(sql,/update\s+public\.session_plans\s+sp[\s\S]+set\s+class_id\s*=\s*c\.id/i);
+  assert.match(sql,/c\.name\s*=\s*s\.class_name\s*\|\|\s*'-G'\s*\|\|\s*a\.group_no/i);
+  assert.doesNotMatch(sql,/set\s+teacher_id\s*=/i);
+  assert.doesNotMatch(sql,/set\s+manipulation_code\s*=/i);
+  assert.doesNotMatch(sql,/set\s+room\s*=/i);
+});
+
+test('reconciliation validates teacher-week distributions directly and defers TEST structural apply',()=>{
+  assert.match(sql,/HOLIDAY_WEEK_DISTRIBUTION/i);
+  assert.match(sql,/MAX_TWO_DAYS_PER_TEACHER/i);
+  assert.match(sql,/TEACHER_WEEKDAY_COUNT/i);
+  assert.match(sql,/v16_apply_test_teacher_plan/i);
+  assert.match(sql,/v16_official_calendar_reconciled/i);
+  assert.doesNotMatch(sql,/public\.v16_verify_teacher_week\(/i);
+});

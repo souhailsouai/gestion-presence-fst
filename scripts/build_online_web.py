@@ -52,6 +52,8 @@ tags = [
     '<script src="./v16-planning-export-model.js"></script>',
     '<script src="./v16-planning-pdf.js"></script>',
     '<script src="./v16-planning-xlsx.js"></script>',
+    '<script src="./v16-planning-editor.js"></script>',
+    '<script src="./v16-dashboard-notices.js"></script>',
     '<script src="./v16-planning-ui.js"></script>',
 ]
 for tag in tags:

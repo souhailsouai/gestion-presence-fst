@@ -20,6 +20,11 @@ test('V16 planning UI exposes all approved interactive filters and counters',()=
   assert.match(ui,/planningSummary/);
 });
 
+test('planning HTML escaping uses a complete quote entity',()=>{
+  assert.match(ui,/&quot;/);
+  assert.doesNotMatch(ui,/&quot(?!;)/);
+});
+
 test('V16 planning UI has explicit loading, empty and error states',()=>{
   assert.match(ui,/Chargement du planning/i);
   assert.match(ui,/Aucune séance ne correspond/i);
@@ -33,6 +38,30 @@ test('V16 auto-init reads V5.13 lexical Supabase and teacher globals, not only w
   assert.match(ui,/typeof currentTeacher/);
   assert.match(ui,/supabaseClient:runtimeClient\(\)/);
   assert.match(ui,/currentTeacher:runtimeTeacher\(\)/);
+});
+
+test('planning loader reads all persisted structural fields and TEST context',()=>{
+  assert.match(ui,/session_id,group_no,teacher_id,manipulation_code,room/);
+  assert.match(ui,/v16_test_assignments/);
+  assert.match(ui,/v16_test_sessions/);
+  assert.match(ui,/V16TestMode/);
+});
+
+test('RÉEL TEST context switch clears unsaved manual weeks before reloading',()=>{
+  assert.match(ui,/v16:context-changed[\s\S]+resetDirty/);
+});
+
+test('teacher selector is restricted to the six teachers configured for the active cycle',()=>{
+  assert.match(ui,/v515_teacher_constraints/);
+  assert.match(ui,/teacher_id/);
+  assert.match(ui,/allowedTeacherIds|allowedIds|allowed/i);
+});
+
+test('manual editor supersedes permutation panel when available',()=>{
+  assert.match(ui,/V16PlanningEditor/);
+  assert.match(ui,/editorApi/);
+  assert.match(ui,/editorApi\?\.render|editorApi\.render/);
+  assert.doesNotMatch(ui,/permutationsApi\?\.render\(/);
 });
 
 test('V16 build bundles V16 modules in dependency order and excludes old floating UI',()=>{

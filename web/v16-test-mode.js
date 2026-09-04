@@ -10,7 +10,6 @@
   let activeRole='teacher';
   let client=null;
 
-  function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function valid(value){return value==='real'||value==='test';}
   function persisted(){try{const v=root.localStorage?.getItem(KEY);return valid(v)?v:'real';}catch(_){return 'real';}}
   function persist(value){try{root.localStorage?.setItem(KEY,value);}catch(_){/* noop */}}
@@ -36,7 +35,7 @@
     if(client)return client;
     try{return typeof supabaseClient!=='undefined'?supabaseClient:(root.supabaseClient||null);}catch(_){return root.supabaseClient||null;}
   }
-  async function resetTest(options={}){
+  async function clearTest(options={}){
     if(!allowed())throw new Error('Accès Admin requis.');
     const c=options.supabaseClient||runtimeClient();
     if(!c)throw new Error('Connexion Supabase indisponible.');
@@ -45,19 +44,31 @@
     if(data&&data.ok===false)throw new Error(data.message||data.code||'Réinitialisation refusée.');
     return data||{ok:true};
   }
-  async function previewApply(effectiveDate,options={}){
+  async function cloneRealToTest(effectiveDate,options={}){
     if(!allowed())throw new Error('Accès Admin requis.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDate||'')))throw new Error('Date d’effet requise.');
     const c=options.supabaseClient||runtimeClient();
     if(!c)throw new Error('Connexion Supabase indisponible.');
-    const [testRes,realRes]=await Promise.all([
-      c.from('v16_test_assignments').select('teacher_id,group_no,test_session_id'),
-      c.from('v515_assignments').select('teacher_id,group_no,session_id')
-    ]);
-    if(testRes.error)throw testRes.error;
-    if(realRes.error)throw realRes.error;
-    const proposed=(testRes.data||[]).length;
-    const current=(realRes.data||[]).length;
-    return {ok:true,effective_date:effectiveDate,current_count:current,proposed_count:proposed,weeks:null,blockers:[],warnings:[]};
+    const {data,error}=await c.rpc('v16_clone_real_to_test',{p_effective_date:effectiveDate});
+    if(error)throw error;
+    if(data&&data.ok===false)throw new Error(data.message||data.code||'Clonage TEST refusé.');
+    emit();
+    return data||{ok:true};
+  }
+  async function resetTest(options={}){
+    const effectiveDate=options.effectiveDate||'';
+    if(!effectiveDate)return clearTest(options);
+    return cloneRealToTest(effectiveDate,options);
+  }
+  async function previewApply(effectiveDate,options={}){
+    if(!allowed())throw new Error('Accès Admin requis.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDate||'')))throw new Error('Date d’effet requise.');
+    const c=options.supabaseClient||runtimeClient();
+    if(!c)throw new Error('Connexion Supabase indisponible.');
+    const {data,error}=await c.rpc('v16_preview_test_apply',{p_effective_date:effectiveDate});
+    if(error)throw error;
+    if(!data)throw new Error('Prévisualisation TEST → RÉEL indisponible.');
+    return data;
   }
   async function applyToReal(effectiveDate,options={}){
     if(!allowed())throw new Error('Accès Admin requis.');
@@ -115,8 +126,10 @@
     });
     mount.querySelector('[data-v16-test-reset]')?.addEventListener('click',async()=>{
       const box=mount.querySelector('[data-v16-test-confirmation]');
-      if(box)box.textContent='Réinitialisation TEST en cours…';
-      try{await resetTest();if(box)box.textContent='Contexte TEST réinitialisé.';alertUser('Contexte TEST réinitialisé.','success');}
+      const date=mount.querySelector('[data-v16-apply-date]')?.value||'';
+      if(!date){alertUser('Choisissez une date d’effet pour recréer le TEST depuis le RÉEL.','warning');return;}
+      if(box)box.textContent='Réinitialisation et clonage TEST en cours…';
+      try{const r=await resetTest({effectiveDate:date});if(box)box.textContent=`TEST recréé : ${r.assignments??0} affectation(s).`;alertUser('Contexte TEST recréé depuis le RÉEL.','success');}
       catch(error){if(box)box.textContent=error?.message||String(error);alertUser(error?.message||String(error),'danger');}
     });
     mount.querySelector('[data-v16-apply-preview]')?.addEventListener('click',async()=>{
@@ -126,10 +139,14 @@
         const p=await previewApply(date);
         mount.querySelector('[data-v16-current-summary]').textContent=String(p.current_count??'—');
         mount.querySelector('[data-v16-proposed-summary]').textContent=String(p.proposed_count??'—');
-        mount.querySelector('[data-v16-weeks-summary]').textContent=String(p.weeks??'À valider côté serveur');
-        mount.querySelector('[data-v16-anomalies-summary]').textContent=(p.blockers||[]).length?`${p.blockers.length} blocage(s)`:'Aucune anomalie détectée dans la prévisualisation.';
-        const confirm=mount.querySelector('[data-v16-apply-confirm]');if(confirm)confirm.disabled=Boolean((p.blockers||[]).length);
-      }catch(error){alertUser(error?.message||String(error),'danger');}
+        mount.querySelector('[data-v16-weeks-summary]').textContent=String(p.weeks??'—');
+        const blockers=p.blockers||[];
+        mount.querySelector('[data-v16-anomalies-summary]').textContent=blockers.length?`${blockers.length} blocage(s) serveur`:'Aucune anomalie détectée par le serveur.';
+        const confirm=mount.querySelector('[data-v16-apply-confirm]');if(confirm)confirm.disabled=!p.ok||Boolean(blockers.length);
+      }catch(error){
+        const confirm=mount.querySelector('[data-v16-apply-confirm]');if(confirm)confirm.disabled=true;
+        alertUser(error?.message||String(error),'danger');
+      }
     });
     mount.querySelector('[data-v16-apply-confirm]')?.addEventListener('click',async()=>{
       const date=mount.querySelector('[data-v16-apply-date]')?.value||'';
@@ -155,5 +172,5 @@
     return true;
   }
 
-  return {configure,getContext,setContext,resetTest,render,previewApply,applyToReal,mount};
+  return {configure,getContext,setContext,resetTest,cloneRealToTest,render,previewApply,applyToReal,mount};
 });
