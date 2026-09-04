@@ -59,12 +59,12 @@ jobs:
         run: |
           set -euo pipefail
           test -s web/index.html
-          grep -Fq 'data-fst-security-v2="inline"' web/index.html
-          grep -Fq 'data-fst-v16-planning-data="inline"' web/index.html
-          grep -Fq 'data-fst-v16-planning-ui="inline"' web/index.html
-          grep -Fq 'save_attendance_sheet' web/index.html
-          grep -Fq 'challengeAndVerify' web/index.html
-          ! grep -Fq './v16-planning-ui.js' web/index.html
+          grep -Fq '<script src="./security-v2.js"></script>' web/index.html
+          grep -Fq '<script src="./v16-planning-data.js"></script>' web/index.html
+          grep -Fq '<script src="./v16-planning-ui.js"></script>' web/index.html
+          grep -Fq 'save_attendance_sheet' web/security-v2.js
+          grep -Fq 'challengeAndVerify' web/security-v2.js
+          grep -Fq 'VERSION_CONFLICT' web/security-v2.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
