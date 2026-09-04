@@ -21,12 +21,17 @@ test('reconciliation restores holiday and DS dates without inventing rooms or te
   assert.doesNotMatch(sql,/random\(|gen_random_uuid\(\).*teacher|room\s*=\s*['"][ABCD]['"]/i);
 });
 
-test('reconciliation protects historical presence data and requires valid future manual planning',()=>{
+test('reconciliation protects historical presence data and validates teacher weeks',()=>{
   assert.match(sql,/attendance|presence/i);
   assert.match(sql,/grade|note/i);
   assert.match(sql,/comment/i);
   assert.match(sql,/v16_verify_teacher_week/i);
-  assert.match(sql,/ROOM_TIME_CONFLICT|VALID_MANUAL_PLAN_REQUIRED/i);
+});
+
+test('calendar-only reconciliation records legacy room conflicts without blocking untouched rows',()=>{
+  assert.match(sql,/legacy_room_conflict_sessions/i);
+  assert.match(sql,/count\s*\(\s*distinct\s+a\.room\s*\)\s*<\s*4/i);
+  assert.doesNotMatch(sql,/raise exception 'VALID_MANUAL_PLAN_REQUIRED: fix teacher\/room assignments/i);
 });
 
 test('reconciliation audits the official calendar change',()=>{
