@@ -35,6 +35,20 @@ test('V16 auto-init reads V5.13 lexical Supabase and teacher globals, not only w
   assert.match(ui,/currentTeacher:runtimeTeacher\(\)/);
 });
 
+test('planning loader reads all persisted structural fields and TEST context',()=>{
+  assert.match(ui,/session_id,group_no,teacher_id,manipulation_code,room/);
+  assert.match(ui,/v16_test_assignments/);
+  assert.match(ui,/v16_test_sessions/);
+  assert.match(ui,/V16TestMode/);
+});
+
+test('manual editor supersedes permutation panel when available',()=>{
+  assert.match(ui,/V16PlanningEditor/);
+  assert.match(ui,/planningEditorApi/);
+  assert.match(ui,/planningEditorApi\?\.render|planningEditorApi\.render/);
+  assert.doesNotMatch(ui,/permutationsApi\?\.render\(/);
+});
+
 test('V16 build bundles V16 modules in dependency order and excludes old floating UI',()=>{
   const modules=['v515-planning-core.js','v515-planning-2026-2027.js','v16-planning-data.js','v16-planning-state.js','v16-planning-ui.js'];
   let last=-1;
