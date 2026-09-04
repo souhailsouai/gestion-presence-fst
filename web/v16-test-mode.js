@@ -53,6 +53,7 @@
     const {data,error}=await c.rpc('v16_clone_real_to_test',{p_effective_date:effectiveDate});
     if(error)throw error;
     if(data&&data.ok===false)throw new Error(data.message||data.code||'Clonage TEST refusé.');
+    emit();
     return data||{ok:true};
   }
   async function resetTest(options={}){
