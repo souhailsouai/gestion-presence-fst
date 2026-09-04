@@ -8,7 +8,11 @@
   let ctx={supabaseClient:null,currentTeacher:null,teachers:[],planningState:{rows:[]},onApplied:null};
 
   function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function isActiveAdmin(t){return Boolean(t&&t.isAdmin&&t.activeMode==='admin');}
+  function isActiveAdmin(t){
+    const activeRole=host.V16ActiveRole;
+    if(activeRole?.canUseAdminControls)return activeRole.canUseAdminControls()===true;
+    return Boolean(t&&t.isAdmin&&t.activeMode==='admin');
+  }
   function client(){
     if(ctx.supabaseClient)return ctx.supabaseClient;
     try{return typeof supabaseClient!=='undefined'?supabaseClient:(host.supabaseClient||null);}catch(_){return host.supabaseClient||null;}
