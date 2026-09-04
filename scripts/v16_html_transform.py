@@ -49,6 +49,8 @@ V16_PLANNING_PANEL = '''
 
 '''
 
+MOBILE_PLANNING_BUTTON = '<button data-tab="planning-v16"><i class="fas fa-calendar-days"></i>Planning des séances</button>'
+
 
 def apply_v16_shell(html: str) -> str:
     """Return the V16 delivered shell while leaving the V5.13 source file unchanged."""
@@ -62,6 +64,11 @@ def apply_v16_shell(html: str) -> str:
         if report_marker not in html:
             raise ValueError('Point d’insertion Rapports introuvable.')
         html = html.replace(report_marker, V16_PLANNING_PANEL + report_marker, 1)
+
+    if 'mobile-more-panel' in html and 'data-tab="planning-v16"' not in html:
+        mobile_report_button = '<button data-tab="rapports"><i class="fas fa-file-alt"></i>Rapports</button>'
+        if mobile_report_button in html:
+            html = html.replace(mobile_report_button, MOBILE_PLANNING_BUTTON + mobile_report_button, 1)
 
     app_marker = '<div class="container" id="app-container"'
     if app_marker not in html:
