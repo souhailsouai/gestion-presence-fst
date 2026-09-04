@@ -21,13 +21,23 @@ declare
   v_one_day integer:=0;
   v_zero_days integer:=0;
 begin
-  select count(*),min(id),min(status)
-    into v_cycle_count,v_cycle_id,v_cycle_status
+  select count(*)
+    into v_cycle_count
   from public.v515_cycles
   where academic_year='2026/2027'
     and semester=1;
 
-  if v_cycle_count<>1 or v_cycle_id is null then
+  if v_cycle_count<>1 then
+    raise exception 'CYCLE_IDENTITY_INVALID: expected exactly one 2026/2027 semester 1 cycle';
+  end if;
+
+  select id,status
+    into v_cycle_id,v_cycle_status
+  from public.v515_cycles
+  where academic_year='2026/2027'
+    and semester=1;
+
+  if v_cycle_id is null then
     raise exception 'CYCLE_IDENTITY_INVALID: expected exactly one 2026/2027 semester 1 cycle';
   end if;
 
@@ -93,8 +103,6 @@ begin
     raise exception 'CALENDAR_ROWS_MISSING: expected all eight affected Thursday rows';
   end if;
 
-  -- Preserve the mapped holiday plan identifiers before deleting the obsolete
-  -- V16 assignment rows.
   create temporary table v16_holiday_legacy_plans on commit drop as
   select a.legacy_plan_id
   from public.v515_assignments a
@@ -128,8 +136,6 @@ begin
     and s.cycle_id=v_cycle_id
     and s.session_date=date '2026-10-15';
 
-  -- Apply authoritative Thursday teaching identity. 15/10 does not advance
-  -- effective index or class occurrence.
   update public.v515_sessions s
      set class_name=c.class_name,
          is_teaching_session=c.is_teaching,
@@ -141,7 +147,6 @@ begin
    where s.cycle_id=v_cycle_id
      and s.session_date=c.session_date;
 
-  -- Keep the entire DS week non-teaching even if an earlier seed differed.
   update public.v515_sessions
      set class_name=null,
          is_teaching_session=false,
@@ -162,8 +167,6 @@ begin
     raise exception 'DS_ASSIGNMENT_NOT_ALLOWED: DS rows unexpectedly contain assignments';
   end if;
 
-  -- Every corrected class/group must have an active presence class before the
-  -- mapped session plan can be moved to the corrected class identity.
   select count(*) into v_missing_classes
   from public.v515_assignments a
   join public.v515_sessions s on s.id=a.session_id
@@ -199,9 +202,6 @@ begin
      and sp.session_id is null
      and sp.deleted_at is null;
 
-  -- Direct weekly teacher validation. This script can run in a management SQL
-  -- context without auth.uid(), so it intentionally does not call the
-  -- authenticated public.v16_verify_teacher_week RPC.
   if (select count(*) from public.v515_teacher_constraints where cycle_id=v_cycle_id)<>6 then
     raise exception 'TEACHER_POOL_INVALID: exactly six configured teachers are required';
   end if;
