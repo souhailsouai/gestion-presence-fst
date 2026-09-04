@@ -17,3 +17,13 @@ test('V16 GitHub Pages deployment is main-only and rebuilds the approved fronten
   assert.match(yml, /actions\/deploy-pages@v\d+/);
   assert.match(yml, /path:\s*web/);
 });
+
+test('Pages verifies the real online multi-file payload rather than standalone inline markers', () => {
+  const yml = fs.readFileSync(workflowPath, 'utf8');
+  assert.match(yml, /\.\/security-v2\.js/);
+  assert.match(yml, /\.\/v16-planning-data\.js/);
+  assert.match(yml, /\.\/v16-planning-ui\.js/);
+  assert.match(yml, /save_attendance_sheet[^\n]*web\/security-v2\.js/);
+  assert.match(yml, /challengeAndVerify[^\n]*web\/security-v2\.js/);
+  assert.doesNotMatch(yml, /data-fst-security-v2=\\?"inline\\?"/);
+});
