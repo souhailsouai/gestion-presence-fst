@@ -27,6 +27,17 @@ test('editor saves complete weeks to context-specific RPCs',()=>{
   assert.match(source,/dirtyWeeks/);
 });
 
+test('editor checks manipulation history across the complete planning state before any week save',()=>{
+  assert.match(source,/validateManipulationHistory/);
+  assert.match(source,/planningState\.rows/);
+});
+
+test('editor table binding is idempotent across filter refreshes',()=>{
+  assert.match(source,/data-v16-editor-bound/);
+  assert.match(source,/getAttribute\(['"]data-v16-editor-bound['"]\)/);
+  assert.match(source,/setAttribute\(['"]data-v16-editor-bound['"],['"]true['"]\)/);
+});
+
 test('teacher mode is read-only and cannot mount edit controls',()=>{
   assert.match(source,/isAdminActive/);
   assert.match(source,/return\s+['"]['"]/);
