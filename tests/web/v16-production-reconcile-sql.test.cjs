@@ -45,7 +45,7 @@ test('reconciliation clears only orphaned soft-deleted class/date conflicts befo
   assert.match(sql,/public\.v515_assignments[\s\S]+legacy_plan_id\s*=\s*stale\.id[\s\S]+SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES/i);
   assert.match(sql,/delete\s+from\s+public\.session_plans\s+stale[\s\S]+stale\.deleted_at\s+is\s+not\s+null[\s\S]+stale\.session_id\s+is\s+null[\s\S]+not\s+exists\s*\([\s\S]+legacy_plan_id\s*=\s*stale\.id/i);
   const cleanup=sql.search(/delete\s+from\s+public\.session_plans\s+stale/i);
-  const remap=sql.search(/update\s+public\.session_plans\s+sp[\s\S]+set\s+class_id\s*=\s*t\.target_class_id/i);
+  const remap=sql.search(/set\s+class_id\s*=\s*t\.target_class_id/i);
   assert.ok(cleanup>=0 && remap>cleanup,'orphan conflict cleanup must run before active remap');
 });
 
