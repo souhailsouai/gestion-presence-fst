@@ -4,14 +4,16 @@
   else root.V16PlanningEditor=api;
 })(typeof globalThis!=='undefined'?globalThis:this,function(stateApi,host){
   'use strict';
+  const MANIPULATIONS=['M1','M2','M3','M4','M5','M6'];
+  const ROOMS=['A','B','C','D'];
   const dirtyWeeks=new Set();
   let ctx={supabaseClient:null,currentTeacher:null,teachers:[],planningState:{rows:[]},context:'real',onSaved:null};
 
   function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function isAdminActive(){const a=host.V16ActiveRole;return Boolean(a?.canUseAdminControls?.());}
   function teacherOptions(selected){return (ctx.teachers||[]).map(t=>`<option value="${esc(t.id)}"${String(t.id)===String(selected)?' selected':''}>${esc(t.full_name||t.email||t.id)}</option>`).join('');}
-  function manipulationOptions(selected){return [1,2,3,4,5,6].map(n=>{const v=`M${n}`;return `<option value="${v}"${v===selected?' selected':''}>${v}</option>`;}).join('');}
-  function roomOptions(selected){return `<option value=""${!selected?' selected':''}>À choisir</option>`+['A','B','C','D'].map(v=>`<option value="${v}"${v===selected?' selected':''}>Salle ${v}</option>`).join('');}
+  function manipulationOptions(selected){return MANIPULATIONS.map(v=>`<option value="${v}"${v===selected?' selected':''}>${v}</option>`).join('');}
+  function roomOptions(selected){return `<option value=""${!selected?' selected':''}>À choisir</option>`+ROOMS.map(v=>`<option value="${v}"${v===selected?' selected':''}>Salle ${v}</option>`).join('');}
 
   function renderGroupControls(row,group){
     if(!isAdminActive())return '';
