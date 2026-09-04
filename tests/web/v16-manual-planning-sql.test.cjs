@@ -3,8 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const realPath = 'supabase/migrations/20260904170000_v16_manual_planning_rules.sql';
 const testPath = 'supabase/migrations/20260904170100_v16_test_manual_planning.sql';
+const deferredPath = 'supabase/migrations/20260904170200_v16_deferred_manip_history.sql';
 const sql = fs.existsSync(realPath) ? fs.readFileSync(realPath,'utf8') : '';
 const testSql = fs.existsSync(testPath) ? fs.readFileSync(testPath,'utf8') : '';
+const deferredSql = fs.existsSync(deferredPath) ? fs.readFileSync(deferredPath,'utf8') : '';
 
 test('manual planning removes same-session manipulation uniqueness', () => {
   assert.match(sql, /drop constraint if exists v515_assignments_session_id_manipulation_code_key/i);
@@ -24,6 +26,15 @@ test('manual planning enforces manipulation history server-side', () => {
   assert.match(sql, /v16_enforce_real_group_manip_history/i);
   assert.match(sql, /v16_enforce_test_group_manip_history/i);
   assert.match(sql, /REPEATED_GROUP_MANIPULATION/i);
+});
+
+test('manipulation history is deferred so atomic multi-row week updates are order-independent',()=>{
+  assert.match(deferredSql,/drop trigger if exists v16_real_group_manip_history_guard/i);
+  assert.match(deferredSql,/drop trigger if exists v16_test_group_manip_history_guard/i);
+  assert.match(deferredSql,/create constraint trigger v16_real_group_manip_history_guard/i);
+  assert.match(deferredSql,/create constraint trigger v16_test_group_manip_history_guard/i);
+  assert.match(deferredSql,/deferrable initially deferred/i);
+  assert.match(deferredSql,/after insert or update/i);
 });
 
 test('week validator supports 3-day, 2-day holiday, and 0-day DS weeks', () => {
@@ -57,6 +68,14 @@ test('TEST migration clones REAL structural planning only', () => {
   assert.match(testSql, /manipulation_code/i);
   assert.match(testSql, /room/i);
   assert.doesNotMatch(testSql, /insert into public\.v16_test_attendance/i);
+});
+
+test('TEST clone excludes the holiday and seeds manipulations from official class occurrence patterns',()=>{
+  assert.match(testSql,/session_date\s*<>\s*'2026-10-15'/i);
+  assert.match(testSql,/class_occurrence/i);
+  assert.match(testSql,/when\s+1\s+then[\s\S]*M1[\s\S]*M2[\s\S]*M3[\s\S]*M4/i);
+  assert.match(testSql,/when\s+5\s+then[\s\S]*M5[\s\S]*M6/i);
+  assert.match(testSql,/when\s+6\s+then[\s\S]*M6[\s\S]*M5/i);
 });
 
 test('TEST week save and TEST to REAL apply all structural fields', () => {
