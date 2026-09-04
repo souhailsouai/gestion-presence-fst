@@ -184,21 +184,71 @@ begin
     raise exception 'TARGET_CLASS_MISSING: % corrected class/group target(s) missing',v_missing_classes;
   end if;
 
+  -- Materialize the exact active plan remaps before handling historical unique-key
+  -- conflicts. This keeps cleanup limited to the corrected Thursday rows only.
+  create temporary table v16_plan_remap_targets(
+    legacy_plan_id uuid primary key,
+    target_class_id uuid not null,
+    plan_date date not null
+  ) on commit drop;
+
+  insert into v16_plan_remap_targets(legacy_plan_id,target_class_id,plan_date)
+  select a.legacy_plan_id,c.id,s.session_date
+  from public.v515_assignments a
+  join public.v515_sessions s on s.id=a.session_id
+  join public.classes c
+    on c.name=s.class_name||'-G'||a.group_no
+   and c.deleted_at is null
+  where s.cycle_id=v_cycle_id
+    and s.session_date in (
+      date '2026-10-22',date '2026-10-29',date '2026-11-12',
+      date '2026-11-19',date '2026-11-26',date '2026-12-03'
+    )
+    and a.legacy_plan_id is not null;
+
+  -- A historical soft-deleted row may still occupy UNIQUE(class_id,plan_date).
+  -- Never remove it if it has started a session or is still referenced by V5.15.
+  if exists(
+    select 1
+    from public.session_plans stale
+    join v16_plan_remap_targets t
+      on t.target_class_id=stale.class_id
+     and t.plan_date=stale.plan_date
+     and t.legacy_plan_id<>stale.id
+    where stale.deleted_at is not null
+      and (
+        stale.session_id is not null
+        or exists(
+          select 1
+          from public.v515_assignments dependency
+          where dependency.legacy_plan_id=stale.id
+        )
+      )
+  ) then
+    raise exception 'SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES: historical plan conflict is still referenced';
+  end if;
+
+  -- Physically remove only orphaned soft-deleted conflicts so the active plan can
+  -- safely take the corrected class/date unique key.
+  delete from public.session_plans stale
+  using v16_plan_remap_targets t
+  where t.target_class_id=stale.class_id
+    and t.plan_date=stale.plan_date
+    and t.legacy_plan_id<>stale.id
+    and stale.deleted_at is not null
+    and stale.session_id is null
+    and not exists(
+      select 1
+      from public.v515_assignments dependency
+      where dependency.legacy_plan_id=stale.id
+    );
+
   update public.session_plans sp
-     set class_id=c.id,
+     set class_id=t.target_class_id,
          revision=sp.revision+1,
          updated_at=now()
-    from public.v515_assignments a
-    join public.v515_sessions s on s.id=a.session_id
-    join public.classes c
-      on c.name=s.class_name||'-G'||a.group_no
-     and c.deleted_at is null
-   where a.legacy_plan_id=sp.id
-     and s.cycle_id=v_cycle_id
-     and s.session_date in (
-       date '2026-10-22',date '2026-10-29',date '2026-11-12',
-       date '2026-11-19',date '2026-11-26',date '2026-12-03'
-     )
+    from v16_plan_remap_targets t
+   where t.legacy_plan_id=sp.id
      and sp.session_id is null
      and sp.deleted_at is null;
 
