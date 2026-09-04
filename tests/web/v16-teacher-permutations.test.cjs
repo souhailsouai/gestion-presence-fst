@@ -8,7 +8,7 @@ const planning=read('web/v16-planning-ui.js');
 const online=read('scripts/build_online_web.py');
 const single=read('scripts/build_single_file_release.py');
 
-test('Admin permutation UI exposes the approved interactive controls',()=>{
+test('legacy Admin permutation UI remains loadable for compatibility',()=>{
   for(const marker of [
     'Permuter','v16-swap-teacher-a','v16-swap-day-a','v16-swap-teacher-b','v16-swap-day-b',
     'v16-swap-scope','Cette semaine','Toutes les semaines futures','v16-swap-effective-date',
@@ -18,15 +18,16 @@ test('Admin permutation UI exposes the approved interactive controls',()=>{
   assert.match(ui,/v16_verify_teacher_week/);
 });
 
-test('permutation module renders only for active Admin role',()=>{
+test('permutation module itself remains Admin-only but Planning now uses manual editor',()=>{
   assert.match(ui,/activeMode\s*===\s*['"]admin['"]/);
   assert.match(ui,/isAdmin/);
   assert.match(ui,/return\s+['"]{2}/);
   assert.match(planning,/v16-admin-permutations/);
-  assert.match(planning,/V16TeacherPermutations/);
+  assert.match(planning,/V16PlanningEditor/);
+  assert.doesNotMatch(planning,/V16TeacherPermutations/);
 });
 
-test('permutation UI provides live policy summary before confirmation',()=>{
+test('legacy permutation UI still contains its historical live policy summary',()=>{
   assert.match(ui,/4\s*\/\s*jour/i);
   assert.match(ui,/2\s*jours\s*\/\s*semaine/i);
   assert.match(ui,/addEventListener\(['"]change['"]/);
@@ -34,7 +35,7 @@ test('permutation UI provides live policy summary before confirmation',()=>{
   assert.match(ui,/confirm/i);
 });
 
-test('V16 build loads permutation module after planning state and before planning UI',()=>{
+test('V16 build keeps legacy permutation module loadable before planning UI',()=>{
   const statePos=online.indexOf('v16-planning-state.js');
   const permPos=online.indexOf('v16-teacher-permutations.js');
   const uiPos=online.indexOf('v16-planning-ui.js');
