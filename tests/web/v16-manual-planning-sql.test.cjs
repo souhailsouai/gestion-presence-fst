@@ -1,8 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = 'supabase/migrations/20260904170000_v16_manual_planning_rules.sql';
-const sql = fs.existsSync(path) ? fs.readFileSync(path,'utf8') : '';
+const realPath = 'supabase/migrations/20260904170000_v16_manual_planning_rules.sql';
+const testPath = 'supabase/migrations/20260904170100_v16_test_manual_planning.sql';
+const sql = fs.existsSync(realPath) ? fs.readFileSync(realPath,'utf8') : '';
+const testSql = fs.existsSync(testPath) ? fs.readFileSync(testPath,'utf8') : '';
 
 test('manual planning removes same-session manipulation uniqueness', () => {
   assert.match(sql, /drop constraint if exists v515_assignments_session_id_manipulation_code_key/i);
@@ -45,4 +47,30 @@ test('room guard permits untouched legacy room rows until explicit V16 reconcili
 test('week type counts distinct teaching dates and REAL save synchronizes mapped presence plans', () => {
   assert.match(sql, /count\s*\(\s*distinct\s+s\.session_date\s*\)\s+into\s+v_teaching_days/i);
   assert.match(sql, /update public\.session_plans sp[\s\S]+teacher_id=a\.teacher_id[\s\S]+manipulation=a\.manipulation_code[\s\S]+room=a\.room/i);
+});
+
+test('TEST migration clones REAL structural planning only', () => {
+  assert.match(testSql, /create or replace function public\.v16_clone_real_to_test\s*\(/i);
+  assert.match(testSql, /real_session_id/i);
+  assert.match(testSql, /real_assignment_id/i);
+  assert.match(testSql, /teacher_id/i);
+  assert.match(testSql, /manipulation_code/i);
+  assert.match(testSql, /room/i);
+  assert.doesNotMatch(testSql, /insert into public\.v16_test_attendance/i);
+});
+
+test('TEST week save and TEST to REAL apply all structural fields', () => {
+  assert.match(testSql, /create or replace function public\.v16_save_test_week_plan\s*\(/i);
+  assert.match(testSql, /create or replace function public\.v16_apply_test_teacher_plan\s*\(/i);
+  assert.match(testSql, /set\s+teacher_id\s*=\s*ta\.teacher_id[\s\S]+manipulation_code\s*=\s*ta\.manipulation_code[\s\S]+room\s*=\s*ta\.room/i);
+  assert.match(testSql, /SESSION_ALREADY_STARTED/i);
+  assert.match(testSql, /HOLIDAY_WEEK_DISTRIBUTION/i);
+  assert.match(testSql, /MAX_TWO_DAYS_PER_TEACHER/i);
+});
+
+test('TEST planning RPCs are Admin-only security invoker', () => {
+  assert.match(testSql, /security invoker/i);
+  assert.match(testSql, /private\.is_admin\(\)/i);
+  assert.match(testSql, /revoke execute on function public\.v16_clone_real_to_test\(date\) from public,anon/i);
+  assert.match(testSql, /revoke execute on function public\.v16_save_test_week_plan\(date,jsonb\) from public,anon/i);
 });
