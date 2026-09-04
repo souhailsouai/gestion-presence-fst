@@ -19,11 +19,12 @@ test('legacy Admin permutation UI remains loadable for compatibility',()=>{
 });
 
 test('permutation module itself remains Admin-only but Planning now uses manual editor',()=>{
-  assert.match(ui,/activeMode\s*===\s*['"]admin['"]/);
+  assert.match(ui,/V16ActiveRole/);
+  assert.match(ui,/canUseAdminControls/);
   assert.match(ui,/isAdmin/);
-  assert.match(ui,/return\s+['"]{2}/);
-  assert.match(planning,/v16-admin-permutations/);
   assert.match(planning,/V16PlanningEditor/);
+  assert.match(planning,/v16-manual-editor-root/);
+  assert.doesNotMatch(planning,/v16-admin-permutations/);
   assert.doesNotMatch(planning,/V16TeacherPermutations/);
 });
 
