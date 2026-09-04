@@ -11,7 +11,7 @@
   function runtimeTeacher(){try{return typeof currentTeacher!=='undefined'?currentTeacher:(host.currentTeacher||null);}catch(_){return host.currentTeacher||null;}}
   function activeMode(){return host.V16TestMode?.getContext?.()||'real';}
   function isActiveAdmin(){if(host.V16ActiveRole?.canUseAdminControls)return host.V16ActiveRole.canUseAdminControls()===true;return Boolean(context.currentTeacher?.isAdmin&&context.currentTeacher?.activeMode==='admin');}
-  function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));}
+  function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function fmtDate(value){const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?`${m[3]}/${m[2]}/${m[1]}`:String(value||'');}
   function dayLabel(day){return ({monday:'Lundi',thursday:'Jeudi',friday:'Vendredi'})[day]||day||'—';}
   function teacherName(id){if(!id)return 'Non affecté';return teachers.find(t=>String(t.id)===String(id))?.full_name||String(id);}
