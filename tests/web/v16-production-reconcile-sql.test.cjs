@@ -37,21 +37,10 @@ test('DS dates stay non teaching and 15 October future structural rows are remov
   assert.match(sql,/deleted_at\s*=\s*now\(\)/i);
 });
 
-test('reconciliation clears only orphaned soft-deleted class/date conflicts before active plan remap',()=>{
-  assert.match(sql,/SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES/i);
-  assert.match(sql,/create\s+temporary\s+table\s+v16_plan_remap_targets/i);
-  assert.match(sql,/stale\.deleted_at\s+is\s+not\s+null/i);
-  assert.match(sql,/stale\.session_id\s+is\s+not\s+null[\s\S]+SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES/i);
-  assert.match(sql,/public\.v515_assignments[\s\S]+legacy_plan_id\s*=\s*stale\.id[\s\S]+SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES/i);
-  assert.match(sql,/delete\s+from\s+public\.session_plans\s+stale[\s\S]+stale\.deleted_at\s+is\s+not\s+null[\s\S]+stale\.session_id\s+is\s+null[\s\S]+not\s+exists\s*\([\s\S]+legacy_plan_id\s*=\s*stale\.id/i);
-  const cleanup=sql.search(/delete\s+from\s+public\.session_plans\s+stale/i);
-  const remap=sql.search(/set\s+class_id\s*=\s*t\.target_class_id/i);
-  assert.ok(cleanup>=0 && remap>cleanup,'orphan conflict cleanup must run before active remap');
-});
-
-test('reconciliation remaps unstarted presence plans to corrected class groups and preserves structural choices',()=>{
-  assert.match(sql,/update\s+public\.session_plans\s+sp[\s\S]+set\s+class_id\s*=/i);
-  assert.match(sql,/c\.name\s*=\s*s\.class_name\s*\|\|\s*'-G'\s*\|\|\s*a\.group_no/i);
+test('calendar reconciliation does not remap active session plans or rewrite teaching choices',()=>{
+  assert.doesNotMatch(sql,/create\s+temporary\s+table\s+v16_plan_remap_targets/i);
+  assert.doesNotMatch(sql,/SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES/i);
+  assert.doesNotMatch(sql,/set\s+class_id\s*=/i);
   assert.doesNotMatch(sql,/set\s+teacher_id\s*=/i);
   assert.doesNotMatch(sql,/set\s+manipulation_code\s*=/i);
   assert.doesNotMatch(sql,/set\s+room\s*=/i);
