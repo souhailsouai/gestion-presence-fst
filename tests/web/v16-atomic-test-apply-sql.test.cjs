@@ -43,9 +43,9 @@ test('apply removes only orphaned soft-deleted class/date conflicts before class
 
 test('session plan synchronization is three-phase and finalizes all four structural fields',()=>{
   const body=fn('public.v16_apply_test_teacher_plan');
-  const neutralize=body.search(/update\s+public\.session_plans\s+sp[\s\S]*?set\s+manipulation\s*=\s*null/i);
-  const structural=body.search(/update\s+public\.session_plans\s+sp[\s\S]*?set\s+class_id\s*=\s*t\.target_class_id[\s\S]*?manipulation\s*=\s*t\.manipulation_code/i);
-  const authority=body.search(/update\s+public\.session_plans\s+sp[\s\S]*?set\s+teacher_id\s*=\s*t\.teacher_id[\s\S]*?room\s*=\s*t\.room/i);
+  const neutralize=body.search(/set\s+manipulation\s*=\s*null/i);
+  const structural=body.search(/set\s+class_id\s*=\s*t\.target_class_id[\s\S]*?manipulation\s*=\s*t\.manipulation_code/i);
+  const authority=body.search(/set\s+teacher_id\s*=\s*t\.teacher_id[\s\S]*?room\s*=\s*t\.room/i);
   assert.ok(neutralize>=0,'neutralization phase missing');
   assert.ok(structural>neutralize,'class/manipulation phase must follow neutralization');
   assert.ok(authority>structural,'teacher/room authority phase must be last');
