@@ -30,6 +30,17 @@ test('apply resolves target class for every mapped TEST assignment before writes
   assert.match(body,/legacy_plan_id/i);
 });
 
+test('apply removes only orphaned soft-deleted class/date conflicts before class remap',()=>{
+  const body=fn('public.v16_apply_test_teacher_plan');
+  assert.match(body,/SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES/i);
+  assert.match(body,/stale\.deleted_at\s+is\s+not\s+null/i);
+  assert.match(body,/stale\.session_id\s+is\s+not\s+null[\s\S]+SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES/i);
+  assert.match(body,/dependency\.legacy_plan_id\s*=\s*stale\.id/i);
+  const cleanup=body.search(/delete\s+from\s+public\.session_plans\s+stale/i);
+  const remap=body.search(/set\s+class_id\s*=\s*t\.target_class_id/i);
+  assert.ok(cleanup>=0 && remap>cleanup,'orphan class/date cleanup must run before class remap');
+});
+
 test('session plan synchronization is three-phase and finalizes all four structural fields',()=>{
   const body=fn('public.v16_apply_test_teacher_plan');
   const neutralize=body.search(/update\s+public\.session_plans\s+sp[\s\S]*?set\s+manipulation\s*=\s*null/i);
