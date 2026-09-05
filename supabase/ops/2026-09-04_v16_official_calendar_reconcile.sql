@@ -3,7 +3,7 @@ begin;
 -- OPERATIONAL SCRIPT ONLY. Do not place under supabase/migrations.
 -- Run after read-only production preflight and explicit user approval.
 -- This operation reconciles calendar identity only. Teacher/manipulation/room
--- choices are applied afterward by authenticated Admin RPC
+-- choices and linked session_plans structure are applied afterward by authenticated Admin RPC
 -- public.v16_apply_test_teacher_plan(date).
 
 do $$
@@ -21,21 +21,17 @@ declare
   v_one_day integer:=0;
   v_zero_days integer:=0;
 begin
-  select count(*)
-    into v_cycle_count
+  select count(*) into v_cycle_count
   from public.v515_cycles
-  where academic_year='2026/2027'
-    and semester=1;
+  where academic_year='2026/2027' and semester=1;
 
   if v_cycle_count<>1 then
     raise exception 'CYCLE_IDENTITY_INVALID: expected exactly one 2026/2027 semester 1 cycle';
   end if;
 
-  select id,status
-    into v_cycle_id,v_cycle_status
+  select id,status into v_cycle_id,v_cycle_status
   from public.v515_cycles
-  where academic_year='2026/2027'
-    and semester=1;
+  where academic_year='2026/2027' and semester=1;
 
   if v_cycle_id is null then
     raise exception 'CYCLE_IDENTITY_INVALID: expected exactly one 2026/2027 semester 1 cycle';
@@ -45,20 +41,15 @@ begin
     raise exception 'CYCLE_STATE_INVALID: expected assignments_finalized, got %',v_cycle_status;
   end if;
 
-  -- Protect every row whose class identity or teaching status is changed here.
   if exists(
-    select 1
-    from public.v515_sessions s
+    select 1 from public.v515_sessions s
     where s.cycle_id=v_cycle_id
       and s.session_date in (
         date '2026-10-15',date '2026-10-22',date '2026-10-29',
         date '2026-11-05',date '2026-11-12',date '2026-11-19',
         date '2026-11-26',date '2026-12-03'
       )
-      and (
-        s.lifecycle_status='completed'
-        or v_local_now >= (s.session_date::timestamp+s.start_time)
-      )
+      and (s.lifecycle_status='completed' or v_local_now >= (s.session_date::timestamp+s.start_time))
   ) then
     raise exception 'SESSION_ALREADY_STARTED: an affected V16 session has started or completed';
   end if;
@@ -115,16 +106,13 @@ begin
     select 1
     from public.session_plans sp
     join v16_holiday_legacy_plans h on h.legacy_plan_id=sp.id
-    where sp.session_id is not null
-      and sp.deleted_at is null
+    where sp.session_id is not null and sp.deleted_at is null
   ) then
     raise exception 'SESSION_ALREADY_STARTED: 15/10 presence plan already started';
   end if;
 
   update public.session_plans sp
-     set deleted_at=now(),
-         revision=sp.revision+1,
-         updated_at=now()
+     set deleted_at=now(),revision=sp.revision+1,updated_at=now()
     from v16_holiday_legacy_plans h
    where h.legacy_plan_id=sp.id
      and sp.session_id is null
@@ -183,74 +171,6 @@ begin
   if v_missing_classes>0 then
     raise exception 'TARGET_CLASS_MISSING: % corrected class/group target(s) missing',v_missing_classes;
   end if;
-
-  -- Materialize the exact active plan remaps before handling historical unique-key
-  -- conflicts. This keeps cleanup limited to the corrected Thursday rows only.
-  create temporary table v16_plan_remap_targets(
-    legacy_plan_id uuid primary key,
-    target_class_id uuid not null,
-    plan_date date not null
-  ) on commit drop;
-
-  insert into v16_plan_remap_targets(legacy_plan_id,target_class_id,plan_date)
-  select a.legacy_plan_id,c.id,s.session_date
-  from public.v515_assignments a
-  join public.v515_sessions s on s.id=a.session_id
-  join public.classes c
-    on c.name=s.class_name||'-G'||a.group_no
-   and c.deleted_at is null
-  where s.cycle_id=v_cycle_id
-    and s.session_date in (
-      date '2026-10-22',date '2026-10-29',date '2026-11-12',
-      date '2026-11-19',date '2026-11-26',date '2026-12-03'
-    )
-    and a.legacy_plan_id is not null;
-
-  -- A historical soft-deleted row may still occupy UNIQUE(class_id,plan_date).
-  -- Never remove it if it has started a session or is still referenced by V5.15.
-  if exists(
-    select 1
-    from public.session_plans stale
-    join v16_plan_remap_targets t
-      on t.target_class_id=stale.class_id
-     and t.plan_date=stale.plan_date
-     and t.legacy_plan_id<>stale.id
-    where stale.deleted_at is not null
-      and (
-        stale.session_id is not null
-        or exists(
-          select 1
-          from public.v515_assignments dependency
-          where dependency.legacy_plan_id=stale.id
-        )
-      )
-  ) then
-    raise exception 'SOFT_DELETED_PLAN_CONFLICT_HAS_REFERENCES: historical plan conflict is still referenced';
-  end if;
-
-  -- Physically remove only orphaned soft-deleted conflicts so the active plan can
-  -- safely take the corrected class/date unique key.
-  delete from public.session_plans stale
-  using v16_plan_remap_targets t
-  where t.target_class_id=stale.class_id
-    and t.plan_date=stale.plan_date
-    and t.legacy_plan_id<>stale.id
-    and stale.deleted_at is not null
-    and stale.session_id is null
-    and not exists(
-      select 1
-      from public.v515_assignments dependency
-      where dependency.legacy_plan_id=stale.id
-    );
-
-  update public.session_plans sp
-     set class_id=t.target_class_id,
-         revision=sp.revision+1,
-         updated_at=now()
-    from v16_plan_remap_targets t
-   where t.legacy_plan_id=sp.id
-     and sp.session_id is null
-     and sp.deleted_at is null;
 
   if (select count(*) from public.v515_teacher_constraints where cycle_id=v_cycle_id)<>6 then
     raise exception 'TEACHER_POOL_INVALID: exactly six configured teachers are required';
