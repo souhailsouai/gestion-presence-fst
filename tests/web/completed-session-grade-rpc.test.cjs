@@ -15,9 +15,11 @@ test('completed-session teacher grade save supports existing and grade-only rows
 });
 
 test('completed-session teacher path never updates status comment or grade_only on existing attendance',()=>{
-  const teacherBranch=sql.match(/if\s+v_session\.completed_at\s+is\s+not\s+null\s+and\s+not\s+v_admin\s+then([\s\S]*?)else/i)?.[1]||'';
-  assert.ok(teacherBranch,'completed-session teacher branch missing');
-  const update=teacherBranch.match(/update\s+public\.attendance[\s\S]*?where[\s\S]*?;/i)?.[0]||'';
+  const start=sql.search(/if\s+v_session\.completed_at\s+is\s+not\s+null\s+and\s+not\s+v_admin\s+then/i);
+  const insert=sql.search(/elsif\s+v_grade\s+is\s+not\s+null\s+then/i);
+  assert.ok(start>=0 && insert>start,'completed-session teacher branch missing');
+  const teacherExisting=sql.slice(start,insert);
+  const update=teacherExisting.match(/update\s+public\.attendance[\s\S]*?where[\s\S]*?;/i)?.[0]||'';
   assert.ok(update,'grade update missing');
   assert.doesNotMatch(update,/set[\s\S]*status\s*=/i);
   assert.doesNotMatch(update,/set[\s\S]*comment\s*=/i);
