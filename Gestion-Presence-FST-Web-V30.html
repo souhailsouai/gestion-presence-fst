@@ -808,11 +808,17 @@
             <button class="nav-tab" onclick="switchTab('emploi')">
                 <i class="fas fa-calendar-week"></i> Emploi du temps
             </button>
+            <button class="nav-tab" onclick="switchTab('enseignants')">
+                <i class="fas fa-chalkboard-teacher"></i> Enseignants
+            </button>
             <button class="nav-tab" onclick="switchTab('etudiants')">
                 <i class="fas fa-user-graduate"></i> Étudiants
             </button>
             <button class="nav-tab" onclick="switchTab('seances')">
                 <i class="fas fa-calendar-check"></i> Séances
+            </button>
+            <button class="nav-tab" onclick="switchTab('planning-v16')">
+                <i class="fas fa-calendar-days"></i> Planning des séances
             </button>
             <button class="nav-tab" onclick="switchTab('presence')">
                 <i class="fas fa-clipboard-check"></i> Présence
@@ -911,6 +917,14 @@
                 <div id="emploi-content"></div>
             </div>
 
+            <!-- Enseignants : lecture seule pour tous les comptes authentifiés -->
+            <div id="enseignants" class="tab-content">
+                <h2><i class="fas fa-chalkboard-teacher"></i> Enseignants — V30</h2>
+                <p style="color:var(--gray);margin-bottom:14px;">Liste des enseignants et affectations officielles TP MPI / PC. La modification des comptes reste réservée à l'administrateur.</p>
+                <div id="teacher-directory-message" class="alert alert-danger" style="display:none;"></div>
+                <div id="teacher-directory-list"></div>
+            </div>
+
             <!-- Étudiants -->
             <div id="etudiants" class="tab-content">
                 <h2>Gestion des Étudiants</h2>
@@ -960,29 +974,23 @@
 
             <!-- Séances -->
             <div id="seances" class="tab-content">
-                <h2>Création de Séances</h2>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Date</label>
-                        <input type="date" id="session-date" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>Heure de début</label>
-                        <input type="time" id="session-start" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>Heure de fin</label>
-                        <input type="time" id="session-end" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>Groupe/Classe</label>
-                        <select id="session-class" class="form-control"></select>
+                <h2><i class="fas fa-calendar-check"></i> Séances — V30</h2>
+                <div class="alert alert-info">
+                    <i class="fas fa-circle-info"></i>
+                    <div>
+                        <strong>Planification officielle TP 2026/2027</strong><br>
+                        Les dates proviennent du planning officiel. En mode Administrateur, utilisez « Planning des séances » pour consulter ou modifier les séances non ouvertes. Une séance réelle est créée lorsqu'elle est ouverte depuis « Présence ».
                     </div>
                 </div>
-                <button class="btn btn-primary" onclick="createSession()">
-                    <i class="fas fa-plus"></i> Créer la séance
+                <button class="btn btn-primary" type="button" onclick="openV17Planning()">
+                    <i class="fas fa-calendar-plus"></i> Planifier / modifier les séances
                 </button>
-                <h3 style="margin-top: 30px;">Séances programmées</h3>
+                <button class="btn btn-info" type="button" onclick="V30.refreshSessions()" style="margin-left:8px;">
+                    <i class="fas fa-rotate"></i> Actualiser
+                </button>
+                <h3 style="margin-top:30px;">Séances planifiées</h3>
+                <div id="v17-planned-sessions-list"><div class="alert alert-info">Chargement du planning…</div></div>
+                <h3 style="margin-top:30px;">Séances ouvertes / réalisées</h3>
                 <div id="sessions-list"></div>
             </div>
 
@@ -994,6 +1002,18 @@
                     <select id="presence-session" class="form-control" onchange="loadPresenceSheet()"></select>
                 </div>
                 <div id="presence-sheet"></div>
+            </div>
+
+            <!-- Planning des séances — V30 -->
+            <div id="planning-v16" class="tab-content" data-v30-planning="true">
+                <h2><i class="fas fa-calendar-days"></i> Planning des séances — V30</h2>
+                <div class="sub" style="color:var(--gray);margin-bottom:14px;">
+                    Planning officiel TP 2026/2027. Les enseignants consultent leurs séances. En mode Administrateur, les séances non ouvertes peuvent être modifiées puis enregistrées.
+                </div>
+                <div id="v30-planning-status"></div>
+                <div id="v16-planning-root">
+                    <div class="auth-note" style="margin-top:0;">Chargement du planning interactif…</div>
+                </div>
             </div>
 
             <!-- Rapports -->
@@ -2095,6 +2115,101 @@ async function save(){if(!admin())return status('Accès administrateur requis.',
 function wrap(){const old=root.switchTab;if(typeof old==='function'&&!old.__v30){root.switchTab=function(tab){const r=old.apply(this,arguments);setTimeout(()=>{rename();if(tab==='administration'&&admin())load();if(tab==='enseignants')teachersView();if(tab==='planning-v16')planning();},0);return r;};root.switchTab.__v30=true;}}
 function mount(){rename();wrap();root.renderTeachersDirectory=teachersView;root.V30={load,save,refresh};if(admin())load();new MutationObserver(rename).observe(document.body,{childList:true,subtree:true});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
+})(window);
+</script>
+
+<script data-fst-v30-sections-fix="inline">
+(function(root){
+'use strict';
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dayNames=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+function rt(){try{return typeof currentTeacher!=='undefined'?currentTeacher:(root.currentTeacher||null);}catch(_){return root.currentTeacher||null;}}
+function sb(){return root.supabaseClient;}
+function isAdmin(){const t=rt();return !!(t?.isAdmin&&t?.activeMode==='admin');}
+async function getProfiles(){
+  const q=await sb().from('profiles').select('id,full_name,username,email,role,account_state,deleted_at').in('role',['teacher','admin']).eq('account_state','active').is('deleted_at',null).order('full_name');
+  if(q.error)throw q.error; return q.data||[];
+}
+async function getClasses(){
+  const q=await sb().from('classes').select('id,name,track,class_number,group_number,module,day,start_time,end_time,room').is('deleted_at',null);
+  if(q.error)throw q.error; return q.data||[];
+}
+async function getPlans(){
+  const t=rt(); if(!t)return [];
+  let q=sb().from('session_plans').select('id,class_id,teacher_id,plan_date,start_time,end_time,module,manipulation,room,status,session_id,plan_kind,deleted_at').eq('module','TP Physique').is('deleted_at',null).order('plan_date',{ascending:true}).order('start_time',{ascending:true});
+  if(!t.isAdmin)q=q.eq('teacher_id',t.id);
+  const r=await q;if(r.error)throw r.error;return r.data||[];
+}
+function fmtDate(s){if(!s)return '—';const d=new Date(s+'T12:00:00');return isNaN(d)?s:d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});}
+function fmtTime(s){return String(s||'').slice(0,5)||'—';}
+root.openV17Planning=function(){root.switchTab?.('planning-v16');setTimeout(()=>void renderPlanning(),0);return true;};
+
+async function renderPlanning(){
+  const host=document.getElementById('v16-planning-root'); if(!host||!sb()||!rt())return false;
+  host.innerHTML='<div class="alert alert-info">Chargement du planning…</div>';
+  try{
+    const [plans,classes,profiles]=await Promise.all([getPlans(),getClasses(),getProfiles()]);
+    const cm=new Map(classes.map(x=>[String(x.id),x])), pm=new Map(profiles.map(x=>[String(x.id),x]));
+    const admin=isAdmin();
+    if(!plans.length){host.innerHTML='<div class="alert alert-info">Aucune séance planifiée.</div>';return true;}
+    host.innerHTML='<div class="table-responsive"><table class="table" id="v30-planning-table"><thead><tr><th>Date</th><th>Classe</th><th>Enseignant</th><th>Manipulation</th><th>Salle</th><th>Horaire</th><th>État</th><th>Action</th></tr></thead><tbody>'+
+      plans.map(p=>{
+        const c=cm.get(String(p.class_id)), teacher=pm.get(String(p.teacher_id)), opened=!!p.session_id;
+        const teacherCell=admin&&!opened?'<select class="form-control" data-field="teacher_id">'+profiles.map(x=>'<option value="'+esc(x.id)+'" '+(String(x.id)===String(p.teacher_id)?'selected':'')+'>'+esc(x.full_name||x.username||x.email||'Enseignant')+'</option>').join('')+'</select>':esc(teacher?.full_name||teacher?.username||teacher?.email||'Non affecté');
+        const manipCell=admin&&!opened?'<select class="form-control" data-field="manipulation">'+['M1','M2','M3','M4','M5','M6'].map(m=>'<option '+(m===p.manipulation?'selected':'')+'>'+m+'</option>').join('')+'</select>':esc(p.manipulation||'—');
+        const roomCell=admin&&!opened?'<input class="form-control" data-field="room" value="'+esc(p.room||'')+'">':esc(p.room||'—');
+        return '<tr data-plan="'+esc(p.id)+'"><td>'+fmtDate(p.plan_date)+'</td><td>'+esc(c?.name||'Classe')+'</td><td>'+teacherCell+'</td><td>'+manipCell+'</td><td>'+roomCell+'</td><td>'+fmtTime(p.start_time)+'–'+fmtTime(p.end_time)+'</td><td><span class="badge '+(opened?'badge-present':'badge-info')+'">'+(opened?'Ouverte / réalisée':'Planifiée')+'</span></td><td>'+(admin&&!opened?'<button class="btn btn-sm btn-success" data-save-plan="'+esc(p.id)+'"><i class="fas fa-floppy-disk"></i> Enregistrer</button>':'—')+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+    host.querySelectorAll('[data-save-plan]').forEach(b=>b.onclick=async()=>{
+      const tr=b.closest('tr'),id=tr.dataset.plan;
+      const payload={teacher_id:tr.querySelector('[data-field="teacher_id"]').value,manipulation:tr.querySelector('[data-field="manipulation"]').value,room:tr.querySelector('[data-field="room"]').value.trim()||null};
+      b.disabled=true;
+      const r=await sb().from('session_plans').update(payload).eq('id',id).is('session_id',null).is('deleted_at',null);
+      b.disabled=false;
+      if(r.error){root.showAlert?.('Modification impossible : '+r.error.message,'danger');return;}
+      root.showAlert?.('Séance planifiée mise à jour.','success');
+      await Promise.allSettled([renderPlanning(),refreshSessions(),root.V30?.load?.(),root.renderTeachersDirectory?.()]);
+    });
+    return true;
+  }catch(e){host.innerHTML='<div class="alert alert-danger">Impossible de charger le planning : '+esc(e.message||e)+'</div>';return false;}
+}
+
+async function refreshSessions(){
+  const planned=document.getElementById('v17-planned-sessions-list'); if(!planned||!sb()||!rt())return false;
+  planned.innerHTML='<div class="alert alert-info">Chargement du planning…</div>';
+  try{
+    const [plans,classes]=await Promise.all([getPlans(),getClasses()]);
+    const cm=new Map(classes.map(x=>[String(x.id),x]));
+    const unopened=plans.filter(p=>!p.session_id),opened=plans.filter(p=>!!p.session_id);
+    planned.innerHTML=unopened.length?unopened.map(p=>{const c=cm.get(String(p.class_id));return '<div class="student-item"><div><strong>'+esc(c?.name||'Classe')+'</strong><br><small>'+fmtDate(p.plan_date)+' · '+fmtTime(p.start_time)+'–'+fmtTime(p.end_time)+' · '+esc(p.manipulation||'—')+' · '+(p.room?'Salle '+esc(p.room):'Salle —')+'</small></div><span class="badge badge-info">Planifiée</span></div>';}).join(''):'<div class="alert alert-info">Aucune séance planifiée non ouverte.</div>';
+    const openHost=document.getElementById('sessions-list');
+    if(openHost){
+      openHost.innerHTML=opened.length?opened.map(p=>{const c=cm.get(String(p.class_id));return '<div class="student-item"><div><strong>'+esc(c?.name||'Classe')+'</strong><br><small>'+fmtDate(p.plan_date)+' · '+fmtTime(p.start_time)+'–'+fmtTime(p.end_time)+' · '+esc(p.manipulation||'—')+'</small></div><span class="badge badge-present">Ouverte / réalisée</span></div>';}).join(''):'<div class="alert alert-info">Aucune séance ouverte ou réalisée.</div>';
+    }
+    return true;
+  }catch(e){planned.innerHTML='<div class="alert alert-danger">Impossible de charger les séances : '+esc(e.message||e)+'</div>';return false;}
+}
+
+root.refreshPlannedSessionsV17=refreshSessions;
+root.V30=root.V30||{};
+root.V30.renderPlanning=renderPlanning;
+root.V30.refreshSessions=refreshSessions;
+
+const oldSwitch=root.switchTab;
+if(typeof oldSwitch==='function'&&!oldSwitch.__v30sections){
+  const wrapped=function(name){
+    const r=oldSwitch.apply(this,arguments);
+    if(name==='planning-v16')setTimeout(()=>void renderPlanning(),0);
+    if(name==='seances')setTimeout(()=>void refreshSessions(),0);
+    if(name==='enseignants')setTimeout(()=>void root.renderTeachersDirectory?.(),0);
+    return r;
+  };
+  wrapped.__v30sections=true;root.switchTab=wrapped;
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  document.documentElement.dataset.appVersion='V30';
+  if(document.getElementById('seances')?.classList.contains('active'))void refreshSessions();
+});
 })(window);
 </script>
 </body>
