@@ -1,0 +1,12 @@
+{
+  "product": "Gestion Présence FST",
+  "release": "V3.0",
+  "status": "final",
+  "academic_year": "2026/2027",
+  "release_date": "2026-09-19",
+  "frontend_source": "Gestion-Presence-FST-Web-V23 (2).html",
+  "backend_rpc": "public.v23_save_teacher_configuration(jsonb)",
+  "official_assignment_source": "public.v21_teacher_day_manipulations",
+  "required_assignments": 18,
+  "protected_history": true
+}
