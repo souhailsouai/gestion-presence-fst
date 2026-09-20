@@ -1322,9 +1322,9 @@ body{margin:0}
         function closePinModal(){ document.getElementById('pin-modal').classList.remove('show'); }
         function showPinChangeError(msg){ const el=document.getElementById('pin-change-error'); el.textContent=msg; el.classList.add('show'); }
         async function changeOwnPin(){
-            const oldP=document.getElementById('current-pin').value.trim();
-            const newP=document.getElementById('new-pin').value.trim();
-            const confirmP=document.getElementById('confirm-pin').value.trim();
+            const oldP=String(document.getElementById('current-pin')?.value||'').trim();
+            const newP=String(document.getElementById('new-pin')?.value||'').trim();
+            const confirmP=String(document.getElementById('confirm-pin')?.value||'').trim();
             if(!oldP||!newP||!confirmP)return showPinChangeError('Veuillez remplir les trois champs.');
             const pattern=currentTeacher?.isAdmin?/^\d{6,12}$/:/^\d{6}$/;
             const rule=currentTeacher?.isAdmin?'6 à 12 chiffres':'exactement 6 chiffres';
@@ -1332,29 +1332,45 @@ body{margin:0}
             if(!pattern.test(newP))return showPinChangeError('Le nouveau PIN doit contenir '+rule+'.');
             if(newP===oldP)return showPinChangeError('Le nouveau PIN doit être différent du PIN actuel.');
             if(newP!==confirmP)return showPinChangeError('La confirmation du PIN ne correspond pas.');
+
             const saveBtn=document.querySelector('#pin-modal .btn-primary');
             if(saveBtn)saveBtn.disabled=true;
             try{
-                const {data:result,error}=await supabaseClient.functions.invoke('change-pin',{
-                    body:{current_pin:oldP,new_pin:newP}
-                });
-                if(error){
-                    const status=Number(error?.context?.status||0);
-                    if(status===429)throw new Error('Trop de tentatives. Réessayez dans quelques minutes.');
-                    throw new Error(result?.error||error.message||'Modification impossible.');
+                const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
+                if(sessionError||!session?.access_token){
+                    throw new Error('Session expirée. Reconnectez-vous puis réessayez.');
                 }
-                if(!result?.ok){
+
+                const response=await fetch(SUPABASE_URL+'/functions/v1/change-pin',{
+                    method:'POST',
+                    headers:{
+                        'Content-Type':'application/json',
+                        'apikey':SUPABASE_KEY,
+                        'Authorization':'Bearer '+session.access_token
+                    },
+                    body:JSON.stringify({current_pin:oldP,new_pin:newP})
+                });
+
+                let result={};
+                try{ result=await response.json(); }catch(_){ result={}; }
+
+                if(!response.ok||!result?.ok){
                     const code=result?.code||'';
+                    if(response.status===401&&code==='UNAUTHENTICATED')throw new Error('Session expirée. Reconnectez-vous puis réessayez.');
                     if(code==='INVALID_CURRENT_PIN')throw new Error('PIN actuel incorrect.');
                     if(code==='SAME_PIN')throw new Error('Le nouveau PIN doit être différent du PIN actuel.');
                     if(code==='PIN_NOT_CONFIGURED')throw new Error('Aucun PIN n’est configuré pour ce compte. Contactez l’administrateur.');
-                    if(code==='RATE_LIMITED')throw new Error('Trop de tentatives. Réessayez dans quelques minutes.');
-                    throw new Error(result?.error||'Modification impossible.');
+                    if(code==='VALIDATION_ERROR')throw new Error('Format du PIN invalide.');
+                    if(code==='RATE_LIMITED'||response.status===429)throw new Error('Trop de tentatives. Réessayez dans quelques minutes.');
+                    if(code==='FORBIDDEN')throw new Error('Ce compte n’est pas autorisé à modifier ce PIN.');
+                    throw new Error(result?.error||('Modification impossible (HTTP '+response.status+').'));
                 }
+
                 closePinModal();
                 showAlert('PIN modifié avec succès. Utilisez ce nouveau PIN lors de votre prochaine connexion.','success');
             }catch(error){
-                showPinChangeError(error.message||'Modification du PIN impossible.');
+                console.error('change-pin',error);
+                showPinChangeError(error?.message||'Modification du PIN impossible.');
             }finally{
                 if(saveBtn)saveBtn.disabled=false;
             }
