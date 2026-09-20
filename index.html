@@ -778,19 +778,19 @@ body{margin:0}
 
     <div class="pin-modal" id="pin-modal">
         <div class="pin-modal-box">
-            <h2><i class="fas fa-key"></i> Changer mon mot de passe</h2>
-            <div class="auth-sub">Saisissez votre mot de passe actuel puis le nouveau.</div>
+            <h2><i class="fas fa-key"></i> Changer mon PIN</h2>
+            <div class="auth-sub">Saisissez votre PIN actuel puis choisissez votre nouveau PIN.</div>
             <div class="auth-error" id="pin-change-error"></div>
             <div class="form-group">
-                <label>Mot de passe actuel</label>
+                <label>PIN actuel</label>
                 <input type="password" id="current-pin" class="form-control" autocomplete="current-password">
             </div>
             <div class="form-group">
-                <label>Nouveau mot de passe</label>
+                <label>Nouveau PIN</label>
                 <input type="password" id="new-pin" class="form-control" autocomplete="new-password">
             </div>
             <div class="form-group">
-                <label>Confirmer le nouveau mot de passe</label>
+                <label>Confirmer le nouveau PIN</label>
                 <input type="password" id="confirm-pin" class="form-control" autocomplete="new-password" onkeydown="if(event.key==='Enter') changeOwnPin();">
             </div>
             <div class="pin-modal-actions">
@@ -826,7 +826,7 @@ body{margin:0}
                     <i class="fas fa-question-circle"></i> Aide
                 </button>
                 <button class="btn btn-info" onclick="openPinModal()">
-                    <i class="fas fa-key"></i> Changer mon mot de passe
+                    <i class="fas fa-key"></i> Changer mon PIN
                 </button>
                 <button class="btn btn-info" id="admin-pin-button" style="display:none;" onclick="setAdminPin()">
                     <i class="fas fa-shield-halved"></i> Définir mon PIN admin
@@ -1322,15 +1322,42 @@ body{margin:0}
         function closePinModal(){ document.getElementById('pin-modal').classList.remove('show'); }
         function showPinChangeError(msg){ const el=document.getElementById('pin-change-error'); el.textContent=msg; el.classList.add('show'); }
         async function changeOwnPin(){
-            const oldP=document.getElementById('current-pin').value,newP=document.getElementById('new-pin').value,confirmP=document.getElementById('confirm-pin').value;
+            const oldP=document.getElementById('current-pin').value.trim();
+            const newP=document.getElementById('new-pin').value.trim();
+            const confirmP=document.getElementById('confirm-pin').value.trim();
             if(!oldP||!newP||!confirmP)return showPinChangeError('Veuillez remplir les trois champs.');
-            if(newP.length<6)return showPinChangeError('Le mot de passe doit contenir au moins 6 caractères.');
-            if(newP!==confirmP)return showPinChangeError('La confirmation ne correspond pas.');
-            const {error:reauthErr}=await supabaseClient.auth.signInWithPassword({email:currentTeacher.email,password:oldP});
-            if(reauthErr)return showPinChangeError('Mot de passe actuel incorrect.');
-            const {error}=await supabaseClient.auth.updateUser({password:newP});
-            if(error)return showPinChangeError(error.message);
-            closePinModal(); showAlert('Mot de passe modifié avec succès','success');
+            const pattern=currentTeacher?.isAdmin?/^\\d{6,12}$/:/^\\d{6}$/;
+            const rule=currentTeacher?.isAdmin?'6 à 12 chiffres':'exactement 6 chiffres';
+            if(!pattern.test(oldP))return showPinChangeError('Le PIN actuel doit contenir '+rule+'.');
+            if(!pattern.test(newP))return showPinChangeError('Le nouveau PIN doit contenir '+rule+'.');
+            if(newP===oldP)return showPinChangeError('Le nouveau PIN doit être différent du PIN actuel.');
+            if(newP!==confirmP)return showPinChangeError('La confirmation du PIN ne correspond pas.');
+            const saveBtn=document.querySelector('#pin-modal .btn-primary');
+            if(saveBtn)saveBtn.disabled=true;
+            try{
+                const {data:result,error}=await supabaseClient.functions.invoke('change-pin',{
+                    body:{current_pin:oldP,new_pin:newP}
+                });
+                if(error){
+                    const status=Number(error?.context?.status||0);
+                    if(status===429)throw new Error('Trop de tentatives. Réessayez dans quelques minutes.');
+                    throw new Error(result?.error||error.message||'Modification impossible.');
+                }
+                if(!result?.ok){
+                    const code=result?.code||'';
+                    if(code==='INVALID_CURRENT_PIN')throw new Error('PIN actuel incorrect.');
+                    if(code==='SAME_PIN')throw new Error('Le nouveau PIN doit être différent du PIN actuel.');
+                    if(code==='PIN_NOT_CONFIGURED')throw new Error('Aucun PIN n’est configuré pour ce compte. Contactez l’administrateur.');
+                    if(code==='RATE_LIMITED')throw new Error('Trop de tentatives. Réessayez dans quelques minutes.');
+                    throw new Error(result?.error||'Modification impossible.');
+                }
+                closePinModal();
+                showAlert('PIN modifié avec succès. Utilisez ce nouveau PIN lors de votre prochaine connexion.','success');
+            }catch(error){
+                showPinChangeError(error.message||'Modification du PIN impossible.');
+            }finally{
+                if(saveBtn)saveBtn.disabled=false;
+            }
         }
 
         async function setAdminPin(){
