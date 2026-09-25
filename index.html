@@ -5096,15 +5096,17 @@ window.v17RenderStudents=async function(){
   const students=[...(data?.students||[])].filter(st=>byClass.has(String(st.classId))).sort((a,b)=>`${a.lastname} ${a.firstname}`.localeCompare(`${b.lastname} ${b.firstname}`,'fr'));
   const byFamily=new Map();
   for(const c of classes){const f=classFamilyV17(c);if(!byFamily.has(f))byFamily.set(f,[]);byFamily.get(f).push(c);}
-  let html=`<div class="v17-student-summary"><span class="badge badge-info">${students.length} étudiant(s)</span>${isAdminMode()?'<span class="badge badge-present">Mode Admin : ajout, modification et suppression définitive autorisés</span>':'<span class="badge badge-present">Enseignant : ajout autorisé dans vos groupes affectés</span><span class="badge badge-justifie">Modification et suppression : Admin uniquement</span>'}</div>`;
+  let html=`<div class="v17-student-summary"><span class="badge badge-info">${students.length} étudiant(s)</span>${isAdminMode()?'<span class="badge badge-present">Mode Admin : ajout, modification et suppression définitive autorisés</span>':'<span class="badge badge-present">Enseignant : ajout et affectation autorisés vers vos groupes affectés</span><span class="badge badge-justifie">Identité et suppression : Admin uniquement</span>'}</div>`;
   for(const [family,familyClasses] of byFamily){
     html+=`<section class="card v17-family-card"><h3 style="margin-top:0"><i class="fas fa-user-graduate"></i> ${esc(family)}</h3>`;
     for(const cls of familyClasses){
       const rows=students.filter(st=>String(st.classId)===String(cls.id));
-      html+=`<div class="v17-group-title"><strong>G${classGroupV17(cls)}</strong><span class="badge badge-info">${rows.length}</span></div><div class="table-responsive"><table class="table"><thead><tr><th>Nom</th><th>Prénom</th><th>Email</th><th>Classe / Groupe</th>${isAdminMode()?'<th>Actions</th>':''}</tr></thead><tbody>`;
+      html+=`<div class="v17-group-title"><strong>G${classGroupV17(cls)}</strong><span class="badge badge-info">${rows.length}</span></div><div class="table-responsive"><table class="table"><thead><tr><th>Nom</th><th>Prénom</th><th>Email</th><th>Classe / Groupe</th><th>Actions</th></tr></thead><tbody>`;
       if(!rows.length)html+='<tr><td colspan="5" style="text-align:center;color:var(--gray)">Aucun étudiant.</td></tr>';
       for(const st of rows){
-        const actions=isAdminMode()?`<td><div class="v17-actions"><button type="button" class="btn btn-sm btn-info" onclick="v17EditStudent('${esc(st.id)}')"><i class="fas fa-pen"></i> Modifier</button><button type="button" class="btn btn-sm btn-danger" onclick="v17DeleteStudentPermanently('${esc(st.id)}')"><i class="fas fa-trash"></i> Supprimer définitivement</button></div></td>`:'';
+        const actions=isAdminMode()
+          ?`<td><div class="v17-actions"><button type="button" class="btn btn-sm btn-info" onclick="v17EditStudent('${esc(st.id)}')"><i class="fas fa-pen"></i> Modifier</button><button type="button" class="btn btn-sm btn-danger" onclick="v17DeleteStudentPermanently('${esc(st.id)}')"><i class="fas fa-trash"></i> Supprimer définitivement</button></div></td>`
+          :`<td><div class="v17-actions"><button type="button" class="btn btn-sm btn-primary" onclick="v30AssignStudent('${esc(st.id)}')"><i class="fas fa-user-group"></i> Affecter</button></div></td>`;
         html+=`<tr><td>${esc(st.lastname||'')}</td><td>${esc(st.firstname||'')}</td><td>${esc(st.email||'—')}</td><td>${esc(cls.name||'')}</td>${actions}</tr>`;
       }
       html+='</tbody></table></div>';
@@ -5200,6 +5202,103 @@ window.v30RefreshStudentClassOptions=async function(){
   if(previous&&allowed.some(c=>String(c.id)===String(previous)))select.value=previous;
   return true;
 };
+
+async function v30AssignedClasses(){
+  let allowed=sortedClassesV17();
+  if(isAdminMode())return allowed;
+  if(!currentTeacher?.id)return [];
+  const ids=new Set();
+  const {data:plans}=await supabaseClient.from('session_plans')
+    .select('class_id')
+    .eq('teacher_id',currentTeacher.id)
+    .is('deleted_at',null);
+  for(const p of plans||[])ids.add(String(p.class_id));
+  const {data:sessions}=await supabaseClient.from('sessions')
+    .select('class_id')
+    .eq('teacher_id',currentTeacher.id)
+    .is('deleted_at',null);
+  for(const s of sessions||[])ids.add(String(s.class_id));
+  return allowed.filter(c=>ids.has(String(c.id)));
+}
+
+function ensureV30AssignModal(){
+  let modal=document.getElementById('v30-assign-student-modal');
+  if(modal)return modal;
+  modal=document.createElement('div');
+  modal.id='v30-assign-student-modal';
+  modal.className='v17-modal';
+  modal.innerHTML=`<div class="v17-modal-box">
+    <h2 style="margin-top:0"><i class="fas fa-user-group"></i> Affecter l'étudiant à un groupe</h2>
+    <input type="hidden" id="v30-assign-student-id">
+    <div id="v30-assign-student-name" class="alert alert-info"></div>
+    <div class="form-group">
+      <label>Groupe cible *</label>
+      <select id="v30-assign-class" class="form-control"></select>
+    </div>
+    <div class="form-group">
+      <label>Date d'effet</label>
+      <input id="v30-assign-effective" type="date" class="form-control" value="${V17_ACADEMIC_START}">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-info" type="button" id="v30-assign-cancel">Annuler</button>
+      <button class="btn btn-success" type="button" id="v30-assign-save"><i class="fas fa-check"></i> Affecter</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('show');});
+  modal.querySelector('#v30-assign-cancel').onclick=()=>modal.classList.remove('show');
+  modal.querySelector('#v30-assign-save').onclick=()=>void window.v30SaveStudentAssignment();
+  return modal;
+}
+
+window.v30AssignStudent=async function(id){
+  if(!currentTeacher)return showAlert('Session utilisateur introuvable. Reconnectez-vous.','danger');
+  const st=(data.students||[]).find(x=>String(x.id)===String(id));
+  if(!st)return showAlert('Étudiant introuvable.','danger');
+  const allowed=await v30AssignedClasses();
+  if(!allowed.length)return showAlert('Aucun groupe ne vous est affecté dans le planning.','danger');
+
+  const modal=ensureV30AssignModal();
+  modal.querySelector('#v30-assign-student-id').value=st.id;
+  modal.querySelector('#v30-assign-student-name').innerHTML=
+    '<strong>'+esc(st.lastname||'')+' '+esc(st.firstname||'')+'</strong><br>Groupe actuel : '+esc(classByIdV17(st.classId)?.name||'—');
+  const select=modal.querySelector('#v30-assign-class');
+  select.innerHTML=allowed.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+  if(allowed.some(c=>String(c.id)===String(st.classId)))select.value=String(st.classId);
+  modal.querySelector('#v30-assign-effective').value=V17_ACADEMIC_START;
+  modal.classList.add('show');
+  return true;
+};
+
+window.v30SaveStudentAssignment=async function(){
+  const modal=ensureV30AssignModal();
+  const id=modal.querySelector('#v30-assign-student-id').value;
+  const classId=modal.querySelector('#v30-assign-class').value;
+  const effective=modal.querySelector('#v30-assign-effective').value||V17_ACADEMIC_START;
+  if(!id||!classId)return showAlert('Sélectionnez un groupe cible.','danger');
+
+  const saveBtn=modal.querySelector('#v30-assign-save');
+  saveBtn.disabled=true;
+  try{
+    const {data:result,error}=await supabaseClient.rpc('v30_teacher_assign_student',{
+      p_student_id:id,
+      p_class_id:classId,
+      p_effective_from:effective
+    });
+    if(error)return showAlert('Affectation impossible : '+error.message,'danger');
+    if(result?.ok===false)return showAlert(result?.message||result?.code||'Affectation refusée.','danger');
+
+    modal.classList.remove('show');
+    await window.FSTOnlineRuntime?.refreshAuthoritativeState();
+    await window.v30RefreshStudentClassOptions?.();
+    await window.v17RenderStudents();
+    showAlert(result?.code==='ALREADY_ASSIGNED'?'L’étudiant appartient déjà à ce groupe.':'Étudiant affecté au groupe avec succès.','success');
+    return true;
+  }finally{
+    saveBtn.disabled=false;
+  }
+};
+
 
 window.addStudent=async function(){
   if(!currentTeacher)return showAlert('Session utilisateur introuvable. Reconnectez-vous.','danger');
