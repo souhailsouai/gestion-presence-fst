@@ -5096,7 +5096,7 @@ window.v17RenderStudents=async function(){
   const students=[...(data?.students||[])].filter(st=>byClass.has(String(st.classId))).sort((a,b)=>`${a.lastname} ${a.firstname}`.localeCompare(`${b.lastname} ${b.firstname}`,'fr'));
   const byFamily=new Map();
   for(const c of classes){const f=classFamilyV17(c);if(!byFamily.has(f))byFamily.set(f,[]);byFamily.get(f).push(c);}
-  let html=`<div class="v17-student-summary"><span class="badge badge-info">${students.length} étudiant(s)</span>${isAdminMode()?'<span class="badge badge-present">Mode Admin : ajout, modification et suppression définitive autorisés</span>':'<span class="badge badge-justifie">Lecture seule</span>'}</div>`;
+  let html=`<div class="v17-student-summary"><span class="badge badge-info">${students.length} étudiant(s)</span>${isAdminMode()?'<span class="badge badge-present">Mode Admin : ajout, modification et suppression définitive autorisés</span>':'<span class="badge badge-present">Enseignant : ajout autorisé dans vos groupes affectés</span><span class="badge badge-justifie">Modification et suppression : Admin uniquement</span>'}</div>`;
   for(const [family,familyClasses] of byFamily){
     html+=`<section class="card v17-family-card"><h3 style="margin-top:0"><i class="fas fa-user-graduate"></i> ${esc(family)}</h3>`;
     for(const cls of familyClasses){
@@ -5155,18 +5155,79 @@ window.v17DeleteStudentPermanently=async function(id){
 };
 window.deleteStudent=window.v17DeleteStudentPermanently;
 
+async function v30TeacherAssignedToClass(classId){
+  if(isAdminMode())return true;
+  if(!currentTeacher?.id||!classId)return false;
+  const {data:plans,error}=await supabaseClient.from('session_plans')
+    .select('id')
+    .eq('class_id',classId)
+    .eq('teacher_id',currentTeacher.id)
+    .is('deleted_at',null)
+    .limit(1);
+  if(!error&&plans?.length)return true;
+  const {data:sessions,error:sessionError}=await supabaseClient.from('sessions')
+    .select('id')
+    .eq('class_id',classId)
+    .eq('teacher_id',currentTeacher.id)
+    .is('deleted_at',null)
+    .limit(1);
+  return !sessionError&&Boolean(sessions?.length);
+}
+
+window.v30RefreshStudentClassOptions=async function(){
+  const select=document.getElementById('student-class');
+  if(!select||!currentTeacher)return false;
+  const previous=select.value;
+  let allowed=sortedClassesV17();
+  if(!isAdminMode()){
+    const {data:plans,error}=await supabaseClient.from('session_plans')
+      .select('class_id')
+      .eq('teacher_id',currentTeacher.id)
+      .is('deleted_at',null);
+    if(error)return false;
+    const allowedIds=new Set((plans||[]).map(p=>String(p.class_id)));
+    if(!allowedIds.size){
+      const {data:sessions}=await supabaseClient.from('sessions')
+        .select('class_id')
+        .eq('teacher_id',currentTeacher.id)
+        .is('deleted_at',null);
+      for(const s of sessions||[])allowedIds.add(String(s.class_id));
+    }
+    allowed=allowed.filter(c=>allowedIds.has(String(c.id)));
+  }
+  select.innerHTML='<option value="">Sélectionner une classe / groupe</option>'+
+    allowed.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+  if(previous&&allowed.some(c=>String(c.id)===String(previous)))select.value=previous;
+  return true;
+};
+
 window.addStudent=async function(){
-  if(!isAdminMode())return showAlert('Passez en mode Admin pour ajouter un étudiant.','danger');
+  if(!currentTeacher)return showAlert('Session utilisateur introuvable. Reconnectez-vous.','danger');
   const lastname=document.getElementById('student-lastname')?.value.trim()||'',firstname=document.getElementById('student-firstname')?.value.trim()||'',email=document.getElementById('student-email')?.value.trim()||'',classId=document.getElementById('student-class')?.value||'';
   if(!lastname||!firstname||!classId)return showAlert('Nom, prénom et classe/groupe sont obligatoires.','danger');
   const cls=classByIdV17(classId);if(!cls)return showAlert('Classe/groupe introuvable.','danger');
+  if(!await v30TeacherAssignedToClass(classId))return showAlert('Vous pouvez ajouter un étudiant uniquement dans un groupe qui vous est affecté.','danger');
+
+  const duplicate=(data.students||[]).some(st=>String(st.classId)===String(classId)&&norm(st.lastname)===norm(lastname)&&norm(st.firstname)===norm(firstname));
+  if(duplicate)return showAlert('Cet étudiant existe déjà dans ce groupe.','warning');
+
   const id=crypto.randomUUID();
   const {data:inserted,error}=await supabaseClient.from('students').insert({id,teacher_id:currentTeacher.id,class_id:classId,last_name:lastname,first_name:firstname,email:email||null}).select('id');
   if(error||inserted?.length!==1)return showAlert('Ajout impossible : '+(error?.message||'écriture refusée'),'danger');
+
   const {data:membership,error:merr}=await supabaseClient.rpc('v16_set_student_group',{p_student_id:id,p_class_id:classId,p_group_no:classGroupV17(cls),p_effective_from:V17_ACADEMIC_START});
-  if(merr||membership?.ok===false){await supabaseClient.from('students').delete().eq('id',id);return showAlert('Ajout annulé : groupe impossible à enregistrer : '+(merr?.message||membership?.message||membership?.code||'erreur'),'danger');}
-  document.getElementById('student-lastname').value='';document.getElementById('student-firstname').value='';document.getElementById('student-email').value='';
-  await window.FSTOnlineRuntime?.refreshAuthoritativeState();await window.v17RenderStudents();showAlert('Étudiant ajouté avec succès.','success');return true;
+  if(merr||membership?.ok===false){
+    return showAlert('Étudiant ajouté, mais l’affectation du groupe n’a pas pu être finalisée : '+(merr?.message||membership?.message||membership?.code||'erreur'),'warning');
+  }
+
+  document.getElementById('student-lastname').value='';
+  document.getElementById('student-firstname').value='';
+  document.getElementById('student-email').value='';
+  await window.FSTOnlineRuntime?.refreshAuthoritativeState();
+  await window.v30RefreshStudentClassOptions();
+  await window.v17RenderStudents();
+  showAlert('Étudiant ajouté avec succès.','success');
+  return true;
 };
 
 function rowsFromWorkbookV17(workbook){
@@ -5232,7 +5293,7 @@ window.loadPresenceSheet=async function(){
 };
 
 const baseSwitchTabV17=window.switchTab;
-window.switchTab=function(tabName){const result=baseSwitchTabV17?.apply(this,arguments);if(tabName==='etudiants')setTimeout(()=>void window.v17RenderStudents(),30);if(tabName==='presence')setTimeout(()=>void window.updatePresenceSelect(),0);return result;};
+window.switchTab=function(tabName){const result=baseSwitchTabV17?.apply(this,arguments);if(tabName==='etudiants')setTimeout(()=>{void window.v30RefreshStudentClassOptions?.();void window.v17RenderStudents();},30);if(tabName==='presence')setTimeout(()=>void window.updatePresenceSelect(),0);return result;};
 const baseRenderAllV17=window.renderAll;
 if(typeof baseRenderAllV17==='function')window.renderAll=function(){const r=baseRenderAllV17.apply(this,arguments);if(document.getElementById('etudiants')?.classList.contains('active'))setTimeout(()=>void window.v17RenderStudents(),30);return r;};
 
