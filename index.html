@@ -5088,6 +5088,7 @@ function ensureStudentModal(){
 
 window.v17RenderStudents=async function(){
   const table=document.getElementById('students-table');if(!table)return false;
+  try{await window.v30RefreshStudentClassOptions?.();}catch(error){console.warn('Chargement des groupes enseignant',error);}
   let root=document.getElementById('v17-students-root');
   if(!root){root=document.createElement('div');root.id='v17-students-root';table.closest('.table-responsive')?.insertAdjacentElement('beforebegin',root);}
   table.closest('.table-responsive').style.display='none';
@@ -5186,7 +5187,11 @@ window.v30RefreshStudentClassOptions=async function(){
       .select('class_id')
       .eq('teacher_id',currentTeacher.id)
       .is('deleted_at',null);
-    if(error)return false;
+    if(error){
+      console.error('Chargement des groupes affectés impossible',error);
+      select.innerHTML='<option value="">Aucun groupe disponible</option>';
+      return false;
+    }
     const allowedIds=new Set((plans||[]).map(p=>String(p.class_id)));
     if(!allowedIds.size){
       const {data:sessions}=await supabaseClient.from('sessions')
@@ -5630,7 +5635,7 @@ window.switchTab=function(tabName){
   if(tabName==='administration')window.renderAdminPanel?.();
   if(tabName==='emploi')window.renderMyTimetable?.();
   if(tabName==='enseignants')setTimeout(()=>void window.renderTeachersDirectory(),0);
-  if(tabName==='etudiants')setTimeout(async()=>{await window.v17RenderStudents?.();numberStudentTables();},0);
+  if(tabName==='etudiants')setTimeout(async()=>{await window.v30RefreshStudentClassOptions?.();await window.v17RenderStudents?.();numberStudentTables();},0);
   if(tabName==='seances')setTimeout(()=>void window.refreshPlannedSessionsV17?.(),0);
   if(tabName==='planning-v16')setTimeout(()=>{const t=teacher();if(window.V16ActiveRole?.configure)window.V16ActiveRole.configure({isAdmin:Boolean(t?.isAdmin),initialRole:adminMode()?'admin':'teacher'});void window.V16PlanningUI?.init?.({supabaseClient,currentTeacher:t});},0);
   return true;
