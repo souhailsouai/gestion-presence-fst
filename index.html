@@ -6825,6 +6825,7 @@ if(root.document){if(root.document.readyState==='loading')root.document.addEvent
 const ROOMS=Object.freeze({M1:'C',M2:'B',M3:'A',M4:'D',M5:'B',M6:'A'});
 const STATUS_KEYS=['present','absent','retard','justifie'];
 const STATUS_LABELS={present:'Pr\u00e9sent',absent:'Absent',retard:'Retard',justifie:'Justifi\u00e9'};
+const OFFICIAL_CLASS_FAMILIES=Object.freeze(['MPI1-A','MPI1-B','MPI1-C','MPI1-D','MPI1-E','PC1-A']);
 const state={snapshot:null,planMeta:{},lastReport:null,lastDashboard:null,loading:null};
 function text(v){return String(v??'');}
 function esc(v){return text(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -6835,6 +6836,7 @@ function adminMode(){const t=runtimeTeacher();return Boolean(t?.isAdmin&&t?.acti
 function userScope(){const t=runtimeTeacher();return{id:text(t?.id),adminMode:adminMode()};}
 function classById(src,id){return(src.classes||[]).find(c=>text(c.id)===text(id));}
 function groupNo(cls){const n=Number(cls?.groupNumber??cls?.group_number??text(cls?.name).match(/-G([1-6])$/i)?.[1]);return Number.isFinite(n)?n:null;}
+function classFamily(cls){const name=text(cls?.name).trim();return name.replace(/-G[1-6]$/i,'')||name;}
 function teacherName(id){return root.FSTAccessControl?.teacherNameFor?.(id)||((text(runtimeTeacher()?.id)===text(id))?runtimeTeacher()?.name:'Enseignant')||'Enseignant';}
 function planFor(planMeta,sessionId){
   if(!planMeta)return{};
@@ -6852,6 +6854,8 @@ function filterSessions(src,filters,user,planMeta){
   return(src.sessions||[]).filter(s=>{
     if(!u.adminMode&&u.id&&text(s.teacherId)!==text(u.id))return false;
     if(u.adminMode&&f.teacherId&&text(s.teacherId)!==text(f.teacherId))return false;
+    const cls=classById(src,s.classId);
+    if(f.classFamily&&text(classFamily(cls)).toUpperCase()!==text(f.classFamily).toUpperCase())return false;
     if(f.classId&&text(s.classId)!==text(f.classId))return false;
     const p=planFor(planMeta,s.id),manip=p.manipulation||'';
     if(f.manipulation&&text(manip)!==text(f.manipulation))return false;
@@ -6880,18 +6884,128 @@ function computeMetrics(src,filters,user,planMeta){
   const final=finalizeBucket(totals);final.sessions=sessions.length;final.students=uniqueStudents.size;final.byManipulation=[...byManipMap.values()].map(finalizeBucket).sort((a,b)=>text(a.label).localeCompare(text(b.label),'fr',{numeric:true}));final.byGroup=[...byGroupMap.values()].map(finalizeBucket).sort((a,b)=>text(a.label).localeCompare(text(b.label),'fr',{numeric:true}));final.filteredSessions=sessions;return final;
 }
 function buildReportModel(src,filters,user,planMeta,nameFn){
-  const sessions=filterSessions(src,filters,user,planMeta),idx=attendanceIndex(src),studentMap=new Map(),sessionRows=[];
-  for(const s of sessions){
-    const cls=classById(src,s.classId),roster=rosterForClass(src,s.classId),p=planFor(planMeta,s.id),counts={present:0,absent:0,retard:0,justifie:0};
-    for(const st of roster){
-      const key=text(st.id),a=idx.get(text(s.id)+'|'+key),status=a&&STATUS_KEYS.includes(a.status)?a.status:'present';
-      if(!studentMap.has(key))studentMap.set(key,{studentId:key,name:(text(st.lastname)+' '+text(st.firstname)).trim(),className:cls?.name||'Classe',group:groupNo(cls),sessions:0,present:0,absent:0,retard:0,justifie:0,presenceRate:0,absenceRate:0});
-      const row=studentMap.get(key);row.sessions++;row[status]++;counts[status]++;
-    }
-    sessionRows.push({sessionId:text(s.id),date:s.date,time:text(s.start)+'-'+text(s.end),teacher:(nameFn||teacherName)(s.teacherId),className:cls?.name||'Classe',group:groupNo(cls),manipulation:p.manipulation||'',room:p.room||ROOMS[p.manipulation]||cls?.room||'—',expected:roster.length,present:counts.present,absent:counts.absent,retard:counts.retard,justifie:counts.justifie,presenceRate:pct(counts.present+counts.retard,roster.length),absenceRate:pct(counts.absent+counts.justifie,roster.length)});
+  const sessions=filterSessions(src,filters,user,planMeta);
+  const idx=attendanceIndex(src);
+  const studentMap=new Map(),sessionRows=[];
+  const studentById=new Map((src.students||[]).map(st=>[text(st.id),st]));
+  const attendanceBySession=new Map();
+
+  for(const a of src.attendance||[]){
+    if(a.gradeOnly)continue;
+    const sid=text(a.sessionId);
+    if(!attendanceBySession.has(sid))attendanceBySession.set(sid,[]);
+    attendanceBySession.get(sid).push(a);
   }
-  const students=[...studentMap.values()].map(r=>({...r,presenceRate:pct(r.present+r.retard,r.sessions),absenceRate:pct(r.absent+r.justifie,r.sessions)})).sort((a,b)=>text(a.className).localeCompare(text(b.className),'fr',{numeric:true})||text(a.name).localeCompare(text(b.name),'fr'));
-  return{filters:{...(filters||{})},metrics:computeMetrics(src,filters,user,planMeta),sessions:sessionRows,students};
+
+  for(const s of sessions){
+    const cls=classById(src,s.classId),p=planFor(planMeta,s.id);
+    const rosterMap=new Map(rosterForClass(src,s.classId).map(st=>[text(st.id),st]));
+
+    // Preserve real historical pointages even if the student's current group changed later.
+    for(const a of attendanceBySession.get(text(s.id))||[]){
+      const st=studentById.get(text(a.studentId));
+      if(st)rosterMap.set(text(st.id),st);
+    }
+
+    const roster=[...rosterMap.values()];
+    const counts={recorded:0,present:0,absent:0,retard:0,justifie:0};
+
+    for(const st of roster){
+      const key=text(st.id),a=idx.get(text(s.id)+'|'+key);
+      const status=a&&STATUS_KEYS.includes(a.status)?a.status:null;
+      if(!studentMap.has(key)){
+        studentMap.set(key,{
+          studentId:key,
+          name:(text(st.lastname)+' '+text(st.firstname)).trim(),
+          classNames:new Set(),
+          sessions:0,
+          recorded:0,
+          present:0,
+          absent:0,
+          retard:0,
+          justifie:0,
+          absenceDetails:[]
+        });
+      }
+      const row=studentMap.get(key);
+      row.classNames.add(cls?.name||'Classe');
+      row.sessions++;
+
+      if(status){
+        row.recorded++;
+        row[status]++;
+        counts.recorded++;
+        counts[status]++;
+        if(status==='absent'||status==='justifie'){
+          row.absenceDetails.push({
+            date:s.date,
+            status:STATUS_LABELS[status]||status,
+            className:cls?.name||'Classe'
+          });
+        }
+      }
+    }
+
+    sessionRows.push({
+      sessionId:text(s.id),
+      date:s.date,
+      time:text(s.start)+'-'+text(s.end),
+      teacher:(nameFn||teacherName)(s.teacherId),
+      className:cls?.name||'Classe',
+      classFamily:classFamily(cls),
+      group:groupNo(cls),
+      manipulation:p.manipulation||'',
+      room:p.room||ROOMS[p.manipulation]||cls?.room||'—',
+      expected:roster.length,
+      recorded:counts.recorded,
+      present:counts.present,
+      absent:counts.absent,
+      retard:counts.retard,
+      justifie:counts.justifie,
+      presenceRate:pct(counts.present+counts.retard,counts.recorded),
+      absenceRate:pct(counts.absent+counts.justifie,counts.recorded)
+    });
+  }
+
+  const students=[...studentMap.values()].map(r=>({
+    studentId:r.studentId,
+    name:r.name,
+    className:[...r.classNames].sort((a,b)=>text(a).localeCompare(text(b),'fr',{numeric:true})).join(', '),
+    sessions:r.sessions,
+    recorded:r.recorded,
+    present:r.present,
+    absent:r.absent,
+    retard:r.retard,
+    justifie:r.justifie,
+    absenceDetails:r.absenceDetails.sort((a,b)=>text(a.date).localeCompare(text(b.date))),
+    presenceRate:pct(r.present+r.retard,r.recorded),
+    absenceRate:pct(r.absent+r.justifie,r.recorded)
+  })).sort((a,b)=>text(a.className).localeCompare(text(b.className),'fr',{numeric:true})||text(a.name).localeCompare(text(b.name),'fr'));
+
+  const totals=sessionRows.reduce((acc,r)=>{
+    acc.expected+=r.expected;
+    acc.recorded+=r.recorded;
+    acc.present+=r.present;
+    acc.absent+=r.absent;
+    acc.retard+=r.retard;
+    acc.justifie+=r.justifie;
+    return acc;
+  },{expected:0,recorded:0,present:0,absent:0,retard:0,justifie:0});
+
+  const metrics={
+    sessions:sessionRows.length,
+    students:students.length,
+    expected:totals.expected,
+    recorded:totals.recorded,
+    present:totals.present,
+    absent:totals.absent,
+    retard:totals.retard,
+    justifie:totals.justifie,
+    presenceRate:pct(totals.present+totals.retard,totals.recorded),
+    absenceRate:pct(totals.absent+totals.justifie,totals.recorded)
+  };
+
+  return{filters:{...(filters||{})},metrics,sessions:sessionRows,students};
 }
 function mapRows(raw){return{
   classes:(raw.classes||[]).map(x=>({id:x.id,teacherId:x.teacher_id,name:x.name,track:x.track||'',classNumber:x.class_number||null,groupNumber:x.group_number||null,module:x.module||'TP Physique',room:x.room||''})),
@@ -6914,11 +7028,31 @@ async function fetchAuthoritativeSnapshot(){
 }
 function planMetaFromRuntime(){const out={};const api=root.V22PlanMeta;if(api?.state?.bySessionId instanceof Map)for(const[k,v]of api.state.bySessionId.entries())out[text(k)]=v;return out;}
 async function ensureSnapshot(force){if(!force&&state.snapshot)return{snapshot:state.snapshot,planMeta:state.planMeta};if(state.loading)return state.loading;state.loading=fetchAuthoritativeSnapshot().finally(()=>{state.loading=null;});return state.loading;}
-function getSelectFilters(prefix){const d=root.document;return{teacherId:d?.getElementById(prefix+'-teacher')?.value||'',classId:d?.getElementById(prefix+'-class')?.value||'',manipulation:d?.getElementById(prefix+'-manip')?.value||'',period:d?.getElementById(prefix+'-period')?.value||'all'};}
+function getSelectFilters(prefix){
+  const d=root.document;
+  return{
+    teacherId:d?.getElementById(prefix+'-teacher')?.value||'',
+    classFamily:d?.getElementById(prefix+'-family')?.value||'',
+    classId:d?.getElementById(prefix+'-class')?.value||'',
+    manipulation:d?.getElementById(prefix+'-manip')?.value||'',
+    period:d?.getElementById(prefix+'-period')?.value||'all'
+  };
+}
 function selectOptions(src,user,selectedTeacher){
   const scoped=(src.sessions||[]).filter(s=>user.adminMode?(!selectedTeacher||text(s.teacherId)===text(selectedTeacher)):text(s.teacherId)===text(user.id));
   const teacherIds=[...new Set((src.sessions||[]).map(s=>text(s.teacherId)).filter(Boolean))].sort((a,b)=>teacherName(a).localeCompare(teacherName(b),'fr'));
-  const classIds=[...new Set(scoped.map(s=>text(s.classId)))];const classes=(src.classes||[]).filter(c=>classIds.includes(text(c.id))).sort((a,b)=>text(a.name).localeCompare(text(b.name),'fr',{numeric:true}));return{teacherIds,classes};
+  const classIds=[...new Set(scoped.map(s=>text(s.classId)))];
+  const classes=(src.classes||[]).filter(c=>classIds.includes(text(c.id))).sort((a,b)=>text(a.name).localeCompare(text(b.name),'fr',{numeric:true}));
+  const families=[...new Set(classes.map(classFamily).filter(Boolean))].sort((a,b)=>{
+    const ia=OFFICIAL_CLASS_FAMILIES.indexOf(a),ib=OFFICIAL_CLASS_FAMILIES.indexOf(b);
+    if(ia>=0||ib>=0){
+      if(ia<0)return 1;
+      if(ib<0)return -1;
+      if(ia!==ib)return ia-ib;
+    }
+    return text(a).localeCompare(text(b),'fr',{numeric:true});
+  });
+  return{teacherIds,classes,families};
 }
 function optionList(items,valueFn,labelFn,current,allLabel){return`<option value="">${esc(allLabel)}</option>`+items.map(x=>`<option value="${esc(valueFn(x))}"${text(valueFn(x))===text(current)?' selected':''}>${esc(labelFn(x))}</option>`).join('');}
 function renderStatusChart(m){const rows=[['Présent',m.present],['Absent',m.absent],['Retard',m.retard],['Justifié',m.justifie]],max=Math.max(1,...rows.map(x=>x[1]));return rows.map(([label,v])=>`<div class="v22-status-row"><span>${esc(label)}</span><div class="v22-status-track"><div class="v22-status-fill" style="width:${Math.round(v*100/max)}%"></div></div><strong>${v}</strong></div>`).join('');}
@@ -6933,8 +7067,75 @@ async function renderDashboard(force){
   try{if(adminMode())await root.FSTAccessControl?.refreshTeacherNames?.();const{snapshot,planMeta}=await ensureSnapshot(Boolean(force));const prev=state.lastDashboard?.filters||{teacherId:'',classId:'',manipulation:'',period:'all'},filters={...prev,...getSelectFilters('v22-dash')};if(!root.document.getElementById('v22-dash-period'))filters.period=prev.period||'all';const user=userScope(),validClasses=selectOptions(snapshot,user,filters.teacherId).classes;if(filters.classId&&!validClasses.some(c=>text(c.id)===text(filters.classId)))filters.classId='';const m=computeMetrics(snapshot,filters,user,planMeta);state.lastDashboard={filters,metrics:m};box.innerHTML=dashboardMarkup(snapshot,filters,user,m);for(const id of['v22-dash-teacher','v22-dash-class','v22-dash-manip','v22-dash-period'])root.document.getElementById(id)?.addEventListener('change',()=>renderDashboard(false));root.document.getElementById('v22-dash-refresh')?.addEventListener('click',()=>renderDashboard(true));return true;}catch(e){console.error('V22 dashboard',e);box.innerHTML=`<div class="alert alert-danger">Tableau de bord indisponible : ${esc(e.message||e)}</div>`;return false;}
 }
 function mountReports(){const tab=root.document?.getElementById('rapports');if(!tab)return false;if(tab.dataset.v22CleanReports==='1')return true;tab.dataset.v22CleanReports='1';tab.innerHTML=`<h2>Rapports de Pr\u00e9sence</h2><div class="v22-analytics-toolbar" id="v22-report-toolbar"></div><div class="v22-analytics-actions"><button class="btn btn-primary" id="v22-report-generate"><i class="fas fa-file-lines"></i> G\u00e9n\u00e9rer le rapport</button><button class="btn btn-success" id="v22-report-pdf" disabled><i class="fas fa-file-pdf"></i> T\u00e9l\u00e9charger PDF</button></div><div id="v22-report-status" class="v22-filter-note">Choisissez vos filtres puis cliquez sur \u00ab G\u00e9n\u00e9rer le rapport \u00bb.</div><div id="report-content"></div><div id="session-report-content"></div>`;root.document.getElementById('v22-report-generate')?.addEventListener('click',()=>generateReport());root.document.getElementById('v22-report-pdf')?.addEventListener('click',()=>downloadGeneralReportPdf());return true;}
-async function refreshReportControls(force){mountReports();try{if(adminMode())await root.FSTAccessControl?.refreshTeacherNames?.();const{snapshot}=await ensureSnapshot(Boolean(force));const user=userScope(),current=getSelectFilters('v22-report'),opt=selectOptions(snapshot,user,current.teacherId),toolbar=root.document.getElementById('v22-report-toolbar');if(!toolbar)return false;toolbar.innerHTML=`${user.adminMode?`<div class="form-group"><label>Intervenant</label><select id="v22-report-teacher" class="form-control">${optionList(opt.teacherIds,x=>x,x=>teacherName(x),current.teacherId,'Tous les intervenants')}</select></div>`:''}<div class="form-group"><label>Classe / groupe</label><select id="v22-report-class" class="form-control">${optionList(opt.classes,x=>x.id,x=>x.name,current.classId,'Toutes les classes / groupes')}</select></div><div class="form-group"><label>Manipulation</label><select id="v22-report-manip" class="form-control"><option value="">Toutes</option>${[1,2,3,4,5,6].map(n=>`<option value="M${n}"${current.manipulation===`M${n}`?' selected':''}>M${n}</option>`).join('')}</select></div><div class="form-group"><label>P\u00e9riode</label><select id="v22-report-period" class="form-control"><option value="all"${current.period==='all'?' selected':''}>Toute l'ann\u00e9e</option><option value="week"${current.period==='week'?' selected':''}>7 derniers jours</option><option value="month"${current.period==='month'?' selected':''}>30 derniers jours</option></select></div>`;root.document.getElementById('v22-report-teacher')?.addEventListener('change',()=>refreshReportControls(false));return true;}catch(e){root.document.getElementById('v22-report-status').textContent='Filtres indisponibles : '+(e.message||e);return false;}}
-function reportHtml(model){const m=model.metrics;if(!model.sessions.length)return'<div class="v22-empty">Aucune séance ne correspond aux filtres sélectionnés.</div>';return`<div class="v22-report-summary"><div class="v22-kpi-grid"><div class="v22-kpi"><div class="v22-kpi-value">${m.sessions}</div><div class="v22-kpi-label">Séances</div></div><div class="v22-kpi"><div class="v22-kpi-value">${m.students}</div><div class="v22-kpi-label">Étudiants</div></div><div class="v22-kpi"><div class="v22-kpi-value">${m.present}</div><div class="v22-kpi-label">Présents</div></div><div class="v22-kpi"><div class="v22-kpi-value">${m.absent}</div><div class="v22-kpi-label">Absents</div></div><div class="v22-kpi"><div class="v22-kpi-value">${m.presenceRate}%</div><div class="v22-kpi-label">Taux de présence</div></div><div class="v22-kpi"><div class="v22-kpi-value">${m.absenceRate}%</div><div class="v22-kpi-label">Taux d’absence</div></div></div></div><div class="v22-report-section"><h3>Détail par séance</h3><div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Intervenant</th><th>Classe / groupe</th><th>Manip.</th><th>Salle</th><th>Étudiants</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th><th>Taux présence</th><th>Taux absence</th></tr></thead><tbody>${model.sessions.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.teacher)}</td><td>${esc(r.className)}</td><td>${esc(r.manipulation||'—')}</td><td>${esc(r.room)}</td><td>${r.expected}</td><td>${r.present}</td><td>${r.absent}</td><td>${r.retard}</td><td>${r.justifie}</td><td>${r.presenceRate}%</td><td>${r.absenceRate}%</td></tr>`).join('')}</tbody></table></div></div><div class="v22-report-section"><h3>Synthèse par étudiant</h3><div class="table-responsive"><table class="table"><thead><tr><th>Étudiant</th><th>Classe / groupe</th><th>Séances</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th><th>Taux présence</th><th>Taux absence</th></tr></thead><tbody>${model.students.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.className)}</td><td>${r.sessions}</td><td>${r.present}</td><td>${r.absent}</td><td>${r.retard}</td><td>${r.justifie}</td><td>${r.presenceRate}%</td><td>${r.absenceRate}%</td></tr>`).join('')}</tbody></table></div></div>`;}
+async function refreshReportControls(force){
+  mountReports();
+  try{
+    if(adminMode())await root.FSTAccessControl?.refreshTeacherNames?.();
+    const{snapshot}=await ensureSnapshot(Boolean(force));
+    const user=userScope(),current=getSelectFilters('v22-report'),opt=selectOptions(snapshot,user,current.teacherId),toolbar=root.document.getElementById('v22-report-toolbar');
+    if(!toolbar)return false;
+
+    const groups=opt.classes.filter(c=>!current.classFamily||text(classFamily(c)).toUpperCase()===text(current.classFamily).toUpperCase());
+    const currentGroupId=groups.some(c=>text(c.id)===text(current.classId))?current.classId:'';
+
+    toolbar.innerHTML=
+      `${user.adminMode?`<div class="form-group"><label>Intervenant</label><select id="v22-report-teacher" class="form-control">${optionList(opt.teacherIds,x=>x,x=>teacherName(x),current.teacherId,'Tous les intervenants')}</select></div>`:''}`+
+      `<div class="form-group"><label>Classe</label><select id="v22-report-family" class="form-control">${optionList(opt.families,x=>x,x=>x,current.classFamily,'Toutes les classes')}</select></div>`+
+      `<div class="form-group"><label>Groupe TP (optionnel)</label><select id="v22-report-class" class="form-control">${optionList(groups,x=>x.id,x=>x.name,currentGroupId,'Tous les groupes TP')}</select></div>`+
+      `<div class="form-group"><label>Manipulation</label><select id="v22-report-manip" class="form-control"><option value="">Toutes</option>${[1,2,3,4,5,6].map(n=>`<option value="M${n}"${current.manipulation===`M${n}`?' selected':''}>M${n}</option>`).join('')}</select></div>`+
+      `<div class="form-group"><label>Période</label><select id="v22-report-period" class="form-control"><option value="all"${current.period==='all'?' selected':''}>Toute l'année</option><option value="week"${current.period==='week'?' selected':''}>7 derniers jours</option><option value="month"${current.period==='month'?' selected':''}>30 derniers jours</option></select></div>`;
+
+    root.document.getElementById('v22-report-teacher')?.addEventListener('change',()=>refreshReportControls(false));
+    root.document.getElementById('v22-report-family')?.addEventListener('change',()=>refreshReportControls(false));
+    return true;
+  }catch(e){
+    const status=root.document.getElementById('v22-report-status');
+    if(status)status.textContent='Filtres indisponibles : '+(e.message||e);
+    return false;
+  }
+}
+function reportHtml(model){
+  const m=model.metrics;
+  if(!model.sessions.length)return'<div class="v22-empty">Aucune séance ne correspond aux filtres sélectionnés.</div>';
+
+  const absenceDetail=r=>{
+    const rows=r.absenceDetails||[];
+    if(!rows.length)return'—';
+    return rows.map(d=>`${esc(d.date)} · ${esc(d.status)} · ${esc(d.className)}`).join('<br>');
+  };
+
+  return `
+    <div class="v22-filter-note" style="margin-bottom:14px">
+      <strong>Absences réelles :</strong> seules les lignes effectivement enregistrées avec le statut « Absent » ou « Justifié » sont comptabilisées comme absence.
+      Une ligne de présence non saisie n'est transformée ni en « Présent » ni en « Absent ».
+      Les taux sont calculés uniquement sur les pointages réellement enregistrés.
+    </div>
+    <div class="v22-report-summary">
+      <div class="v22-kpi-grid">
+        <div class="v22-kpi"><div class="v22-kpi-value">${m.sessions}</div><div class="v22-kpi-label">Séances</div></div>
+        <div class="v22-kpi"><div class="v22-kpi-value">${m.students}</div><div class="v22-kpi-label">Étudiants</div></div>
+        <div class="v22-kpi"><div class="v22-kpi-value">${m.recorded}</div><div class="v22-kpi-label">Pointages saisis</div></div>
+        <div class="v22-kpi"><div class="v22-kpi-value">${m.absent}</div><div class="v22-kpi-label">Absents</div></div>
+        <div class="v22-kpi"><div class="v22-kpi-value">${m.justifie}</div><div class="v22-kpi-label">Justifiés</div></div>
+        <div class="v22-kpi"><div class="v22-kpi-value">${m.presenceRate}%</div><div class="v22-kpi-label">Taux de présence</div></div>
+        <div class="v22-kpi"><div class="v22-kpi-value">${m.absenceRate}%</div><div class="v22-kpi-label">Taux d'absence</div></div>
+      </div>
+    </div>
+    <div class="v22-report-section">
+      <h3>Détail par séance</h3>
+      <div class="table-responsive"><table class="table">
+        <thead><tr><th>Date</th><th>Intervenant</th><th>Classe / groupe</th><th>Manip.</th><th>Salle</th><th>Étudiants</th><th>Pointages</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th><th>Taux présence</th><th>Taux absence</th></tr></thead>
+        <tbody>${model.sessions.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.teacher)}</td><td>${esc(r.className)}</td><td>${esc(r.manipulation||'—')}</td><td>${esc(r.room)}</td><td>${r.expected}</td><td><strong>${r.recorded}</strong></td><td>${r.present}</td><td>${r.absent}</td><td>${r.retard}</td><td>${r.justifie}</td><td>${r.presenceRate}%</td><td>${r.absenceRate}%</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="v22-report-section">
+      <h3>Synthèse par étudiant</h3>
+      <div class="table-responsive"><table class="table">
+        <thead><tr><th>Étudiant</th><th>Classe / groupe</th><th>Séances</th><th>Pointages</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th><th>Absences enregistrées</th><th>Taux présence</th><th>Taux absence</th></tr></thead>
+        <tbody>${model.students.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.className)}</td><td>${r.sessions}</td><td><strong>${r.recorded}</strong></td><td>${r.present}</td><td>${r.absent}</td><td>${r.retard}</td><td>${r.justifie}</td><td>${absenceDetail(r)}</td><td>${r.presenceRate}%</td><td>${r.absenceRate}%</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+}
 async function generateReport(){
   mountReports();const status=root.document.getElementById('v22-report-status');if(status)status.textContent='G\u00e9n\u00e9ration en cours...';try{const{snapshot,planMeta}=await ensureSnapshot(true);const filters=getSelectFilters('v22-report'),model=buildReportModel(snapshot,filters,userScope(),planMeta,teacherName);state.lastReport=model;root.document.getElementById('report-content').innerHTML=reportHtml(model);const pdf=root.document.getElementById('v22-report-pdf');if(pdf)pdf.disabled=!model.sessions.length;if(status)status.textContent=model.sessions.length?`${model.sessions.length} s\u00e9ance(s) incluse(s) dans le rapport.`:'Aucune s\u00e9ance pour ces filtres.';return model;}catch(e){console.error('V22 report',e);if(status)status.textContent='Rapport impossible : '+(e.message||e);root.showAlert?.('Rapport impossible : '+(e.message||e),'danger');return null;}}
 function sessionReportModel(snapshot,planMeta,sessionId){const s=(snapshot.sessions||[]).find(x=>text(x.id)===text(sessionId));if(!s)throw new Error('Séance introuvable ou non autorisée.');const cls=classById(snapshot,s.classId),roster=rosterForClass(snapshot,s.classId),idx=attendanceIndex(snapshot),p=planFor(planMeta,s.id);return{session:s,teacher:teacherName(s.teacherId),className:cls?.name||'Classe',manipulation:p.manipulation||'',room:p.room||ROOMS[p.manipulation]||cls?.room||'—',students:roster.map(st=>{const a=idx.get(text(s.id)+'|'+text(st.id));return{name:(text(st.lastname)+' '+text(st.firstname)).trim(),status:a?STATUS_LABELS[a.status]||a.status:'Présent',comment:a?.comment||'—',grade:a?.grade==null?'—':a.grade+' /20'};})};}
