@@ -6859,6 +6859,7 @@ function filterSessions(src,filters,user,planMeta){
     const cls=classById(src,s.classId);
     if(f.classFamily&&text(classFamily(cls)).toUpperCase()!==text(f.classFamily).toUpperCase())return false;
     if(f.classId&&text(s.classId)!==text(f.classId))return false;
+    if(f.sessionDate&&text(s.date)!==text(f.sessionDate))return false;
     const p=planFor(planMeta,s.id),manip=p.manipulation||'';
     if(f.manipulation&&text(manip)!==text(f.manipulation))return false;
     if(!periodAllows(s.date,f.period||'all'))return false;
@@ -6873,13 +6874,10 @@ function attendanceIndex(src){
   }
   return map;
 }
-function rosterForClass(src,classId){
-  return(src.students||[]).filter(st=>text(st.classId)===text(classId));
-}
+function rosterForClass(src,classId){return(src.students||[]).filter(st=>text(st.classId)===text(classId));}
 function canonicalGroupIdForSession(src,session){
   if(session?.groupId)return text(session.groupId);
-  const cls=classById(src,session?.classId);
-  const wanted=text(cls?.name).toUpperCase();
+  const cls=classById(src,session?.classId),wanted=text(cls?.name).toUpperCase();
   const group=(src.studentGroups||[]).find(g=>text(g.displayName).toUpperCase()===wanted);
   return group?text(group.id):'';
 }
@@ -6889,44 +6887,19 @@ function membershipCoversDate(m,date){
 }
 function rosterForSession(src,session){
   const studentById=new Map((src.students||[]).map(st=>[text(st.id),st]));
-  const groupId=canonicalGroupIdForSession(src,session);
   const ids=new Set();
-
-  if(groupId){
-    for(const e of src.enrollments||[]){
-      if(e.active&&text(e.groupId)===groupId)ids.add(text(e.studentId));
-    }
+  const dated=(src.memberships||[]).filter(m=>text(m.classId)===text(session?.classId)&&membershipCoversDate(m,session?.date));
+  if(dated.length){
+    for(const m of dated)ids.add(text(m.studentId));
+  }else{
+    const groupId=canonicalGroupIdForSession(src,session);
+    if(groupId){for(const e of src.enrollments||[])if(e.active&&text(e.groupId)===groupId)ids.add(text(e.studentId));}
   }
-
-  // Historical membership overrides the current enrollment when such history exists.
-  const historical=new Map();
-  for(const m of src.memberships||[]){
-    if(!membershipCoversDate(m,session?.date))continue;
-    const sid=text(m.studentId);
-    if(!historical.has(sid))historical.set(sid,new Set());
-    historical.get(sid).add(text(m.classId));
-  }
-  for(const [sid,classIds] of historical.entries()){
-    if(ids.has(sid)||classIds.has(text(session?.classId))){
-      ids.delete(sid);
-      if(classIds.has(text(session?.classId)))ids.add(sid);
-    }
-  }
-
-  // Fallback for legacy records without canonical enrollment.
-  if(!ids.size){
-    for(const st of rosterForClass(src,session?.classId))ids.add(text(st.id));
-  }
-
-  // Never lose an explicitly recorded historical status.
+  if(!ids.size){for(const st of rosterForClass(src,session?.classId))ids.add(text(st.id));}
   for(const a of src.attendance||[]){
-    if(a.gradeOnly)continue;
-    if(text(a.sessionId)===text(session?.id))ids.add(text(a.studentId));
+    if(!a.gradeOnly&&text(a.sessionId)===text(session?.id))ids.add(text(a.studentId));
   }
-
-  return [...ids].map(id=>studentById.get(id)).filter(Boolean).sort((a,b)=>
-    (text(a.lastname)+' '+text(a.firstname)).localeCompare(text(b.lastname)+' '+text(b.firstname),'fr')
-  );
+  return [...ids].map(id=>studentById.get(id)).filter(Boolean).sort((a,b)=>(text(a.lastname)+' '+text(a.firstname)).localeCompare(text(b.lastname)+' '+text(b.firstname),'fr'));
 }
 function emptyBucket(label){return{label,sessions:0,students:new Set(),expected:0,present:0,absent:0,retard:0,justifie:0,presenceRate:0,absenceRate:0};}
 function finalizeBucket(b){return{label:b.label,sessions:b.sessions,students:b.students.size,expected:b.expected,present:b.present,absent:b.absent,retard:b.retard,justifie:b.justifie,presenceRate:pct(b.present+b.retard,b.expected),absenceRate:pct(b.absent+b.justifie,b.expected)};}
@@ -6947,109 +6920,38 @@ function computeMetrics(src,filters,user,planMeta){
   const final=finalizeBucket(totals);final.sessions=sessions.length;final.students=uniqueStudents.size;final.byManipulation=[...byManipMap.values()].map(finalizeBucket).sort((a,b)=>text(a.label).localeCompare(text(b.label),'fr',{numeric:true}));final.byGroup=[...byGroupMap.values()].map(finalizeBucket).sort((a,b)=>text(a.label).localeCompare(text(b.label),'fr',{numeric:true}));final.filteredSessions=sessions;return final;
 }
 function buildReportModel(src,filters,user,planMeta,nameFn){
-  const sessions=filterSessions(src,filters,user,planMeta);
-  const idx=attendanceIndex(src);
-  const studentMap=new Map(),sessionRows=[];
-
-  for(const s of sessions){
+  const selected=filterSessions(src,filters,user,planMeta);
+  const idx=attendanceIndex(src),buckets=new Map();
+  for(const s of selected){
     const cls=classById(src,s.classId),p=planFor(planMeta,s.id),roster=rosterForSession(src,s);
-    const counts={present:0,absent:0,retard:0,justifie:0,explicit:0};
-
+    const family=classFamily(cls)||cls?.name||'Classe';
+    const bucketName=filters?.classId?(cls?.name||family):family;
+    const key=text(s.date)+'|'+text(bucketName);
+    if(!buckets.has(key))buckets.set(key,{date:s.date,className:bucketName,start:s.start,end:s.end,teachers:new Set(),groups:new Set(),manipulations:new Set(),rooms:new Set(),expected:0,present:0,absent:0,retard:0,justifie:0,students:[]});
+    const b=buckets.get(key);
+    b.teachers.add((nameFn||teacherName)(s.teacherId));
+    b.groups.add(cls?.name||family);
+    if(p.manipulation)b.manipulations.add(p.manipulation);
+    const room=p.room||ROOMS[p.manipulation]||cls?.room||'';if(room)b.rooms.add(room);
     for(const st of roster){
-      const key=text(st.id),a=idx.get(text(s.id)+'|'+key);
-      const explicitStatus=a&&STATUS_KEYS.includes(a.status)?a.status:null;
-      const status=explicitStatus||'present';
-
-      if(!studentMap.has(key)){
-        studentMap.set(key,{
-          studentId:key,
-          name:(text(st.lastname)+' '+text(st.firstname)).trim(),
-          classNames:new Set(),
-          sessions:0,
-          present:0,
-          absent:0,
-          retard:0,
-          justifie:0,
-          absenceDetails:[]
-        });
-      }
-
-      const row=studentMap.get(key);
-      row.classNames.add(cls?.name||'Classe');
-      row.sessions++;
-      row[status]++;
-      counts[status]++;
-      if(explicitStatus)counts.explicit++;
-
-      if(status==='absent'||status==='justifie'){
-        row.absenceDetails.push({
-          date:s.date,
-          status:STATUS_LABELS[status]||status,
-          className:cls?.name||'Classe'
-        });
-      }
+      const a=idx.get(text(s.id)+'|'+text(st.id));
+      const status=a&&STATUS_KEYS.includes(a.status)?a.status:'present';
+      b.expected++;b[status]++;
+      b.students.push({studentId:text(st.id),name:(text(st.lastname)+' '+text(st.firstname)).trim(),group:cls?.name||family,status,statusLabel:STATUS_LABELS[status]||status,comment:a?.comment||''});
     }
-
-    sessionRows.push({
-      sessionId:text(s.id),
-      date:s.date,
-      time:text(s.start)+'-'+text(s.end),
-      teacher:(nameFn||teacherName)(s.teacherId),
-      className:cls?.name||'Classe',
-      classFamily:classFamily(cls),
-      group:groupNo(cls),
-      manipulation:p.manipulation||'',
-      room:p.room||ROOMS[p.manipulation]||cls?.room||'—',
-      expected:roster.length,
-      explicit:counts.explicit,
-      present:counts.present,
-      absent:counts.absent,
-      retard:counts.retard,
-      justifie:counts.justifie,
-      totalAbsence:counts.absent+counts.justifie,
-      presenceRate:pct(counts.present+counts.retard,roster.length),
-      absenceRate:pct(counts.absent+counts.justifie,roster.length)
-    });
   }
-
-  const students=[...studentMap.values()].map(r=>({
-    studentId:r.studentId,
-    name:r.name,
-    className:[...r.classNames].sort((a,b)=>text(a).localeCompare(text(b),'fr',{numeric:true})).join(', '),
-    sessions:r.sessions,
-    present:r.present,
-    absent:r.absent,
-    retard:r.retard,
-    justifie:r.justifie,
-    totalAbsence:r.absent+r.justifie,
-    absenceDetails:r.absenceDetails.sort((a,b)=>text(a.date).localeCompare(text(b.date))),
-    presenceRate:pct(r.present+r.retard,r.sessions),
-    absenceRate:pct(r.absent+r.justifie,r.sessions)
-  })).sort((a,b)=>text(a.className).localeCompare(text(b.className),'fr',{numeric:true})||text(a.name).localeCompare(text(b.name),'fr'));
-
-  const totals=sessionRows.reduce((acc,r)=>{
-    acc.expected+=r.expected;
-    acc.present+=r.present;
-    acc.absent+=r.absent;
-    acc.retard+=r.retard;
-    acc.justifie+=r.justifie;
-    return acc;
-  },{expected:0,present:0,absent:0,retard:0,justifie:0});
-
-  const metrics={
-    sessions:sessionRows.length,
-    students:students.length,
-    expected:totals.expected,
-    present:totals.present,
-    absent:totals.absent,
-    retard:totals.retard,
-    justifie:totals.justifie,
-    totalAbsence:totals.absent+totals.justifie,
-    presenceRate:pct(totals.present+totals.retard,totals.expected),
-    absenceRate:pct(totals.absent+totals.justifie,totals.expected)
-  };
-
-  return{filters:{...(filters||{})},metrics,sessions:sessionRows,students};
+  const sessions=[...buckets.values()].map(b=>({
+    date:b.date,className:b.className,time:text(b.start)+(b.end?' - '+text(b.end):''),
+    teacher:[...b.teachers].sort((a,b)=>text(a).localeCompare(text(b),'fr')).join(', '),
+    groups:[...b.groups].sort((a,b)=>text(a).localeCompare(text(b),'fr',{numeric:true})),
+    manipulation:[...b.manipulations].sort((a,b)=>text(a).localeCompare(text(b),'fr',{numeric:true})).join(', '),
+    room:[...b.rooms].sort((a,b)=>text(a).localeCompare(text(b),'fr',{numeric:true})).join(', '),
+    expected:b.expected,present:b.present,absent:b.absent,retard:b.retard,justifie:b.justifie,
+    presenceRate:pct(b.present+b.retard,b.expected),
+    absenceRate:pct(b.absent+b.justifie,b.expected),
+    students:b.students.sort((a,b)=>text(a.group).localeCompare(text(b.group),'fr',{numeric:true})||text(a.name).localeCompare(text(b.name),'fr'))
+  })).sort((a,b)=>text(a.date).localeCompare(text(b.date))||text(a.className).localeCompare(text(b.className),'fr',{numeric:true}));
+  return{filters:{...(filters||{})},metrics:{sessions:sessions.length},sessions};
 }
 function mapRows(raw){return{
   classes:(raw.classes||[]).map(x=>({id:x.id,teacherId:x.teacher_id,name:x.name,track:x.track||'',classNumber:x.class_number||null,groupNumber:x.group_number||null,module:x.module||'TP Physique',room:x.room||''})),
@@ -7093,9 +6995,14 @@ function getSelectFilters(prefix){
     teacherId:d?.getElementById(prefix+'-teacher')?.value||'',
     classFamily:d?.getElementById(prefix+'-family')?.value||'',
     classId:d?.getElementById(prefix+'-class')?.value||'',
+    sessionDate:d?.getElementById(prefix+'-session')?.value||'',
     manipulation:d?.getElementById(prefix+'-manip')?.value||'',
     period:d?.getElementById(prefix+'-period')?.value||'all'
   };
+}
+function formatDateFr(value){
+  const m=text(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m?m[3]+'/'+m[2]+'/'+m[1]:text(value);
 }
 function selectOptions(src,user,selectedTeacher){
   const scoped=(src.sessions||[]).filter(s=>user.adminMode?(!selectedTeacher||text(s.teacherId)===text(selectedTeacher)):text(s.teacherId)===text(user.id));
@@ -7104,11 +7011,7 @@ function selectOptions(src,user,selectedTeacher){
   const classes=(src.classes||[]).filter(c=>classIds.includes(text(c.id))).sort((a,b)=>text(a.name).localeCompare(text(b.name),'fr',{numeric:true}));
   const families=[...new Set(classes.map(classFamily).filter(Boolean))].sort((a,b)=>{
     const ia=OFFICIAL_CLASS_FAMILIES.indexOf(a),ib=OFFICIAL_CLASS_FAMILIES.indexOf(b);
-    if(ia>=0||ib>=0){
-      if(ia<0)return 1;
-      if(ib<0)return -1;
-      if(ia!==ib)return ia-ib;
-    }
+    if(ia>=0||ib>=0){if(ia<0)return 1;if(ib<0)return -1;if(ia!==ib)return ia-ib;}
     return text(a).localeCompare(text(b),'fr',{numeric:true});
   });
   return{teacherIds,classes,families};
@@ -7130,71 +7033,46 @@ async function refreshReportControls(force){
   mountReports();
   try{
     if(adminMode())await root.FSTAccessControl?.refreshTeacherNames?.();
-    const{snapshot}=await ensureSnapshot(Boolean(force));
+    const{snapshot,planMeta}=await ensureSnapshot(Boolean(force));
     const user=userScope(),current=getSelectFilters('v22-report'),opt=selectOptions(snapshot,user,current.teacherId),toolbar=root.document.getElementById('v22-report-toolbar');
     if(!toolbar)return false;
-
     const groups=opt.classes.filter(c=>!current.classFamily||text(classFamily(c)).toUpperCase()===text(current.classFamily).toUpperCase());
     const currentGroupId=groups.some(c=>text(c.id)===text(current.classId))?current.classId:'';
-
-    toolbar.innerHTML=
-      `${user.adminMode?`<div class="form-group"><label>Intervenant</label><select id="v22-report-teacher" class="form-control">${optionList(opt.teacherIds,x=>x,x=>teacherName(x),current.teacherId,'Tous les intervenants')}</select></div>`:''}`+
-      `<div class="form-group"><label>Classe</label><select id="v22-report-family" class="form-control">${optionList(opt.families,x=>x,x=>x,current.classFamily,'Toutes les classes')}</select></div>`+
-      `<div class="form-group"><label>Groupe TP (optionnel)</label><select id="v22-report-class" class="form-control">${optionList(groups,x=>x.id,x=>x.name,currentGroupId,'Tous les groupes TP')}</select></div>`+
-      `<div class="form-group"><label>Manipulation</label><select id="v22-report-manip" class="form-control"><option value="">Toutes</option>${[1,2,3,4,5,6].map(n=>`<option value="M${n}"${current.manipulation===`M${n}`?' selected':''}>M${n}</option>`).join('')}</select></div>`+
-      `<div class="form-group"><label>Période</label><select id="v22-report-period" class="form-control"><option value="all"${current.period==='all'?' selected':''}>Toute l'année</option><option value="week"${current.period==='week'?' selected':''}>7 derniers jours</option><option value="month"${current.period==='month'?' selected':''}>30 derniers jours</option></select></div>`;
-
-    root.document.getElementById('v22-report-teacher')?.addEventListener('change',()=>refreshReportControls(false));
-    root.document.getElementById('v22-report-family')?.addEventListener('change',()=>refreshReportControls(false));
+    const dateFilters={teacherId:current.teacherId,classFamily:current.classFamily,classId:currentGroupId,sessionDate:'',manipulation:current.manipulation,period:current.period};
+    const dates=[...new Set(filterSessions(snapshot,dateFilters,user,planMeta).map(s=>text(s.date)).filter(Boolean))].sort();
+    const currentDate=dates.includes(current.sessionDate)?current.sessionDate:'';
+    const teacherHtml=user.adminMode?'<div class="form-group"><label>Intervenant</label><select id="v22-report-teacher" class="form-control">'+optionList(opt.teacherIds,x=>x,x=>teacherName(x),current.teacherId,'Tous les intervenants')+'</select></div>':'';
+    const familyHtml='<div class="form-group"><label>Classe</label><select id="v22-report-family" class="form-control">'+optionList(opt.families,x=>x,x=>x,current.classFamily,'Toutes les classes')+'</select></div>';
+    const groupHtml='<div class="form-group"><label>Groupe TP (optionnel)</label><select id="v22-report-class" class="form-control">'+optionList(groups,x=>x.id,x=>x.name,currentGroupId,'Tous les groupes TP')+'</select></div>';
+    const sessionHtml='<div class="form-group"><label>Séance</label><select id="v22-report-session" class="form-control">'+optionList(dates,x=>x,x=>formatDateFr(x),currentDate,'Toutes les séances — calcul séparé')+'</select></div>';
+    const manipHtml='<div class="form-group"><label>Manipulation</label><select id="v22-report-manip" class="form-control"><option value="">Toutes</option>'+[1,2,3,4,5,6].map(n=>'<option value="M'+n+'"'+(current.manipulation==='M'+n?' selected':'')+'>M'+n+'</option>').join('')+'</select></div>';
+    const periodHtml='<div class="form-group"><label>Période</label><select id="v22-report-period" class="form-control"><option value="all"'+(current.period==='all'?' selected':'')+'>Toute l\'année</option><option value="week"'+(current.period==='week'?' selected':'')+'>7 derniers jours</option><option value="month"'+(current.period==='month'?' selected':'')+'>30 derniers jours</option></select></div>';
+    toolbar.innerHTML=teacherHtml+familyHtml+groupHtml+sessionHtml+manipHtml+periodHtml;
+    for(const id of['v22-report-teacher','v22-report-family','v22-report-class','v22-report-manip','v22-report-period'])root.document.getElementById(id)?.addEventListener('change',()=>refreshReportControls(false));
     return true;
   }catch(e){
-    const status=root.document.getElementById('v22-report-status');
-    if(status)status.textContent='Filtres indisponibles : '+(e.message||e);
-    return false;
+    const status=root.document.getElementById('v22-report-status');if(status)status.textContent='Filtres indisponibles : '+(e.message||e);return false;
   }
 }
 function reportHtml(model){
-  const m=model.metrics;
   if(!model.sessions.length)return'<div class="v22-empty">Aucune séance réalisée ne correspond aux filtres sélectionnés.</div>';
-
-  const absenceDetail=r=>{
-    const rows=r.absenceDetails||[];
-    if(!rows.length)return'—';
-    return rows.map(d=>`${esc(d.date)} · ${esc(d.status)} · ${esc(d.className)}`).join('<br>');
-  };
-
-  return `
-    <div class="v22-filter-note" style="margin-bottom:14px">
-      <strong>Calcul utilisé :</strong> l'effectif de chaque groupe provient des inscriptions actives.
-      Les lignes enregistrées « Absent », « Justifié » et « Retard » sont lues directement dans la base.
-      En l'absence d'un statut d'absence/retard pour un étudiant inscrit à une séance réalisée, l'étudiant est compté présent.
-    </div>
-    <div class="v22-report-summary">
-      <div class="v22-kpi-grid">
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.sessions}</div><div class="v22-kpi-label">Séances de groupes</div></div>
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.students}</div><div class="v22-kpi-label">Étudiants concernés</div></div>
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.expected}</div><div class="v22-kpi-label">Présences attendues</div></div>
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.present}</div><div class="v22-kpi-label">Présents</div></div>
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.absent}</div><div class="v22-kpi-label">Absents</div></div>
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.justifie}</div><div class="v22-kpi-label">Absences justifiées</div></div>
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.presenceRate}%</div><div class="v22-kpi-label">Taux de présence</div></div>
-        <div class="v22-kpi"><div class="v22-kpi-value">${m.absenceRate}%</div><div class="v22-kpi-label">Taux d'absence</div></div>
-      </div>
-    </div>
-    <div class="v22-report-section">
-      <h3>Détail par séance et groupe</h3>
-      <div class="table-responsive"><table class="table">
-        <thead><tr><th>Date</th><th>Intervenant</th><th>Classe / groupe</th><th>Manip.</th><th>Salle</th><th>Effectif</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th><th>Taux présence</th><th>Taux absence</th></tr></thead>
-        <tbody>${model.sessions.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.teacher)}</td><td>${esc(r.className)}</td><td>${esc(r.manipulation||'—')}</td><td>${esc(r.room)}</td><td><strong>${r.expected}</strong></td><td>${r.present}</td><td>${r.absent}</td><td>${r.retard}</td><td>${r.justifie}</td><td>${r.presenceRate}%</td><td>${r.absenceRate}%</td></tr>`).join('')}</tbody>
-      </table></div>
-    </div>
-    <div class="v22-report-section">
-      <h3>Synthèse par étudiant</h3>
-      <div class="table-responsive"><table class="table">
-        <thead><tr><th>Étudiant</th><th>Classe / groupe</th><th>Séances</th><th>Présent</th><th>Absent</th><th>Retard</th><th>Justifié</th><th>Dates d'absence</th><th>Taux présence</th><th>Taux absence</th></tr></thead>
-        <tbody>${model.students.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.className)}</td><td>${r.sessions}</td><td>${r.present}</td><td><strong>${r.absent}</strong></td><td>${r.retard}</td><td>${r.justifie}</td><td>${absenceDetail(r)}</td><td>${r.presenceRate}%</td><td>${r.absenceRate}%</td></tr>`).join('')}</tbody>
-      </table></div>
-    </div>`;
+  const blocks=model.sessions.map(r=>{
+    const exceptions=(r.students||[]).filter(st=>st.status!=='present');
+    const rows=exceptions.length?'<div class="table-responsive"><table class="table"><thead><tr><th>Étudiant</th><th>Groupe</th><th>Statut</th><th>Commentaire</th></tr></thead><tbody>'+exceptions.map(st=>'<tr><td>'+esc(st.name)+'</td><td>'+esc(st.group)+'</td><td><strong>'+esc(st.statusLabel)+'</strong></td><td>'+esc(st.comment||'—')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="v22-empty">Aucune absence, aucun retard et aucune justification enregistrés pour cette séance.</div>';
+    return '<section class="v22-report-section" style="margin-bottom:22px">'+
+      '<h3 style="margin-bottom:8px">Séance du '+esc(formatDateFr(r.date))+' — '+esc(r.className)+'</h3>'+
+      '<div class="v22-filter-note" style="margin-bottom:10px">Groupes : '+esc(r.groups.join(', ')||'—')+' · Intervenant(s) : '+esc(r.teacher||'—')+' · Manipulation(s) : '+esc(r.manipulation||'—')+' · Salle(s) : '+esc(r.room||'—')+'</div>'+
+      '<div class="v22-kpi-grid">'+
+        '<div class="v22-kpi"><div class="v22-kpi-value">'+r.expected+'</div><div class="v22-kpi-label">Effectif de la séance</div></div>'+
+        '<div class="v22-kpi"><div class="v22-kpi-value">'+r.present+'</div><div class="v22-kpi-label">Présents</div></div>'+
+        '<div class="v22-kpi"><div class="v22-kpi-value">'+r.absent+'</div><div class="v22-kpi-label">Absents</div></div>'+
+        '<div class="v22-kpi"><div class="v22-kpi-value">'+r.retard+'</div><div class="v22-kpi-label">Retards</div></div>'+
+        '<div class="v22-kpi"><div class="v22-kpi-value">'+r.justifie+'</div><div class="v22-kpi-label">Justifiés</div></div>'+
+        '<div class="v22-kpi"><div class="v22-kpi-value">'+r.presenceRate+'%</div><div class="v22-kpi-label">Taux présence — séance</div></div>'+
+        '<div class="v22-kpi"><div class="v22-kpi-value">'+r.absenceRate+'%</div><div class="v22-kpi-label">Taux absence — séance</div></div>'+
+      '</div><div style="margin-top:14px"><h4>Absences, retards et justifications de cette séance</h4>'+rows+'</div></section>';
+  }).join('');
+  return '<div class="v22-filter-note" style="margin-bottom:14px"><strong>Règle de calcul :</strong> chaque séance est calculée indépendamment. Aucun nombre de présents, d\'absents ni aucun taux n\'est cumulé avec une autre séance.</div>'+blocks;
 }
 async function generateReport(){
   mountReports();const status=root.document.getElementById('v22-report-status');if(status)status.textContent='G\u00e9n\u00e9ration en cours...';try{const{snapshot,planMeta}=await ensureSnapshot(true);const filters=getSelectFilters('v22-report'),model=buildReportModel(snapshot,filters,userScope(),planMeta,teacherName);state.lastReport=model;root.document.getElementById('report-content').innerHTML=reportHtml(model);const pdf=root.document.getElementById('v22-report-pdf');if(pdf)pdf.disabled=!model.sessions.length;if(status)status.textContent=model.sessions.length?`${model.sessions.length} s\u00e9ance(s) incluse(s) dans le rapport.`:'Aucune s\u00e9ance pour ces filtres.';return model;}catch(e){console.error('V22 report',e);if(status)status.textContent='Rapport impossible : '+(e.message||e);root.showAlert?.('Rapport impossible : '+(e.message||e),'danger');return null;}}
@@ -7223,7 +7101,25 @@ function sessionReportModel(snapshot,planMeta,sessionId){
 async function generateSessionReport(sessionId){mountReports();try{const{snapshot,planMeta}=await ensureSnapshot(true),m=sessionReportModel(snapshot,planMeta,sessionId),el=root.document.getElementById('session-report-content');el.innerHTML=`<h3>Rapport de s\u00e9ance</h3><div class="alert alert-info"><strong>${esc(m.className)}</strong> \u00b7 ${esc(m.session.date)} \u00b7 ${esc(m.session.start)}-${esc(m.session.end)}<br>Intervenant : ${esc(m.teacher)} \u00b7 ${esc(m.manipulation||'\u2014')} \u00b7 Salle ${esc(m.room)}</div><div class="table-responsive"><table class="table"><thead><tr><th>\u00c9tudiant</th><th>Statut</th><th>Commentaire</th><th>Note</th></tr></thead><tbody>${m.students.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.status)}</td><td>${esc(r.comment)}</td><td>${esc(r.grade)}</td></tr>`).join('')}</tbody></table></div><button class="btn btn-primary" onclick="V22DashboardReports.downloadSessionReportPdf('${esc(sessionId)}')"><i class="fas fa-file-pdf"></i> T\u00e9l\u00e9charger PDF</button>`;return true;}catch(e){root.showAlert?.('Rapport de s\u00e9ance impossible : '+(e.message||e),'danger');return false;}}
 function requirePdf(){const jsPDF=root.jspdf?.jsPDF;if(!jsPDF)throw new Error('Moteur PDF indisponible.');return jsPDF;}
 function savePdf(doc,name){if(root.AndroidPdfBridge&&typeof root.AndroidPdfBridge.savePdf==='function'){root.AndroidPdfBridge.savePdf(name,doc.output('datauristring'));return true;}doc.save(name);return true;}
-async function downloadGeneralReportPdf(){try{if(!state.lastReport)await generateReport();const m=state.lastReport;if(!m?.sessions?.length)throw new Error('Générez d’abord un rapport contenant des séances.');const jsPDF=requirePdf(),doc=new jsPDF({unit:'mm',format:'a4'});doc.setFontSize(14);doc.text('Rapport de presence',14,16);doc.setFontSize(9);doc.text('Faculte des Sciences de Tunis - 2026/2027',14,22);doc.text(`Seances: ${m.metrics.sessions}  Presence: ${m.metrics.presenceRate}%  Absence: ${m.metrics.absenceRate}%`,14,28);doc.autoTable({startY:34,head:[['Date','Intervenant','Classe/Groupe','Manip.','Salle','Etudiants','P','A','R','J','Presence','Absence']],body:m.sessions.map(r=>[r.date,r.teacher,r.className,r.manipulation||'-',r.room,String(r.expected),String(r.present),String(r.absent),String(r.retard),String(r.justifie),r.presenceRate+'%',r.absenceRate+'%']),styles:{fontSize:6.8,cellPadding:1.3},margin:{left:7,right:7}});let y=(doc.lastAutoTable?.finalY||40)+8;if(y>230){doc.addPage();y=18;}doc.setFontSize(11);doc.text('Synthese par etudiant',14,y);doc.autoTable({startY:y+3,head:[['Etudiant','Classe/Groupe','Seances','P','A','R','J','Presence','Absence']],body:m.students.map(r=>[r.name,r.className,String(r.sessions),String(r.present),String(r.absent),String(r.retard),String(r.justifie),r.presenceRate+'%',r.absenceRate+'%']),styles:{fontSize:7,cellPadding:1.4},margin:{left:8,right:8}});return savePdf(doc,'Rapport_Presence_V30.pdf');}catch(e){root.showAlert?.('PDF impossible : '+(e.message||e),'danger');return false;}}
+async function downloadGeneralReportPdf(){
+  try{
+    if(!state.lastReport)await generateReport();
+    const m=state.lastReport;if(!m?.sessions?.length)throw new Error('Générez d’abord un rapport contenant des séances.');
+    const jsPDF=requirePdf(),doc=new jsPDF({unit:'mm',format:'a4'});
+    doc.setFontSize(14);doc.text('Rapport de presence - calcul par seance',14,16);
+    doc.setFontSize(9);doc.text('Faculte des Sciences de Tunis - 2026/2027',14,22);
+    doc.text('Chaque seance est calculee independamment. Aucun taux cumule entre seances.',14,28);
+    for(let i=0;i<m.sessions.length;i++){
+      const r=m.sessions[i];if(i>0)doc.addPage();const y=18;
+      doc.setFontSize(11);doc.text('Seance du '+formatDateFr(r.date)+' - '+r.className,14,y);
+      doc.setFontSize(8);doc.text('Effectif: '+r.expected+'  Presents: '+r.present+'  Absents: '+r.absent+'  Retards: '+r.retard+'  Justifies: '+r.justifie,14,y+6);
+      doc.text('Taux presence: '+r.presenceRate+'%  Taux absence: '+r.absenceRate+'%',14,y+11);
+      const body=(r.students||[]).filter(st=>st.status!=='present').map(st=>[st.name,st.group,st.statusLabel,st.comment||'-']);
+      doc.autoTable({startY:y+16,head:[['Etudiant','Groupe','Statut','Commentaire']],body,styles:{fontSize:7.2,cellPadding:1.5},margin:{left:10,right:10}});
+    }
+    return savePdf(doc,'Rapport_Presence_Par_Seance_V30.pdf');
+  }catch(e){root.showAlert?.('PDF impossible : '+(e.message||e),'danger');return false;}
+}
 async function downloadSessionReportPdf(sessionId){try{const{snapshot,planMeta}=await ensureSnapshot(true),m=sessionReportModel(snapshot,planMeta,sessionId),jsPDF=requirePdf(),doc=new jsPDF({unit:'mm',format:'a4'});doc.setFontSize(14);doc.text('Rapport de seance TP',14,16);doc.setFontSize(9);doc.text(`${m.className} - ${m.session.date} - ${m.session.start}-${m.session.end}`,14,23);doc.text(`Intervenant: ${m.teacher}  Manipulation: ${m.manipulation||'-'}  Salle: ${m.room}`,14,29);doc.autoTable({startY:35,head:[['Etudiant','Statut','Commentaire','Note']],body:m.students.map(r=>[r.name,r.status,r.comment,r.grade]),styles:{fontSize:8,cellPadding:1.8},margin:{left:12,right:12}});return savePdf(doc,`Rapport_Seance_${m.session.date}.pdf`);}catch(e){root.showAlert?.('PDF impossible : '+(e.message||e),'danger');return false;}}
 function hookSwitch(){const base=root.switchTab;if(typeof base==='function'&&!base.__v22DashboardReports){const wrapped=function(name){const r=base.apply(this,arguments);if(name==='dashboard')setTimeout(()=>renderDashboard(true),0);if(name==='rapports')setTimeout(()=>refreshReportControls(true),0);return r;};wrapped.__v22DashboardReports=true;root.switchTab=wrapped;}}
 function install(){mountReports();hookSwitch();if(root.V21Dashboard)root.V21Dashboard.load=()=>renderDashboard(true);root.updateDashboard=()=>renderDashboard(true);root.generateReport=generateReport;root.generateSessionReport=generateSessionReport;root.downloadGeneralReportPdf=downloadGeneralReportPdf;root.downloadSessionReportPdf=downloadSessionReportPdf;const old=root.document?.getElementById('fst-statistics-panel');if(old)old.remove();if(runtimeTeacher()){renderDashboard(true);refreshReportControls(true);}}
