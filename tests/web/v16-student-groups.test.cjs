@@ -66,3 +66,27 @@ test('group change and membership ending use V16 RPCs then authoritative refresh
   assert.match(source,/data-v16-change-group/);
   assert.match(source,/data-v16-end-membership/);
 });
+
+
+test('LPC3 hyphenated groups render as one dedicated Ondes et Vibrations family',()=>{
+  const lpc={
+    classes:[
+      {id:'l1',name:'LPC3-G1',track:'LPC',classNumber:3,groupNumber:1,module:'TP Ondes et Vibrations'},
+      {id:'l2',name:'LPC3-G2',track:'LPC',classNumber:3,groupNumber:2,module:'TP Ondes et Vibrations'},
+      {id:'l3',name:'LPC3-G3',track:'LPC',classNumber:3,groupNumber:3,module:'TP Ondes et Vibrations'},
+      {id:'l4',name:'LPC3-G4',track:'LPC',classNumber:3,groupNumber:4,module:'TP Ondes et Vibrations'}
+    ],
+    students:[
+      {id:'ls1',lastname:'Alpha',firstname:'Un',classId:'l1'},
+      {id:'ls2',lastname:'Beta',firstname:'Deux',classId:'l2'},
+      {id:'ls3',lastname:'Gamma',firstname:'Trois',classId:'l3'},
+      {id:'ls4',lastname:'Delta',firstname:'Quatre',classId:'l4'}
+    ],
+    memberships:[]
+  };
+  const html=api.renderClassGroups(lpc,{isAdmin:false,activeMode:'teacher'});
+  assert.equal((html.match(/data-v16-class-family="LPC3"/g)||[]).length,1);
+  assert.doesNotMatch(html,/data-v16-class-family="LPC3-G[1-4]"/);
+  assert.match(html,/LPC3 — TP Ondes et Vibrations/);
+  for(const group of ['G1','G2','G3','G4'])assert.match(html,new RegExp(`>${group}<`),group);
+});
