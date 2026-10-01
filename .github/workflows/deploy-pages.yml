@@ -7,6 +7,7 @@ on:
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
       - 'scripts/build_online_web.py'
+      - 'scripts/build_single_file_release.py'
       - 'scripts/v16_html_transform.py'
       - 'scripts/web-superadmin.patch.part*'
       - 'tests/web/**'
@@ -44,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check web/security-v2.js
-          for file in web/v515-*.js web/v16-*.js; do
+          for file in web/v515-*.js web/v16-*.js web/v30-*.js; do
             node --check "$file"
           done
           for test in tests/web/*.test.cjs; do
@@ -65,6 +66,10 @@ jobs:
           grep -Fq 'data-fst-security-v2="inline"' web/index.html
           grep -Fq 'data-fst-v16-planning-data="inline"' web/index.html
           grep -Fq 'data-fst-v16-planning-ui="inline"' web/index.html
+          grep -Fq 'data-fst-v30-lpc3="inline"' web/index.html
+          grep -Fq 'Présence LPC3' web/index.html
+          grep -Fq 'Salle Onde' web/index.html
+          grep -Fq '08h30' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'challengeAndVerify' web/index.html
           ! grep -Fq './v16-planning-ui.js' web/index.html
