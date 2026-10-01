@@ -44,18 +44,7 @@
   }
 
   function classFamily(cls){
-    return String(cls?.name||'Classe')
-      .replace(/(?:\s+|[-–—]\s*)G[1-4]\s*$/i,'')
-      .trim()||'Classe';
-  }
-
-  function familyHeading(family,familyClasses){
-    const first=(familyClasses||[])[0]||{};
-    const track=String(first.track||'').toUpperCase();
-    const classNumber=Number(first.classNumber||first.class_number||0);
-    const modules=[...new Set((familyClasses||[]).map(c=>String(c.module||'').trim()).filter(Boolean))];
-    if(track==='LPC'&&classNumber===3&&modules.length===1)return `${family} — ${modules[0]}`;
-    return family;
+    return String(cls?.name||'Classe').replace(/\s+G[1-4]\s*$/i,'').trim()||'Classe';
   }
 
   function latestMembership(rows){
@@ -119,7 +108,7 @@
         return memberships.some(m=>String(m.student_id)===String(student.id)&&ids.has(String(m.class_id)));
       }).sort((a,b)=>`${a.lastname||a.last_name||''} ${a.firstname||a.first_name||''}`.localeCompare(`${b.lastname||b.last_name||''} ${b.firstname||b.first_name||''}`,'fr'));
       blocks.push(`<section class="card" data-v16-class-family="${esc(family)}" style="margin-top:18px">
-        <h3 style="margin-top:0">${esc(familyHeading(family,familyClasses))}</h3>
+        <h3 style="margin-top:0">${esc(family)}</h3>
         <div class="table-responsive"><table class="table"><thead><tr><th>Nom</th><th>Prénom</th><th>Email</th><th>Groupe</th><th>${isAdmin?'Affectation':'État'}</th><th>Historique</th></tr></thead><tbody>
         ${familyStudents.length?familyStudents.map(s=>renderStudentRow(s,familyClasses,memberships,isAdmin,classById)).join(''):'<tr><td colspan="6" style="text-align:center">Aucun étudiant.</td></tr>'}
         </tbody></table></div>
