@@ -10,7 +10,7 @@ test('V16 GitHub Pages deploys the approved online build from main', () => {
   const workflow=fs.readFileSync(workflowPath,'utf8');
   for(const marker of [
     'branches: [ main ]',
-    'python scripts/build_online_web.py',
+    'python scripts/build_pages_from_41881.py',
     'pages: write',
     'actions/upload-pages-artifact@v3',
     'actions/deploy-pages@v4',
