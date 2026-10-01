@@ -5057,7 +5057,7 @@ window.FSTAccessControl={isAdmin,canManageRecord,foreignSessions,refreshTeacherN
 </script>
 
 <style data-fst-v17-students="inline">
-.v17-student-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 18px}.v17-family-card{margin:18px 0}.v17-group-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 8px;color:#0a427e}.v17-actions{display:flex;gap:6px;flex-wrap:wrap}.v17-modal{position:fixed;inset:0;background:rgba(0,20,45,.52);z-index:6000;display:none;align-items:center;justify-content:center;padding:18px}.v17-modal.show{display:flex}.v17-modal-box{width:min(680px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.v17-student-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 18px}.v30-program-section{margin:22px 0 34px}.v30-program-section+.v30-program-section{border-top:3px solid var(--primary);padding-top:28px;margin-top:34px}.v30-program-section-title{display:flex;align-items:center;gap:10px;margin:0 0 14px}.v17-family-card{margin:18px 0}.v17-group-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 8px;color:#0a427e}.v17-actions{display:flex;gap:6px;flex-wrap:wrap}.v17-modal{position:fixed;inset:0;background:rgba(0,20,45,.52);z-index:6000;display:none;align-items:center;justify-content:center;padding:18px}.v17-modal.show{display:flex}.v17-modal-box{width:min(680px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.28)}
 @media(max-width:768px){.v17-actions{width:100%}.v17-actions .btn{flex:1}.v17-modal{align-items:flex-end;padding:0}.v17-modal-box{border-radius:22px 22px 0 0;max-height:88dvh}}
 </style>
 <script data-fst-v17-attached-fix="inline">
@@ -5115,22 +5115,34 @@ window.v17RenderStudents=async function(){
   const byFamily=new Map();
   for(const c of classes){const f=classFamilyV17(c);if(!byFamily.has(f))byFamily.set(f,[]);byFamily.get(f).push(c);}
   let html=`<div class="v17-student-summary"><span class="badge badge-info">${students.length} étudiant(s)</span>${isAdminMode()?'<span class="badge badge-present">Mode Admin : ajout, modification et suppression définitive autorisés</span>':'<span class="badge badge-present">Enseignant : ajout et affectation autorisés vers vos groupes affectés</span><span class="badge badge-justifie">Identité et suppression : Admin uniquement</span>'}</div>`;
-  for(const [family,familyClasses] of byFamily){
-    html+=`<section class="card v17-family-card"><h3 style="margin-top:0"><i class="fas fa-user-graduate"></i> ${esc(family)}</h3>`;
-    for(const cls of familyClasses){
-      const rows=students.filter(st=>String(st.classId)===String(cls.id));
-      html+=`<div class="v17-group-title"><strong>G${classGroupV17(cls)}</strong><span class="badge badge-info">${rows.length}</span></div><div class="table-responsive"><table class="table"><thead><tr><th>Nom</th><th>Prénom</th><th>Email</th><th>Classe / Groupe</th><th>Actions</th></tr></thead><tbody>`;
-      if(!rows.length)html+='<tr><td colspan="5" style="text-align:center;color:var(--gray)">Aucun étudiant.</td></tr>';
-      for(const st of rows){
-        const actions=isAdminMode()
-          ?`<td><div class="v17-actions"><button type="button" class="btn btn-sm btn-info" onclick="v17EditStudent('${esc(st.id)}')"><i class="fas fa-pen"></i> Modifier</button><button type="button" class="btn btn-sm btn-danger" onclick="v17DeleteStudentPermanently('${esc(st.id)}')"><i class="fas fa-trash"></i> Supprimer définitivement</button></div></td>`
-          :`<td><div class="v17-actions"><button type="button" class="btn btn-sm btn-primary" onclick="v30AssignStudent('${esc(st.id)}')"><i class="fas fa-user-group"></i> Affecter</button></div></td>`;
-        html+=`<tr><td>${esc(st.lastname||'')}</td><td>${esc(st.firstname||'')}</td><td>${esc(st.email||'—')}</td><td>${esc(cls.name||'')}</td>${actions}</tr>`;
+  const familyEntries=[...byFamily.entries()];
+  const lpc3Entries=familyEntries.filter(([family])=>family==='LPC3 — TP Ondes et Vibrations');
+  const mpiPcEntries=familyEntries.filter(([family])=>family!=='LPC3 — TP Ondes et Vibrations');
+  function renderProgramSection(entries,title,key){
+    if(!entries.length)return '';
+    let section=`<section class="v30-program-section" data-v30-program-section="${esc(key)}"><h2 class="v30-program-section-title"><i class="fas fa-layer-group"></i> ${esc(title)}</h2>`;
+    for(const [family,familyClasses] of entries){
+      const familyHeading=family===title?'':`<h3 style="margin-top:0"><i class="fas fa-user-graduate"></i> ${esc(family)}</h3>`;
+      section+=`<div class="card v17-family-card">${familyHeading}`;
+      for(const cls of familyClasses){
+        const rows=students.filter(st=>String(st.classId)===String(cls.id));
+        section+=`<div class="v17-group-title"><strong>G${classGroupV17(cls)}</strong><span class="badge badge-info">${rows.length}</span></div><div class="table-responsive"><table class="table"><thead><tr><th>Nom</th><th>Prénom</th><th>Email</th><th>Classe / Groupe</th><th>Actions</th></tr></thead><tbody>`;
+        if(!rows.length)section+='<tr><td colspan="5" style="text-align:center;color:var(--gray)">Aucun étudiant.</td></tr>';
+        for(const st of rows){
+          const actions=isAdminMode()
+            ?`<td><div class="v17-actions"><button type="button" class="btn btn-sm btn-info" onclick="v17EditStudent('${esc(st.id)}')"><i class="fas fa-pen"></i> Modifier</button><button type="button" class="btn btn-sm btn-danger" onclick="v17DeleteStudentPermanently('${esc(st.id)}')"><i class="fas fa-trash"></i> Supprimer définitivement</button></div></td>`
+            :`<td><div class="v17-actions"><button type="button" class="btn btn-sm btn-primary" onclick="v30AssignStudent('${esc(st.id)}')"><i class="fas fa-user-group"></i> Affecter</button></div></td>`;
+          section+=`<tr><td>${esc(st.lastname||'')}</td><td>${esc(st.firstname||'')}</td><td>${esc(st.email||'—')}</td><td>${esc(cls.name||'')}</td>${actions}</tr>`;
+        }
+        section+='</tbody></table></div>';
       }
-      html+='</tbody></table></div>';
+      section+='</div>';
     }
-    html+='</section>';
+    section+='</section>';
+    return section;
   }
+  html+=renderProgramSection(mpiPcEntries,'MPI1 / PC1 — TP Physique','mpi1-pc1');
+  html+=renderProgramSection(lpc3Entries,'LPC3 — TP Ondes et Vibrations','lpc3');
   root.innerHTML=html||'<div class="alert alert-info">Aucun étudiant.</div>';
   return true;
 };
