@@ -26,6 +26,7 @@ v16_xlsx_path = root / 'web' / 'v16-planning-xlsx.js'
 v16_editor_path = root / 'web' / 'v16-planning-editor.js'
 v16_notices_path = root / 'web' / 'v16-dashboard-notices.js'
 v16_ui_path = root / 'web' / 'v16-planning-ui.js'
+v30_lpc3_path = root / 'web' / 'v30-lpc3.js'
 statistics_path = root / 'web' / 'statistics.js'
 report_path = root / 'web' / 'report-pdf.js'
 vendor = root / 'web' / 'vendor'
@@ -48,7 +49,7 @@ external_modules = [
     './v16-planning-data.js', './v16-planning-state.js', './v16-teacher-permutations.js',
     './v16-student-groups.js', './v16-timetable-presence-link.js', './vendor/xlsx.full.min.js',
     './v16-planning-export-model.js', './v16-planning-pdf.js', './v16-planning-xlsx.js',
-    './v16-planning-editor.js', './v16-dashboard-notices.js', './v16-planning-ui.js'
+    './v16-planning-editor.js', './v16-dashboard-notices.js', './v16-planning-ui.js', './v30-lpc3.js'
 ]
 for src in external_modules:
     html = html.replace(f'<script src="{src}"></script>', '')
@@ -79,6 +80,7 @@ v16_xlsx = v16_xlsx_path.read_text(encoding='utf-8').strip()
 v16_editor = v16_editor_path.read_text(encoding='utf-8').strip()
 v16_notices = v16_notices_path.read_text(encoding='utf-8').strip()
 v16_ui = v16_ui_path.read_text(encoding='utf-8').strip()
+v30_lpc3 = v30_lpc3_path.read_text(encoding='utf-8').strip()
 statistics = statistics_path.read_text(encoding='utf-8').strip()
 report = report_path.read_text(encoding='utf-8').strip()
 
@@ -107,6 +109,7 @@ inline = (
     '<script data-fst-v16-planning-editor="inline">\n' + v16_editor + '\n</script>\n'
     '<script data-fst-v16-dashboard-notices="inline">\n' + v16_notices + '\n</script>\n'
     '<script data-fst-v16-planning-ui="inline">\n' + v16_ui + '\n</script>\n'
+    '<script data-fst-v30-lpc3="inline">\n' + v30_lpc3 + '\n</script>\n'
     '<script data-fst-statistics="inline">\n' + statistics + '\n</script>\n'
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
 )
@@ -127,7 +130,8 @@ for marker in [
     'data-fst-v16-teacher-permutations="inline"', 'data-fst-v16-student-groups="inline"',
     'data-fst-v16-timetable-presence-link="inline"', 'data-fst-v16-planning-export-model="inline"',
     'data-fst-v16-planning-pdf="inline"', 'data-fst-v16-planning-xlsx="inline"',
-    'data-fst-v16-planning-editor="inline"', 'data-fst-v16-dashboard-notices="inline"', 'data-fst-v16-planning-ui="inline"'
+    'data-fst-v16-planning-editor="inline"', 'data-fst-v16-dashboard-notices="inline"', 'data-fst-v16-planning-ui="inline"',
+    'data-fst-v30-lpc3="inline"', 'V30LPC3', 'Présence LPC3', 'Salle Onde', '08h30'
 ]:
     assert marker in html, marker
 for src in external_modules:
