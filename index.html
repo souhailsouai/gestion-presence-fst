@@ -5072,7 +5072,7 @@ function isAdminMode(){return Boolean(currentTeacher?.isAdmin&&currentTeacher?.a
 function classByIdV17(id){return (data?.classes||[]).find(c=>String(c.id)===String(id));}
 function classFamilyV17(cls){
   const name=String(cls?.name||'');
-  if(/^LPC3$/i.test(name))return 'LPC3 — TP Ondes et Vibrations';
+  if(/^LPC3(?:-G[1-4])?$/i.test(name))return 'LPC3 — TP Ondes et Vibrations';
   return name.replace(/-G[1-6]$/i,'')||'Classe';
 }
 function classGroupV17(cls){return Number(cls?.groupNumber||cls?.group_number||String(cls?.name||'').match(/-G([1-6])$/i)?.[1]||0);}
@@ -5081,11 +5081,11 @@ function sortedClassesV17(){
   return [...(data?.classes||[])].filter(c=>{
     const name=String(c.name||'');
     if(/^(MPI1-[A-E]|PC1-A)-G[1-6]$/i.test(name))return true;
-    return /^LPC3$/i.test(name)
+    return /^LPC3-G[1-4]$/i.test(name)
       && String(c.teacherId||'')===uid
       && String(c.module||'')==='TP Ondes et Vibrations';
   }).sort((a,b)=>{
-    const aL=/^LPC3$/i.test(String(a.name||'')),bL=/^LPC3$/i.test(String(b.name||''));
+    const aL=/^LPC3-G[1-4]$/i.test(String(a.name||'')),bL=/^LPC3-G[1-4]$/i.test(String(b.name||''));
     if(aL!==bL)return aL?1:-1;
     return String(a.name).localeCompare(String(b.name),'fr',{numeric:true});
   });
@@ -5217,7 +5217,14 @@ window.v30RefreshStudentClassOptions=async function(){
         .is('deleted_at',null);
       for(const s of sessions||[])allowedIds.add(String(s.class_id));
     }
-    allowed=allowed.filter(c=>allowedIds.has(String(c.id)));
+    allowed=allowed.filter(c=>
+      allowedIds.has(String(c.id))
+      || (
+        /^LPC3-G[1-4]$/i.test(String(c.name||''))
+        && String(c.teacherId||'')===String(currentTeacher.id||'')
+        && String(c.module||'')==='TP Ondes et Vibrations'
+      )
+    );
   }
   select.innerHTML='<option value="">Sélectionner une classe / groupe</option>'+
     allowed.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
