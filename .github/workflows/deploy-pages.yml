@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
+      - 'index.html'
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
       - 'scripts/build_pages_from_41881.py'
