@@ -54,6 +54,9 @@ jobs:
       - name: Build approved V16 frontend
         run: python scripts/build_online_web.py
 
+      - name: Build standalone Web release
+        run: python scripts/build_single_file_release.py
+
       - name: Verify Pages payload
         shell: bash
         run: |
