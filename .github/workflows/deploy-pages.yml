@@ -63,6 +63,9 @@ jobs:
           grep -Fq 'data-fst-security-v2="inline"' web/index.html
           grep -Fq 'data-fst-v16-planning-data="inline"' web/index.html
           grep -Fq 'data-fst-v16-planning-ui="inline"' web/index.html
+          grep -Fq './vendor/xlsx.full.min.js' web/index.html
+          ! grep -Fq 'data-fst-xlsx-engine="inline"' web/index.html
+          ! grep -Fq 'Km(e){var r=e.replace' web/index.html
           grep -Fq './v30-teacher-attendance-fix.js' web/index.html
           grep -Fq './v30-lpc3.js' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
