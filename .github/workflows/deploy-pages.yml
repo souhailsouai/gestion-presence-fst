@@ -6,8 +6,7 @@ on:
     paths:
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
-      - 'scripts/build_online_web.py'
-      - 'scripts/build_single_file_release.py'
+      - 'scripts/build_pages_from_41881.py'
       - 'scripts/v16_html_transform.py'
       - 'scripts/web-superadmin.patch.part*'
       - 'tests/web/**'
@@ -52,11 +51,8 @@ jobs:
             node "$test"
           done
 
-      - name: Build approved V16 frontend
-        run: python scripts/build_online_web.py
-
-      - name: Build standalone Web release
-        run: python scripts/build_single_file_release.py
+      - name: Build Pages from locked 41881 baseline
+        run: python scripts/build_pages_from_41881.py
 
       - name: Verify Pages payload
         shell: bash
@@ -66,13 +62,10 @@ jobs:
           grep -Fq 'data-fst-security-v2="inline"' web/index.html
           grep -Fq 'data-fst-v16-planning-data="inline"' web/index.html
           grep -Fq 'data-fst-v16-planning-ui="inline"' web/index.html
-          grep -Fq 'data-fst-v30-lpc3="inline"' web/index.html
-          grep -Fq 'Présence LPC3' web/index.html
-          grep -Fq 'Salle Onde' web/index.html
-          grep -Fq '08h30' web/index.html
+          grep -Fq './v30-teacher-attendance-fix.js' web/index.html
+          grep -Fq './v30-lpc3.js' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'challengeAndVerify' web/index.html
-          ! grep -Fq './v16-planning-ui.js' web/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
