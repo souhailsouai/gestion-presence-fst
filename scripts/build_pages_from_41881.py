@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 root = Path(__file__).resolve().parents[1]
 source = root / 'index.html'
@@ -6,6 +7,21 @@ web = root / 'web'
 out = web / 'index.html'
 
 html = source.read_text(encoding='utf-8')
+
+# Keep the locked 41881 baseline untouched, but externalize the large SheetJS
+# engine in the Pages payload. This prevents browser HTML recovery from ever
+# rendering minified XLSX source as visible application content.
+xlsx_tag = '<script src="./vendor/xlsx.full.min.js"></script>'
+xlsx_pattern = r'<script data-fst-xlsx-engine="inline">.*?</script>'
+html, xlsx_replacements = re.subn(
+    xlsx_pattern,
+    xlsx_tag,
+    html,
+    count=1,
+    flags=re.S,
+)
+assert xlsx_replacements == 1, 'Expected exactly one inline XLSX engine in locked baseline'
+
 tags = [
     '<script src="./v30-teacher-attendance-fix.js"></script>',
     '<script src="./v30-lpc3.js"></script>',
@@ -21,7 +37,11 @@ for marker in [
     'v30-lpc3.js',
     'presence-session',
     'saveAttendance',
+    './vendor/xlsx.full.min.js',
 ]:
     assert marker in html, marker
+
+assert 'data-fst-xlsx-engine="inline"' not in html
+assert 'Km(e){var r=e.replace' not in html
 
 print(out)
