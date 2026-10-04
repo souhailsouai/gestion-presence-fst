@@ -83,6 +83,7 @@
   function sessionRow(x){return {id:String(x.id),teacher_id:currentTeacher.id,class_id:String(x.classId),session_date:x.date,start_time:x.start,end_time:x.end,completed_at:x.completedAt||null};}
   function attendanceRow(x){return {id:String(x.id),teacher_id:currentTeacher.id,session_id:String(x.sessionId),student_id:String(x.studentId),status:x.status||'present',comment:x.comment||'',grade:x.grade==null?null:Number(x.grade),grade_updated_at:x.gradeUpdatedAt||null,grade_origin:x.gradeOrigin||null,manual_grade_backup:x.manualGradeBackup==null?null:Number(x.manualGradeBackup)};}
   async function upsert(table,rows){ if(!requireOnline())return false; const {error}=await supabaseClient.from(table).upsert(rows); if(error){showAlert('Enregistrement impossible : '+error.message,'danger');return false;}return true; }
+  async function insertRows(table,rows){ if(!requireOnline())return false; const {error}=await supabaseClient.from(table).insert(rows); if(error){showAlert('Ajout impossible : '+error.message,'danger');return false;}return true; }
   async function remove(table,id){ if(!requireOnline())return false; const {error}=await supabaseClient.from(table).delete().eq('id',id); if(error){showAlert('Suppression impossible : '+error.message,'danger');return false;}return true; }
 
   window.addClass=async function(){
@@ -94,7 +95,7 @@
   window.addStudent=async function(){
     if(!requireOnline())return; const lastname=document.getElementById('student-lastname').value.trim(),firstname=document.getElementById('student-firstname').value.trim(),classId=document.getElementById('student-class').value,email=document.getElementById('student-email').value.trim();
     if(!lastname||!firstname||!classId)return showAlert('Veuillez remplir tous les champs obligatoires','danger');
-    const x={id:crypto.randomUUID(),lastname,firstname,email,classId,createdAt:new Date().toISOString()}; if(!await upsert('students',[studentRow(x)]))return; await refreshAuthoritativeState(); showAlert('Étudiant ajouté avec succès','success');
+    const x={id:crypto.randomUUID(),lastname,firstname,email,classId,createdAt:new Date().toISOString()}; if(!await insertRows('students',[studentRow(x)]))return; await refreshAuthoritativeState(); showAlert('Étudiant ajouté avec succès','success');
   };
   window.createSession=async function(){
     if(!requireOnline())return; const date=document.getElementById('session-date').value,start=document.getElementById('session-start').value,end=document.getElementById('session-end').value,classId=document.getElementById('session-class').value;

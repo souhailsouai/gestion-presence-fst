@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const modulePath=path.join(__dirname,'../../web/session-permissions.js');
-function load(){assert.equal(fs.existsSync(modulePath),true);return require(modulePath);}
+function load(){assert.equal(fs.existsSync(modulePath),true);delete require.cache[require.resolve(modulePath)];return require(modulePath);}
 
 const teacher={id:'t1',isAdmin:false};
 const admin={id:'a1',isAdmin:true};
@@ -18,10 +18,10 @@ test('teacher can edit attendance comment and grade before completion',()=>{
   assert.equal(P.canEditGrade(teacher,activeOwn),true);
 });
 
-test('teacher can edit only grade after completion',()=>{
+test('teacher keeps attendance comment and grade edit rights on own completed session',()=>{
   const P=load();
-  assert.equal(P.canEditAttendance(teacher,doneOwn),false);
-  assert.equal(P.canEditComment(teacher,doneOwn),false);
+  assert.equal(P.canEditAttendance(teacher,doneOwn),true);
+  assert.equal(P.canEditComment(teacher,doneOwn),true);
   assert.equal(P.canEditGrade(teacher,doneOwn),true);
 });
 
