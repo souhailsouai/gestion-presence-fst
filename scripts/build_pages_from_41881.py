@@ -36,6 +36,8 @@ visible_labels = (
     ('Erreur de chargement : modules V16 indisponibles.', 'Erreur de chargement : modules indisponibles.'),
     ('Mode de fonctionnement V20', 'Mode de fonctionnement'),
     ('Modification manuelle des enseignants \u2014 V20', 'Modification manuelle des enseignants'),
+    ('Application TEST \u2192 R\u00c9EL d\u00e9sactiv\u00e9e en V20.', 'Application TEST \u2192 R\u00c9EL d\u00e9sactiv\u00e9e.'),
+    ('Les noms affich\u00e9s proviennent uniquement des affectations V21.', 'Les noms affich\u00e9s proviennent uniquement des affectations officielles.'),
 )
 for previous_label, display_label in visible_labels:
     assert previous_label in html, 'Expected legacy display label: ' + previous_label
