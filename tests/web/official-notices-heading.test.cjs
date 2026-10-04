@@ -20,11 +20,22 @@ function buildPagesCandidate() {
   }
 }
 
+const html = buildPagesCandidate();
+
 test('generated Pages official notices heading has no application version suffix', () => {
-  const html = buildPagesCandidate();
   const heading = /Avis\s+officiels\s*(?:\u2014|\u2013|-|&mdash;|&ndash;)\s*(?:V\s*\d+(?:\.\d+)*|Version\s+\d+(?:\.\d+)*)/gi;
   const matches = [...html.matchAll(heading)];
   const excerpts = matches.map(m => html.slice(Math.max(0, m.index - 160), m.index + m[0].length + 160));
   assert.equal(matches.length, 0, 'Version remains in generated notices heading: ' + JSON.stringify(excerpts));
-  assert.match(html, /Avis\s+officiels/, 'The notices section title must remain present');
+  assert.match(html, /<h3><i class="fas fa-bullhorn"><\/i> Avis officiels<\/h3>/);
+});
+
+test('removing the notices version preserves the icon and all official notice content', () => {
+  const source = fs.readFileSync('index.html', 'utf8').replace(/\r\n/g, '\n');
+  const section = /<section\b[^>]*\bid="v21-official-notices"[^>]*>[\s\S]*?<\/section>/;
+  const original = source.match(section);
+  const delivered = html.replace(/\r\n/g, '\n').match(section);
+  assert.ok(original, 'Original official notices block must exist');
+  assert.ok(delivered, 'Delivered official notices block must not be removed');
+  assert.equal(delivered[0], original[0].replace('Avis officiels \u2014 V30</h3>', 'Avis officiels</h3>'));
 });
