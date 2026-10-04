@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 
 from v16_html_transform import apply_v16_shell
+from fst_shell_transform import apply_fst_shell
 
 root = Path(__file__).resolve().parents[1]
 web = root / 'web'
@@ -71,6 +72,7 @@ tags = [
 for tag in tags:
     if tag not in html:
         html = html.replace('</body>', f'\n{tag}\n</body>', 1)
+html = apply_fst_shell(html, target='online', root=root)
 out.write_text(html, encoding='utf-8')
 
 markers = [
@@ -80,8 +82,9 @@ markers = [
     '2026/2027',
     'data-v16-navigation="true"',
     'id="planning-v16" class="tab-content"',
-    'data-fst-mobile-css="inline"',
-    'data-fst-mobile-js="inline"',
+    'data-fst-shell-css="inline"',
+    'data-fst-shell-js="inline"',
+    'data-fst-auth-compat="inline"',
     *tags,
 ]
 for marker in markers:
