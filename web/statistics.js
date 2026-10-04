@@ -10,12 +10,22 @@
   function inDateRange(date,from,to){return (!from||date>=from)&&(!to||date<=to);}
   function recognized(a){return !a?.gradeOnly&&STATUS_KEYS.includes(a?.status);}
   function avg(values){return values.length?round2(values.reduce((a,b)=>a+b,0)/values.length):null;}
+  function fallbackSummary(rows){
+    const list=(rows||[]).filter(recognized);
+    const present=list.filter(x=>x.status==='present').length;
+    const late=list.filter(x=>x.status==='retard').length;
+    const absent=list.filter(x=>x.status==='absent').length;
+    const justified=list.filter(x=>x.status==='justifie').length;
+    const total=present+late+absent+justified;
+    const presenceCount=present+late,absenceCount=absent+justified;
+    return {present,late,absent,justified,presenceCount,absenceCount,totalAbsences:absenceCount,countedSessions:total,presencePercent:total?100*presenceCount/total:0,absencePercent:total?100*absenceCount/total:0};
+  }
   function buildBreakdown(items,keyOf,labelOf){
     const map=new Map();
     for(const item of items){const key=String(keyOf(item)||'');if(!key)continue;if(!map.has(key))map.set(key,{key,label:labelOf(item,key),rows:[]});map.get(key).rows.push(item);}
     return [...map.values()].map(group=>{
       const counted=group.rows.filter(recognized);const grades=group.rows.map(x=>x.grade).filter(v=>v!==null&&v!==undefined&&Number.isFinite(Number(v))).map(Number);
-      return {key:group.key,label:group.label,count:counted.length,presenceRate:counted.length?round2(100*counted.filter(x=>x.status==='present').length/counted.length):0,averageGrade:avg(grades)};
+      const summary=(root?.FSTV31Domain?.summarizeAttendance||fallbackSummary)(counted);return {key:group.key,label:group.label,count:counted.length,presenceRate:round2(summary.presencePercent),absenceRate:round2(summary.absencePercent),averageGrade:avg(grades)};
     }).sort((a,b)=>a.label.localeCompare(b.label,'fr'));
   }
   function computeStatistics(source,filters,user){
@@ -26,16 +36,16 @@
     const sessionIds=new Set(sessions.map(s=>String(s.id))),classIds=new Set(sessions.map(s=>String(s.classId)));
     const students=allStudents.filter(st=>classIds.has(String(st.classId))&&(!effectiveTeacherId||!st.teacherId||String(st.teacherId)===effectiveTeacherId));
     const attendanceAll=allAttendance.filter(a=>sessionIds.has(String(a.sessionId))),countedAttendance=attendanceAll.filter(recognized);
-    const statusCounts={present:0,absent:0,retard:0,justifie:0};countedAttendance.forEach(a=>statusCounts[a.status]++);
+    const statusCounts={present:0,absent:0,retard:0,justifie:0};countedAttendance.forEach(a=>statusCounts[a.status]++);const attendanceSummary=(root?.FSTV31Domain?.summarizeAttendance||fallbackSummary)(countedAttendance);
     const grades=attendanceAll.map(a=>a.grade).filter(v=>v!==null&&v!==undefined&&Number.isFinite(Number(v))).map(Number);
-    const timeline=sessions.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(s=>{const rows=countedAttendance.filter(a=>String(a.sessionId)===String(s.id)),present=rows.filter(a=>a.status==='present').length;return {sessionId:s.id,date:s.date,presenceRate:rows.length?round2(present*100/rows.length):0,total:rows.length};});
+    const timeline=sessions.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(s=>{const rows=countedAttendance.filter(a=>String(a.sessionId)===String(s.id)),summary=(root?.FSTV31Domain?.summarizeAttendance||fallbackSummary)(rows);return {sessionId:s.id,date:s.date,presenceRate:round2(summary.presencePercent),absenceRate:round2(summary.absencePercent),total:rows.length};});
     const teacherName=id=>root?.FSTAccessControl?.teacherNameFor?.(id)||String(id||'Enseignant'),className=id=>classes.find(c=>String(c.id)===String(id))?.name||String(id||'Classe');
     const byTeacher=buildBreakdown(countedAttendance,a=>sessions.find(s=>String(s.id)===String(a.sessionId))?.teacherId,(a,key)=>teacherName(key));
     const byClass=buildBreakdown(countedAttendance,a=>sessions.find(s=>String(s.id)===String(a.sessionId))?.classId,(a,key)=>className(key));
     const byModule=buildBreakdown(countedAttendance,a=>{const s=sessions.find(x=>String(x.id)===String(a.sessionId));return classes.find(c=>String(c.id)===String(s?.classId))?.module||'—';},(a,key)=>key);
     const bucketDefs=[[0,5,'0–4.99'],[5,10,'5–9.99'],[10,12,'10–11.99'],[12,14,'12–13.99'],[14,16,'14–15.99'],[16,20.000001,'16–20']];
     const gradeBuckets=bucketDefs.map(([min,max,label])=>({label,count:grades.filter(g=>g>=min&&g<max).length}));
-    return {sessions:sessions.length,students:students.length,attendance:countedAttendance.length,statusCounts,averageGrade:avg(grades),timeline,grades,gradeBuckets,byTeacher,byClass,byModule};
+    return {sessions:sessions.length,students:students.length,attendance:countedAttendance.length,statusCounts,attendanceSummary,averageGrade:avg(grades),timeline,grades,gradeBuckets,byTeacher,byClass,byModule};
   }
   function buildStatusChartSvg(stats){const vals=STATUS_KEYS.map(k=>stats.statusCounts?.[k]||0),max=Math.max(1,...vals),base=175,barW=72,gap=48;return `<svg viewBox="0 0 520 220" role="img" aria-label="Répartition des présences" style="width:100%;height:auto;color:#163a66"><line x1="30" y1="${base}" x2="500" y2="${base}" stroke="currentColor" opacity=".25"/>${vals.map((v,i)=>{const bh=Math.round(120*v/max),x=45+i*(barW+gap),y=base-bh;return `<g><rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="6" fill="currentColor" opacity=".75"/><text x="${x+barW/2}" y="${y-8}" text-anchor="middle" font-size="13">${v}</text><text x="${x+barW/2}" y="${base+24}" text-anchor="middle" font-size="12">${STATUS_LABELS[STATUS_KEYS[i]]}</text></g>`;}).join('')}</svg>`;}
   function buildGradeChartSvg(stats){const rows=stats.gradeBuckets||[],max=Math.max(1,...rows.map(x=>x.count)),base=175,barW=58,gap=22;return `<svg viewBox="0 0 520 220" role="img" aria-label="Répartition des notes" style="width:100%;height:auto;color:#163a66"><line x1="20" y1="${base}" x2="500" y2="${base}" stroke="currentColor" opacity=".25"/>${rows.map((r,i)=>{const bh=Math.round(120*r.count/max),x=25+i*(barW+gap),y=base-bh;return `<g><rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="5" fill="currentColor" opacity=".75"/><text x="${x+barW/2}" y="${y-7}" text-anchor="middle" font-size="12">${r.count}</text><text x="${x+barW/2}" y="${base+22}" text-anchor="middle" font-size="10">${r.label}</text></g>`;}).join('')}</svg>`;}
