@@ -274,6 +274,17 @@
         const record = typeof ensureAttendanceRecord === 'function'
           ? ensureAttendanceRecord(sessionId, student.id)
           : (data.attendance || []).find((item) => String(item.sessionId) === String(sessionId) && String(item.studentId) === String(student.id));
+        const rule=window.FSTV31Domain?.applyAttendanceGradeRule?.({
+          status:record?.status||'present',
+          grade:record?.grade,
+          gradeOrigin:record?.gradeOrigin,
+          manualGradeBackup:record?.manualGradeBackup
+        });
+        if(rule?.valid){
+          record.grade=rule.grade;
+          record.gradeOrigin=rule.gradeOrigin;
+          record.manualGradeBackup=rule.manualGradeBackup;
+        }
         return {
           student_id: String(student.id),
           status: record?.status || 'present',
