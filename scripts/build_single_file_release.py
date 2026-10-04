@@ -1,6 +1,7 @@
 from pathlib import Path
 from urllib.request import urlopen
 import re
+from fst_shell_transform import apply_fst_shell
 
 root = Path(__file__).resolve().parents[1]
 html_path = root / 'web' / 'index.html'
@@ -130,6 +131,7 @@ inline = (
     '<script data-fst-pdf-reports="inline">\n' + report + '\n</script>\n'
 )
 html = html.replace('</body>', inline + '</body>', 1)
+html = apply_fst_shell(html, target='standalone', root=root)
 html_path.write_text(html, encoding='utf-8')
 
 for marker in [
