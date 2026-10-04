@@ -11,7 +11,8 @@ function gitBlobSha(content){
 
 test('MPI-PC1 baseline remains exactly commit 41881 index blob',()=>{
   const source=fs.readFileSync('index.html');
-  assert.equal(gitBlobSha(source),'216fa2171551ca5ffb8a785b2801dba1efad7e0c');
+  const normalized=Buffer.from(source.toString('utf8').replace(/\r\n/g,'\n'),'utf8');
+  assert.equal(gitBlobSha(normalized),'216fa2171551ca5ffb8a785b2801dba1efad7e0c');
 });
 
 test('teacher attendance fix is isolated from baseline',()=>{
