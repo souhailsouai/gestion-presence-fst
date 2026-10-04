@@ -7,6 +7,7 @@ html_path = root / 'web' / 'index.html'
 v31_config_path = root / 'web' / 'v31-config.js'
 v31_domain_path = root / 'web' / 'v31-domain.js'
 v31_tracking_xlsx_path = root / 'web' / 'v31-tracking-xlsx.js'
+v31_version_ui_path = root / 'web' / 'v31-version-ui.js'
 runtime_path = root / 'web' / 'online-runtime.js'
 active_role_path = root / 'web' / 'v16-active-role.js'
 test_mode_path = root / 'web' / 'v16-test-mode.js'
@@ -52,7 +53,7 @@ external_modules = [
     './v515-planning-core.js', './v515-planning-2026-2027.js',
     './v16-planning-data.js', './v16-planning-state.js', './v16-teacher-permutations.js',
     './v16-student-groups.js', './v16-timetable-presence-link.js', './vendor/xlsx.full.min.js',
-    './v16-planning-export-model.js', './v16-planning-pdf.js', './v16-planning-xlsx.js', './v31-tracking-xlsx.js',
+    './v16-planning-export-model.js', './v16-planning-pdf.js', './v16-planning-xlsx.js', './v31-tracking-xlsx.js', './v31-version-ui.js',
     './v16-planning-editor.js', './v16-dashboard-notices.js', './v16-planning-ui.js', './v30-lpc3.js'
 ]
 for src in external_modules:
@@ -65,6 +66,7 @@ xlsx_engine = (vendor / 'xlsx.full.min.js').read_text(encoding='utf-8').strip()
 v31_config = v31_config_path.read_text(encoding='utf-8').strip()
 v31_domain = v31_domain_path.read_text(encoding='utf-8').strip()
 v31_tracking_xlsx = v31_tracking_xlsx_path.read_text(encoding='utf-8').strip()
+v31_version_ui = v31_version_ui_path.read_text(encoding='utf-8').strip()
 runtime = runtime_path.read_text(encoding='utf-8').strip()
 active_role = active_role_path.read_text(encoding='utf-8').strip()
 test_mode = test_mode_path.read_text(encoding='utf-8').strip()
@@ -116,6 +118,7 @@ inline = (
     '<script data-fst-v16-planning-pdf="inline">\n' + v16_pdf + '\n</script>\n'
     '<script data-fst-v16-planning-xlsx="inline">\n' + v16_xlsx + '\n</script>\n'
     '<script data-fst-v31-tracking-xlsx="inline">\n' + v31_tracking_xlsx + '\n</script>\n'
+    '<script data-fst-v31-version-ui="inline">\n' + v31_version_ui + '\n</script>\n'
     '<script data-fst-v16-planning-editor="inline">\n' + v16_editor + '\n</script>\n'
     '<script data-fst-v16-dashboard-notices="inline">\n' + v16_notices + '\n</script>\n'
     '<script data-fst-v16-planning-ui="inline">\n' + v16_ui + '\n</script>\n'
@@ -127,7 +130,7 @@ html = html.replace('</body>', inline + '</body>', 1)
 html_path.write_text(html, encoding='utf-8')
 
 for marker in [
-    'FSTV31Config', 'FSTV31Domain', 'FSTV31TrackingXlsx', 'window.FSTOnlineRuntime=', 'V16ActiveRole', 'V16TestMode', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
+    'FSTV31Config', 'FSTV31Domain', 'FSTV31TrackingXlsx', 'FSTV31VersionUi', 'window.FSTOnlineRuntime=', 'V16ActiveRole', 'V16TestMode', 'window.FSTSecurityV2', 'pin-login', 'save_attendance_sheet',
     'challengeAndVerify', 'VERSION_CONFLICT', 'Connexion Internet requise',
     'data-fst-pdf-engine="inline"', 'data-fst-xlsx-engine="inline"', 'data-fst-v16-active-role="inline"', 'data-fst-v16-test-mode="inline"', 'data-fst-security-v2="inline"',
     'window.FSTAccessControl=', 'grade_only', 'FSTSessionPermissions',
