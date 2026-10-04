@@ -18,6 +18,22 @@ html = html.replace(
     1,
 )
 
+# Change display text only, not V30/V31 module names, data attributes or APIs.
+# Apply to the whole source: inline renderers recreate the student/planning
+# headings after navigation, so editing only static heading elements is not enough.
+visible_labels = (
+    ('Gestion Pr\u00e9sence FST V30 \u2014 2026/2027', 'Gestion Pr\u00e9sence FST \u2014 2026/2027'),
+    ('Gestion de Pr\u00e9sence des TP \u2014 V30', 'Gestion de Pr\u00e9sence des TP'),
+    ('\u00c9tudiants \u2014 V30', '\u00c9tudiants'),
+    ('S\u00e9ances \u2014 V30', 'S\u00e9ances'),
+    ('Planning des s\u00e9ances \u2014 V30', 'Planning des s\u00e9ances'),
+    ('Configuration des intervenants \u2014 V30', 'Configuration des intervenants'),
+    ('Source officielle V30 :', 'Source officielle :'),
+)
+for previous_label, display_label in visible_labels:
+    assert previous_label in html, 'Expected legacy display label: ' + previous_label
+    html = html.replace(previous_label, display_label)
+
 # Keep the locked 41881 baseline untouched, but externalize the large SheetJS
 # engine in the Pages payload. This prevents browser HTML recovery from ever
 # rendering minified XLSX source as visible application content.
