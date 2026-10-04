@@ -14,6 +14,8 @@ const SCHEDULE=[
   ['2026-11-30','LPC3-G1'],['2026-12-03','LPC3-G4'],['2026-12-07','LPC3-G3'],['2026-12-10','LPC3-G2']
 ];
 const state={classes:[],students:[],sessions:[],attendance:[],selectedSessionId:''};
+let readEpoch=0;
+let inFlight=null;
 
 function teacher(){
   try{return typeof currentTeacher!=='undefined'?currentTeacher:(root.currentTeacher||null);}
@@ -87,14 +89,14 @@ function ensureScaffold(){
         '<button id="lpc3-refresh" class="btn btn-info" type="button"><i class="fas fa-rotate"></i> Actualiser</button></div>'+
         '<div id="lpc3-sheet"></div></section>'+
       '<section class="lpc3-card" style="margin-top:14px"><h3>Suivi des séances</h3><div id="lpc3-report"></div></section>';
-    var firstContent=host.querySelector('.tab-content');
-    if(firstContent)host.appendChild(tab);else host.appendChild(tab);
+    (host.querySelector('#fst-main')||host.querySelector('.content')||host).appendChild(tab);
     tab.querySelector('#lpc3-session').addEventListener('change',function(){state.selectedSessionId=this.value;renderSheet();});
     tab.querySelector('#lpc3-refresh').addEventListener('click',function(){void refresh();});
   }
 }
 
 function ensureMobileEntry(){
+  if(root.FSTShell)return null;
   var panel=document.querySelector('#mobile-more-sheet .mobile-more-panel,.mobile-more-panel');
   if(!panel)return null;
   var button=document.getElementById('mobile-lpc3-link');
@@ -123,7 +125,7 @@ function syncAccess(){
   if(nav)nav.style.display=ok?'':'none';
   if(mobile){mobile.hidden=!ok;mobile.style.display=ok?'':'none';mobile.setAttribute('aria-hidden',ok?'false':'true');}
   if(tab&&!ok&&tab.classList.contains('active'))root.switchTab?.('dashboard');
-  if(ok&&tab?.classList.contains('active')&&!state.classes.length)void refresh();
+  if(!root.FSTShell&&ok&&tab?.classList.contains('active')&&!state.classes.length)void refresh();
   isolateGenericUi();
   return ok;
 }
@@ -135,26 +137,28 @@ function isolateGenericUi(){
 }
 
 async function fetchRows(){
+  const snapshot={classes:[],students:[],sessions:[],attendance:[]};
   var c=client();if(!c||!isOwner())throw new Error('Accès LPC3 non autorisé.');
   var cls=await c.from('classes').select('id,teacher_id,name,module,day,start_time,end_time,room').eq('teacher_id',OWNER_ID).eq('module',MODULE).is('deleted_at',null).order('name');
   if(cls.error)throw cls.error;
-  state.classes=(cls.data||[]).filter(function(x){return /^LPC3-G[1-4]$/i.test(String(x.name||''));});
-  var classIds=state.classes.map(function(x){return x.id;});
-  if(!classIds.length){state.students=[];state.sessions=[];state.attendance=[];return;}
+  snapshot.classes=(cls.data||[]).filter(function(x){return /^LPC3-G[1-4]$/i.test(String(x.name||''));});
+  var classIds=snapshot.classes.map(function(x){return x.id;});
+  if(!classIds.length){snapshot.students=[];snapshot.sessions=[];snapshot.attendance=[];return snapshot;}
   var results=await Promise.all([
     c.from('students').select('id,teacher_id,class_id,last_name,first_name,email').in('class_id',classIds).is('deleted_at',null).order('last_name').order('first_name'),
     c.from('sessions').select('id,teacher_id,class_id,session_date,start_time,end_time,completed_at').eq('teacher_id',OWNER_ID).in('class_id',classIds).is('deleted_at',null).order('session_date',{ascending:true}).order('start_time',{ascending:true})
   ]);
   if(results[0].error)throw results[0].error;if(results[1].error)throw results[1].error;
-  state.students=results[0].data||[];state.sessions=results[1].data||[];
-  var sessionIds=state.sessions.map(function(x){return x.id;});
-  if(!sessionIds.length){state.attendance=[];return;}
+  snapshot.students=results[0].data||[];snapshot.sessions=results[1].data||[];
+  var sessionIds=snapshot.sessions.map(function(x){return x.id;});
+  if(!sessionIds.length){snapshot.attendance=[];return snapshot;}
   var plans=await c.from('session_plans').select('session_id,manipulation,status').in('session_id',sessionIds).is('deleted_at',null);
   if(plans.error)throw plans.error;
   var manipulationBySession=new Map((plans.data||[]).filter(function(p){return p.session_id&&p.manipulation;}).map(function(p){return [String(p.session_id),p.manipulation];}));
-  state.sessions.forEach(function(s){s.manipulation=manipulationBySession.get(String(s.id))||s.manipulation||'';});
+  snapshot.sessions.forEach(function(s){s.manipulation=manipulationBySession.get(String(s.id))||s.manipulation||'';});
   var at=await c.from('attendance').select('id,teacher_id,session_id,student_id,status,comment,grade,grade_origin,manual_grade_backup,grade_only,updated_at').in('session_id',sessionIds).is('deleted_at',null);
-  if(at.error)throw at.error;state.attendance=at.data||[];
+  if(at.error)throw at.error;snapshot.attendance=at.data||[];
+  return snapshot;
 }
 
 function renderPlanning(){
@@ -242,7 +246,7 @@ async function saveAttendance(){
   try{
     var r=await c.from('attendance').upsert(payload,{onConflict:'session_id,student_id'});
     if(r.error)throw r.error;
-    root.showAlert?.('Présence LPC3 enregistrée.','success');await refresh();
+    root.showAlert?.('Présence LPC3 enregistrée.','success');readEpoch++;inFlight=null;await refresh();
   }catch(e){root.showAlert?.('Enregistrement LPC3 impossible : '+(e?.message||e),'danger');}
 }
 
@@ -257,12 +261,41 @@ function renderReport(){
     '<div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Groupe</th><th>Effectif</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
-async function refresh(){
-  var tab=document.getElementById('presence-lpc3');if(!tab||!isOwner())return false;
+function invalidate(){
+  readEpoch++;
+  inFlight=null;
+  Object.assign(state,{classes:[],students:[],sessions:[],attendance:[],selectedSessionId:''});
+  for(const id of ['lpc3-students','lpc3-sheet','lpc3-report','lpc3-session']){
+    const element=document.getElementById(id);if(element)element.replaceChildren();
+  }
+  const refreshButton=document.getElementById('lpc3-refresh');if(refreshButton){refreshButton.disabled=false;refreshButton.removeAttribute('aria-busy');}
+}
+
+function refresh(){
+  var tab=document.getElementById('presence-lpc3');if(!tab||!isOwner())return Promise.resolve(false);
+  const identity=String(teacher()?.id||''),epoch=readEpoch;
+  if(inFlight&&inFlight.identity===identity&&inFlight.epoch===epoch)return inFlight.promise;
   var sheet=document.getElementById('lpc3-sheet');if(sheet)sheet.innerHTML='<div class="alert alert-info">Chargement LPC3…</div>';
-  try{
-    await fetchRows();renderPlanning();renderStudents();renderSessionSelect();renderSheet();renderReport();isolateGenericUi();return true;
-  }catch(e){if(sheet)sheet.innerHTML='<div class="alert alert-danger">Impossible de charger LPC3 : '+esc(e?.message||e)+'</div>';return false;}
+  const refreshButton=document.getElementById('lpc3-refresh');if(refreshButton){refreshButton.disabled=true;refreshButton.setAttribute('aria-busy','true');}
+  const valid=()=>epoch===readEpoch&&isOwner()&&String(teacher()?.id||'')===identity;
+  const promise=(async()=>{
+    try{
+      const snapshot=await fetchRows();
+      if(!valid())return false;
+      Object.assign(state,snapshot);
+      renderPlanning();renderStudents();renderSessionSelect();renderSheet();renderReport();isolateGenericUi();
+      root.dispatchEvent?.(new root.CustomEvent('fst:lpc3-updated',{detail:{userId:identity}}));
+      return true;
+    }catch(e){
+      if(valid()&&sheet)sheet.innerHTML='<div class="alert alert-danger">Impossible de charger LPC3 : '+esc(e?.message||e)+'</div>';
+      return false;
+    }finally{
+      if(inFlight?.promise===promise)inFlight=null;
+      if(valid()&&refreshButton){refreshButton.disabled=false;refreshButton.removeAttribute('aria-busy');}
+    }
+  })();
+  inFlight={identity,epoch,promise};
+  return promise;
 }
 
 function wrapSwitch(){
@@ -280,11 +313,14 @@ function wrapSwitch(){
 function init(){
   ensureScaffold();wrapSwitch();syncAccess();renderPlanning();
   root.addEventListener?.('fst:mobile-shell-ready',syncAccess);
-  root.addEventListener?.('resize',syncAccess,{passive:true});
-  setInterval(syncAccess,2500);
+  root.addEventListener?.('fst:shell-ready',syncAccess);
+  root.addEventListener?.('fst:auth-changed',syncAccess);
+  root.addEventListener?.('fst:tab-activated',isolateGenericUi);
+  root.addEventListener?.('v16:role-changed',syncAccess);
+  if(!root.FSTShell){root.addEventListener?.('resize',syncAccess,{passive:true});setInterval(syncAccess,2500);}
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,syncAccess:syncAccess,refresh:refresh,isolateGenericUi:isolateGenericUi,state:state};
+root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,syncAccess:syncAccess,refresh:refresh,invalidate:invalidate,isolateGenericUi:isolateGenericUi,state:state};
 if(typeof module==='object'&&module.exports)module.exports={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE};
 })(typeof window!=='undefined'?window:globalThis);
