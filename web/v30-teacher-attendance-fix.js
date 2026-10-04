@@ -53,6 +53,22 @@ async function saveAttendanceFixed(showSuccess=true){
   const s=sessionById(sid);
   if(!assignedToCurrentTeacher(s)){root.showAlert?.('Cette séance est en lecture seule.','danger');return false;}
   materialize(s);
+  const domain=root.FSTV31Domain;
+  if(domain){
+    for(const a of (d.attendance||[]).filter(x=>String(x.sessionId)===String(sid)&&!x.gradeOnly)){
+      const rule=domain.applyAttendanceGradeRule({
+        status:a.status,
+        grade:a.grade,
+        gradeOrigin:a.gradeOrigin,
+        manualGradeBackup:a.manualGradeBackup
+      });
+      if(!rule.valid){root.showAlert?.(rule.message||'Note invalide.','danger');return false;}
+      a.grade=rule.grade;
+      a.gradeOrigin=rule.gradeOrigin;
+      a.manualGradeBackup=rule.manualGradeBackup;
+      if(rule.grade!==null)a.gradeUpdatedAt=new Date().toISOString();
+    }
+  }
   const rows=(d.attendance||[])
     .filter(a=>String(a.sessionId)===String(sid)&&!a.gradeOnly)
     .map(a=>({
@@ -64,6 +80,8 @@ async function saveAttendanceFixed(showSuccess=true){
       comment:a.comment||'',
       grade:a.grade==null?null:Number(a.grade),
       grade_updated_at:a.gradeUpdatedAt||null,
+      grade_origin:a.gradeOrigin||null,
+      manual_grade_backup:a.manualGradeBackup==null?null:Number(a.manualGradeBackup),
       grade_only:false
     }));
   if(!rows.length){root.showAlert?.('Aucun étudiant n’est associé à cette séance.','danger');return false;}
