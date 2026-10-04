@@ -10,13 +10,13 @@ test('v5.13 stable reference metadata remains canonical',()=>{
   assert.match(ref,/Do not overwrite the V5\.13 reference/);
 });
 
-test('v5.13 attendance and grade permissions remain unchanged',()=>{
+test('current teacher permissions allow attendance and grades on own sessions even after completion',()=>{
   const owner={id:'teacher-a',isAdmin:false};
   const admin={id:'admin',isAdmin:true};
   const open={teacherId:'teacher-a',completedAt:null};
   const closed={teacherId:'teacher-a',completedAt:'2026-09-14T17:30:00Z'};
   assert.equal(permissions.canEditAttendance(owner,open),true);
-  assert.equal(permissions.canEditAttendance(owner,closed),false);
+  assert.equal(permissions.canEditAttendance(owner,closed),true);
   assert.equal(permissions.canEditAttendance(admin,closed),true);
   assert.equal(permissions.canEditGrade(owner,open),true);
   assert.equal(permissions.canEditGrade(owner,closed),true);
