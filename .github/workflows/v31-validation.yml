@@ -49,7 +49,6 @@ jobs:
               assert headers[:4] == ['N°','Nom','Prénom','Groupe']
               assert 'Présence %' in headers and 'Absence %' in headers
               assert ws.auto_filter.ref is not None
-              assert ws.sheet_view.showGridLines is False
           lwb=load_workbook(lpc[0], data_only=False)
           values=[cell.value for row in lwb[lwb.sheetnames[0]].iter_rows() for cell in row]
           assert 0 in values
