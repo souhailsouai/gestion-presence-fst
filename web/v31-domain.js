@@ -11,6 +11,8 @@
   const RECOGNIZED_STATUSES = Object.freeze(['present', 'retard', 'absent', 'justifie']);
   const PRESENT_STATUSES = new Set(['present', 'retard']);
   const ABSENT_STATUSES = new Set(['absent', 'justifie']);
+  const GRADE_ORIGIN_MANUAL = 'manual';
+  const GRADE_ORIGIN_ABSENCE_AUTO = 'absence_auto';
   const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'annule', 'annulee', 'annulé', 'annulée', 'pause']);
 
   function text(value) {
@@ -50,12 +52,7 @@
   function summarizeAttendance(rows, options) {
     const source = Array.isArray(rows) ? rows : [];
     const applicableRows = source.filter((row) => rowIsApplicable(row, options || {}));
-    const counts = {
-      present: 0,
-      late: 0,
-      absent: 0,
-      justified: 0,
-    };
+    const counts = { present: 0, late: 0, absent: 0, justified: 0 };
 
     for (const row of applicableRows) {
       const status = normalizeStatus(row && row.status);
@@ -69,7 +66,7 @@
     const presenceCount = counts.present + counts.late;
     const absenceCount = counts.absent + counts.justified;
     const presencePercent = countedSessions === 0 ? 0 : (presenceCount / countedSessions) * 100;
-    const absencePercent = countedSessions === 0 ? 0 : 100 - presencePercent;
+    const absencePercent = countedSessions === 0 ? 0 : (absenceCount / countedSessions) * 100;
 
     return Object.freeze({
       applicableSessions: applicableRows.length,
@@ -78,9 +75,12 @@
       present: counts.present,
       late: counts.late,
       absent: counts.absent,
+      unjustifiedAbsences: counts.absent,
       justified: counts.justified,
+      justifiedAbsences: counts.justified,
       presenceCount,
       absenceCount,
+      totalAbsences: absenceCount,
       presencePercent,
       absencePercent,
     });
@@ -92,14 +92,80 @@
     }
     const numeric = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
     if (!Number.isFinite(numeric) || numeric < 0 || numeric > 20) {
-      return {
-        valid: false,
-        value: null,
-        kind: 'invalid',
-        message: 'La note doit être comprise entre 0 et 20.',
-      };
+      return { valid: false, value: null, kind: 'invalid', message: 'La note doit être comprise entre 0 et 20.' };
     }
     return { valid: true, value: numeric, kind: 'grade' };
+  }
+
+  function normalizeGradeOrigin(origin, grade) {
+    const value = text(origin);
+    if (value === GRADE_ORIGIN_MANUAL || value === GRADE_ORIGIN_ABSENCE_AUTO) return value;
+    return grade === null || grade === undefined ? null : GRADE_ORIGIN_MANUAL;
+  }
+
+  function applyAttendanceGradeRule(input) {
+    const row = input || {};
+    const status = normalizeStatus(row.status);
+    const parsed = validateGrade(row.grade);
+    if (!parsed.valid) return { ...parsed, status };
+    const originalGrade = parsed.value;
+    const originalOrigin = normalizeGradeOrigin(row.gradeOrigin || row.origin, originalGrade);
+    const backupParsed = validateGrade(row.manualGradeBackup);
+    const originalBackup = backupParsed.valid ? backupParsed.value : null;
+
+    if (status === 'absent') {
+      const backup = originalOrigin === GRADE_ORIGIN_MANUAL ? originalGrade : originalBackup;
+      return Object.freeze({
+        valid: true,
+        status,
+        grade: 0,
+        gradeOrigin: GRADE_ORIGIN_ABSENCE_AUTO,
+        manualGradeBackup: backup,
+        locked: true,
+      });
+    }
+
+    if (status === 'justifie') {
+      const backup = originalOrigin === GRADE_ORIGIN_MANUAL ? originalGrade : originalBackup;
+      return Object.freeze({
+        valid: true,
+        status,
+        grade: null,
+        gradeOrigin: null,
+        manualGradeBackup: backup,
+        locked: true,
+      });
+    }
+
+    if (status === 'present' || status === 'retard') {
+      if (originalOrigin === GRADE_ORIGIN_ABSENCE_AUTO) {
+        return Object.freeze({
+          valid: true,
+          status,
+          grade: originalBackup,
+          gradeOrigin: originalBackup === null ? null : GRADE_ORIGIN_MANUAL,
+          manualGradeBackup: null,
+          locked: false,
+        });
+      }
+      return Object.freeze({
+        valid: true,
+        status,
+        grade: originalGrade,
+        gradeOrigin: originalOrigin,
+        manualGradeBackup: originalBackup,
+        locked: false,
+      });
+    }
+
+    return Object.freeze({
+      valid: true,
+      status,
+      grade: originalGrade,
+      gradeOrigin: originalOrigin,
+      manualGradeBackup: originalBackup,
+      locked: false,
+    });
   }
 
   function gradeKey(environment, studentId, manipulationId) {
@@ -110,7 +176,7 @@
     const map = new Map();
     for (const row of Array.isArray(rows) ? rows : []) {
       if (!row) continue;
-      const key = gradeKey(row.environment, row.student_id, row.manipulation_id);
+      const key = gradeKey(row.environment, row.student_id, row.manipulation_id || row.manipulation_code);
       if (key !== '||') map.set(key, row);
     }
     return map;
@@ -125,10 +191,7 @@
     return map;
   }
 
-  function safeTime(value) {
-    return text(value).slice(0, 8);
-  }
-
+  function safeTime(value) { return text(value).slice(0, 8); }
   function sessionSortKey(row) {
     return [text(row && row.session_date), safeTime(row && row.start_time), text(row && row.id)].join('|');
   }
@@ -139,21 +202,16 @@
     const environment = text(data.environment) || ENV_MPI1_PC1;
     const attendanceBySession = indexAttendance(data.attendance, student.id);
     const gradeByKey = indexGrades(data.grades);
-
     const sessions = (Array.isArray(data.sessions) ? data.sessions : [])
       .filter((session) => rowIsApplicable(session, { environment }))
       .sort((a, b) => sessionSortKey(a).localeCompare(sessionSortKey(b)));
 
     const rows = sessions.map((session) => {
       const attendance = attendanceBySession.get(text(session.id)) || null;
-      const manipulationId = session.manipulation_id || (session.manipulation && session.manipulation.id) || null;
-      const manipulationCode = session.manipulation_code || (session.manipulation && session.manipulation.code) || null;
-      const gradeRow = manipulationId
-        ? gradeByKey.get(gradeKey(environment, student.id, manipulationId)) || null
-        : null;
-      const grade = gradeRow && gradeRow.grade !== undefined && gradeRow.grade !== null
-        ? Number(gradeRow.grade)
-        : null;
+      const manipulationId = session.manipulation_id || session.manipulation_code || (session.manipulation && (session.manipulation.id || session.manipulation.code)) || null;
+      const manipulationCode = session.manipulation_code || (session.manipulation && session.manipulation.code) || manipulationId;
+      const gradeRow = manipulationId ? gradeByKey.get(gradeKey(environment, student.id, manipulationId)) || null : null;
+      const grade = gradeRow && gradeRow.grade !== undefined && gradeRow.grade !== null ? Number(gradeRow.grade) : null;
 
       return Object.freeze({
         studentId: student.id || null,
@@ -170,6 +228,7 @@
         comment: attendance && attendance.comment ? attendance.comment : '',
         grade,
         gradeEntered: grade !== null,
+        gradeOrigin: gradeRow && (gradeRow.grade_origin || gradeRow.origin) || null,
         attendanceId: attendance && attendance.id ? attendance.id : null,
         gradeId: gradeRow && gradeRow.id ? gradeRow.id : null,
         environment,
@@ -197,10 +256,13 @@
     RECOGNIZED_STATUSES,
     PRESENT_STATUSES,
     ABSENT_STATUSES,
+    GRADE_ORIGIN_MANUAL,
+    GRADE_ORIGIN_ABSENCE_AUTO,
     environmentForClass,
     normalizeStatus,
     summarizeAttendance,
     validateGrade,
+    applyAttendanceGradeRule,
     gradeKey,
     indexGrades,
     buildStudentHistory,
