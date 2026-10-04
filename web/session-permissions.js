@@ -7,7 +7,7 @@
   function owns(user,record){return Boolean(user&&record)&&String(record.teacherId||'')===String(user.id||'');}
   function canManage(user,record){return Boolean(record)&&(isAdmin(user)||owns(user,record));}
   function isCompleted(session){return Boolean(session&&session.completedAt);}
-  function canEditAttendance(user,session){return isAdmin(user)||(owns(user,session)&&!isCompleted(session));}
+  function canEditAttendance(user,session){return canManage(user,session);}
   function canEditComment(user,session){return canEditAttendance(user,session);}
   function canEditGrade(user,session){return canManage(user,session);}
   return {isAdmin,owns,canManage,isCompleted,canEditAttendance,canEditComment,canEditGrade};
