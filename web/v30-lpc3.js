@@ -51,7 +51,8 @@ function ensureStyle(){
     '#presence-lpc3 .lpc3-student-list{margin:0;padding-left:22px}'+
     '#presence-lpc3 .lpc3-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0}'+
     '#presence-lpc3 .lpc3-kpi{padding:10px;border-radius:10px;background:#f5f9ff;text-align:center}'+
-    '@media(max-width:600px){#presence-lpc3 .lpc3-toolbar .form-group{min-width:100%}}';
+    '#presence-lpc3 .table-responsive{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}'+
+    '@media(max-width:768px){#presence-lpc3{min-width:0}#presence-lpc3 .lpc3-grid{grid-template-columns:minmax(0,1fr)}#presence-lpc3 .lpc3-card{min-width:0;padding:12px}#presence-lpc3 .lpc3-toolbar{align-items:stretch}#presence-lpc3 .lpc3-toolbar .form-group{min-width:100%;flex-basis:100%}#presence-lpc3 .lpc3-toolbar .btn,#presence-lpc3 #lpc3-save{width:100%}#presence-lpc3 .lpc3-head .badge{max-width:100%;white-space:normal}#presence-lpc3 table{min-width:680px}}';
   document.head.appendChild(s);
 }
 
@@ -93,10 +94,34 @@ function ensureScaffold(){
   }
 }
 
+function ensureMobileEntry(){
+  var panel=document.querySelector('#mobile-more-sheet .mobile-more-panel,.mobile-more-panel');
+  if(!panel)return null;
+  var button=document.getElementById('mobile-lpc3-link');
+  if(!button){
+    button=document.createElement('button');
+    button.id='mobile-lpc3-link';
+    button.type='button';
+    button.dataset.tab='presence-lpc3';
+    button.innerHTML='<i class="fas fa-wave-square"></i>LPC3';
+    var admin=panel.querySelector('#mobile-admin-link');
+    panel.insertBefore(button,admin||panel.lastElementChild);
+    button.addEventListener('click',function(){
+      if(!isOwner())return false;
+      root.switchTab?.('presence-lpc3');
+      root.syncMobileActive?.('presence-lpc3');
+      root.closeMoreSheet?.();
+      return true;
+    });
+  }
+  return button;
+}
+
 function syncAccess(){
   ensureScaffold();
-  var nav=document.getElementById('lpc3-nav-tab'),tab=document.getElementById('presence-lpc3'),ok=isOwner();
+  var nav=document.getElementById('lpc3-nav-tab'),mobile=ensureMobileEntry(),tab=document.getElementById('presence-lpc3'),ok=isOwner();
   if(nav)nav.style.display=ok?'':'none';
+  if(mobile){mobile.hidden=!ok;mobile.style.display=ok?'':'none';mobile.setAttribute('aria-hidden',ok?'false':'true');}
   if(tab&&!ok&&tab.classList.contains('active'))root.switchTab?.('dashboard');
   if(ok&&tab?.classList.contains('active')&&!state.classes.length)void refresh();
   isolateGenericUi();
@@ -252,9 +277,14 @@ function wrapSwitch(){
   wrapped.__v30Lpc3=true;root.switchTab=wrapped;
 }
 
-function init(){ensureScaffold();wrapSwitch();syncAccess();renderPlanning();setInterval(syncAccess,1200);}
+function init(){
+  ensureScaffold();wrapSwitch();syncAccess();renderPlanning();
+  root.addEventListener?.('fst:mobile-shell-ready',syncAccess);
+  root.addEventListener?.('resize',syncAccess,{passive:true});
+  setInterval(syncAccess,2500);
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,refresh:refresh,isolateGenericUi:isolateGenericUi,state:state};
+root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,syncAccess:syncAccess,refresh:refresh,isolateGenericUi:isolateGenericUi,state:state};
 if(typeof module==='object'&&module.exports)module.exports={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE};
 })(typeof window!=='undefined'?window:globalThis);
