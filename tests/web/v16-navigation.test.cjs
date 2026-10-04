@@ -8,26 +8,18 @@ function buildV16() {
   return fs.readFileSync('web/index.html', 'utf8');
 }
 
-function navEntries(source) {
-  const navMatch = source.match(/<!-- Navigation -->([\s\S]*?)<!-- Contenu -->/i);
-  assert.ok(navMatch, 'Navigation block not found');
-  return [...navMatch[1].matchAll(/<button[^>]*class="nav-tab[^\"]*"[^>]*onclick="switchTab\('([^']+)'\)"[^>]*>([\s\S]*?)<\/button>/gi)]
-    .map(([, id, body]) => ({
-      id,
-      text: body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-    }));
-}
+const {navEntries,NAV_IDS,NAV_LABELS}=require('./fst-shell-test-helpers.cjs');
 
-test('V16 delivered navigation follows the approved native order', () => {
+test('delivered navigation follows the approved shared sidebar order', () => {
   const html = buildV16();
   const entries = navEntries(html);
   assert.deepEqual(
     entries.map(x => x.text),
-    ['Dashboard', 'Présence', 'Classes & Groupes', 'Emploi du temps', 'Étudiants', 'Séances', 'Planning des séances', 'Rapports', 'Administration']
+    NAV_LABELS
   );
   assert.deepEqual(
     entries.map(x => x.id),
-    ['dashboard', 'presence', 'classes', 'emploi', 'etudiants', 'seances', 'planning-v16', 'rapports', 'administration']
+    NAV_IDS
   );
 });
 
@@ -39,10 +31,11 @@ test('V16 planning is a native delivered tab and the floating V5.15 launcher is 
   assert.equal(html.includes('v515-launcher'), false);
 });
 
-test('V16 mobile More menu exposes Planning des séances', () => {
+test('mobile drawer reuses the single sidebar and exposes Planning des seances', () => {
   const html = buildV16();
-  const mobileMenu = html.match(/mobile-more-panel[\s\S]*?document\.body\.appendChild\(s\)/i);
-  assert.ok(mobileMenu, 'Mobile More menu not found');
-  assert.ok(mobileMenu[0].includes('data-tab="planning-v16"'));
-  assert.ok(mobileMenu[0].includes('Planning des séances'));
+  const entries = navEntries(html);
+  assert.deepEqual(entries.filter(x => x.id === 'planning-v16').map(x => x.text), ['Planning des s\u00e9ances']);
+  assert.equal((html.match(/id="fst-sidebar-nav"/g)||[]).length, 1);
+  assert.match(html, /aria-controls="fst-sidebar"/);
+  assert.doesNotMatch(html, /<script[^>]*(?:data-shared-mobile-v2="js"|data-fst-mobile-js="inline")/);
 });

@@ -6,10 +6,22 @@ on:
     paths:
       - 'windows/GestionPresenceFSTOnline/**'
       - 'web/**'
+      - 'shared/fst-*'
+      - 'scripts/fst_shell_transform.py'
+      - 'tests/browser/**'
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'scripts/build_online_web.py'
       - 'scripts/build_single_file_release.py'
       - 'scripts/web-superadmin.patch.part*'
+      - 'tests/web/**'
+      - '.github/workflows/build-windows-online.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'windows/GestionPresenceFSTOnline/**'
+      - 'web/**'
+      - 'shared/fst-*'
+      - 'scripts/**'
       - 'tests/web/**'
       - '.github/workflows/build-windows-online.yml'
   workflow_dispatch:

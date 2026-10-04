@@ -76,7 +76,12 @@ test('all delivered heading text is version-free including inline HTML templates
 
 test('removing visible versions preserves logos, institution, year and technical module identifiers', () => {
   const source = fs.readFileSync('index.html', 'utf8');
-  assert.deepEqual([...html.matchAll(/<img\b[^>]*>/gi)].map(m => m[0]), [...source.matchAll(/<img\b[^>]*>/gi)].map(m => m[0]));
+  // Reserved dimensions change, but image bytes, identity and all other attributes do not.
+  const logoMarkup = text => [...text.matchAll(/<img\b[^>]*>/gi)].map(m =>
+    /id="internal-(utm|fst)-logo"/.test(m[0]) ? m[0].replace(/ (?:width|height)="[^"]*"/g, '') : m[0]);
+  assert.deepEqual(logoMarkup(html), logoMarkup(source));
+  assert.match(html, /id="internal-utm-logo"[^>]*width="48"[^>]*height="48"/);
+  assert.match(html, /id="internal-fst-logo"[^>]*width="80"[^>]*height="48"/);
   assert.ok(html.includes('Faculté des Sciences de Tunis'));
   assert.ok(html.includes('Université de Tunis El Manar'));
   assert.ok(html.includes('2026/2027'));

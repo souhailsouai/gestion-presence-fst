@@ -12,15 +12,12 @@ function buildStandalone(){
   cp.execFileSync('python',['scripts/build_single_file_release.py'],{stdio:'pipe'});
   return fs.readFileSync('web/index.html','utf8');
 }
-function navText(html){
-  const block=html.match(/<!-- Navigation -->([\s\S]*?)<!-- Contenu -->/i)?.[1]||'';
-  return [...block.matchAll(/<button[^>]*class="nav-tab[^\"]*"[^>]*>([\s\S]*?)<\/button>/gi)].map(m=>m[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
-}
+const {navEntries,NAV_LABELS}=require('./fst-shell-test-helpers.cjs');
 
-test('final V16 artifact is explicitly versioned and keeps approved navigation',()=>{
+test('final artifact preserves internal metadata and approved shared navigation',()=>{
   const html=build();
   assert.match(html,/data-app-version="V16"/);
-  assert.deepEqual(navText(html),['Dashboard','Présence','Classes & Groupes','Emploi du temps','Étudiants','Séances','Planning des séances','Rapports','Administration']);
+  assert.deepEqual(navEntries(html).map(x=>x.text),NAV_LABELS);
   assert.match(html,/id="planning-v16" class="tab-content"/);
 });
 
