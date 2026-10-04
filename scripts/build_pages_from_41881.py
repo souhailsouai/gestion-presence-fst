@@ -27,6 +27,7 @@ tags = [
     '<script src="./v31-domain.js"></script>',
     '<script src="./v31-tracking-xlsx.js"></script>',
     '<script src="./v31-version-ui.js"></script>',
+    '<script src="./v31-export-ui.js"></script>',
     '<script src="./v30-teacher-attendance-fix.js"></script>',
     '<script src="./v30-lpc3.js"></script>',
 ]
@@ -41,6 +42,7 @@ for marker in [
     'v31-domain.js',
     'v31-tracking-xlsx.js',
     'v31-version-ui.js',
+    'v31-export-ui.js',
     'v30-teacher-attendance-fix.js',
     'v30-lpc3.js',
     'presence-session',
