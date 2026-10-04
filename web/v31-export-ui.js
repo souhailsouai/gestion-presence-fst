@@ -11,7 +11,14 @@ function runtimeData(){try{return typeof data!=='undefined'?data:(root.data||{})
 function teacher(){try{return typeof currentTeacher!=='undefined'?currentTeacher:(root.currentTeacher||null);}catch(_){return root.currentTeacher||null;}}
 function alertUser(message,type){try{if(typeof showAlert==='function')showAlert(message,type);else root.showAlert?.(message,type);}catch(_){}}
 
-function modelsFromRuntime(environment){
+async function loadPlanManipulations(){
+  let client=null;try{client=typeof supabaseClient!=='undefined'?supabaseClient:root.supabaseClient;}catch(_){client=root.supabaseClient;}
+  if(!client)return new Map();
+  const {data:plans,error}=await client.from('session_plans').select('session_id,manipulation,status,plan_kind').not('session_id','is',null).is('deleted_at',null);
+  if(error)throw error;
+  return new Map((plans||[]).filter(p=>p.session_id&&p.manipulation&&String(p.status||'').toLowerCase()!=='cancelled').map(p=>[String(p.session_id),p.manipulation]));
+}
+function modelsFromRuntime(environment,planMap){
   const d=runtimeData(),classes=(d.classes||[]).filter(c=>environmentForClass(c)===environment);
   const sessions=d.sessions||[],attendance=d.attendance||[],students=d.students||[];
   const families=[...new Set(classes.map(c=>baseClass(c.name)).filter(Boolean))];
@@ -28,8 +35,8 @@ function modelsFromRuntime(environment){
         sessionId:s.id,
         className:cls?.name||family,
         groupName:cls?.name||family,
-        manipulationCode:manipulationForSession(s),
-        manipulationLabel:manipulationForSession(s),
+        manipulationCode:manipulationForSession(s)||(planMap&&planMap.get(String(s.id)))||'',
+        manipulationLabel:manipulationForSession(s)||(planMap&&planMap.get(String(s.id)))||'',
         status:a.status,
         grade:a.grade,
         gradeOrigin:a.gradeOrigin||a.grade_origin||null,
@@ -66,8 +73,8 @@ function panel(id,title,includePerClass){
     '<button class="btn btn-success" type="button" data-v31-export="global"><i class="fas fa-file-excel"></i> Export Excel</button></div></section>';
 }
 function bindPanel(el,environment){
-  el.querySelector('[data-v31-export="classes"]')?.addEventListener('click',()=>{
-    try{const models=modelsFromRuntime(environment);if(!models.length)throw new Error('Aucune classe disponible.');root.FSTV31TrackingXlsx.generatePerClass(models,{environment});}
+  el.querySelector('[data-v31-export="classes"]')?.addEventListener('click',async()=>{
+    try{const planMap=await loadPlanManipulations();const models=modelsFromRuntime(environment,planMap);if(!models.length)throw new Error('Aucune classe disponible.');root.FSTV31TrackingXlsx.generatePerClass(models,{environment});}
     catch(e){alertUser('Export Excel impossible : '+(e?.message||e),'danger');}
   });
   el.querySelector('[data-v31-export="global"]')?.addEventListener('click',async()=>{
@@ -78,7 +85,7 @@ function bindPanel(el,environment){
         const model=lpc3Model();if(!model)throw new Error('Données LPC3 indisponibles.');
         root.FSTV31TrackingXlsx.generate(model,{environment:'LPC3'});
       }else{
-        const models=modelsFromRuntime(environment);if(!models.length)throw new Error('Aucune classe disponible.');
+        const planMap=await loadPlanManipulations();const models=modelsFromRuntime(environment,planMap);if(!models.length)throw new Error('Aucune classe disponible.');
         root.FSTV31TrackingXlsx.generate(models,{environment});
       }
     }catch(e){alertUser('Export Excel impossible : '+(e?.message||e),'danger');}
@@ -100,5 +107,5 @@ function mount(){
 }
 if(root.document?.readyState==='loading')root.document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,0),{once:true});else setTimeout(mount,0);
 setInterval(mount,1500);
-root.FSTV31ExportUi={mount,modelsFromRuntime,lpc3Model};
+root.FSTV31ExportUi={mount,modelsFromRuntime,lpc3Model,loadPlanManipulations};
 })(typeof window!=='undefined'?window:globalThis);
