@@ -36,6 +36,8 @@ finally:
 html = out.read_text(encoding='utf-8')
 html = apply_v16_shell(html)
 tags = [
+    '<script src="./v31-config.js"></script>',
+    '<script src="./v31-domain.js"></script>',
     '<script src="./online-runtime.js"></script>',
     '<script src="./v16-active-role.js"></script>',
     '<script src="./v16-test-mode.js"></script>',
@@ -52,6 +54,9 @@ tags = [
     '<script src="./v16-planning-export-model.js"></script>',
     '<script src="./v16-planning-pdf.js"></script>',
     '<script src="./v16-planning-xlsx.js"></script>',
+    '<script src="./v31-tracking-xlsx.js"></script>',
+    '<script src="./v31-version-ui.js"></script>',
+    '<script src="./v31-export-ui.js"></script>',
     '<script src="./v16-planning-editor.js"></script>',
     '<script src="./v16-dashboard-notices.js"></script>',
     '<script src="./v16-planning-ui.js"></script>',

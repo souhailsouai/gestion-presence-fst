@@ -12,3 +12,12 @@ test('statistics module exposes charts and PDF helpers',()=>{const S=load();for(
 test('late grade-only rows affect grade average but not attendance statistics',()=>{const S=load(),source={...sample,attendance:[...sample.attendance,{sessionId:'s2',studentId:'u9',status:'present',grade:20,gradeOnly:true}]},r=S.computeStatistics(source,{teacherId:'t1'},{id:'a1',isAdmin:true});assert.equal(r.attendance,4);assert.equal(r.averageGrade,15);assert.equal(r.timeline.find(x=>x.sessionId==='s2').total,2);});
 test('statistics include grade distribution and module comparison',()=>{const S=load(),r=S.computeStatistics(sample,{}, {id:'a1',isAdmin:true});assert.equal(r.byModule.length,2);assert.deepEqual(r.gradeBuckets.map(x=>x.label),['0–4.99','5–9.99','10–11.99','12–13.99','14–15.99','16–20']);assert.equal(r.gradeBuckets.reduce((n,x)=>n+x.count,0),4);assert.equal(typeof S.buildGradeChartSvg,'function');});
 test('PDF charts include grade distribution',()=>{const js=fs.readFileSync(modulePath,'utf8');assert.match(js,/drawPdfCharts[\s\S]*Répartition des notes/);});
+
+test('V31 statistics count retard as presence and justified plus unjustified as absence',()=>{
+  const S=load(),r=S.computeStatistics(sample,{}, {id:'a1',isAdmin:true});
+  assert.equal(r.attendanceSummary.presenceCount,4);
+  assert.equal(r.attendanceSummary.absenceCount,1);
+  assert.equal(r.attendanceSummary.presencePercent,80);
+  assert.equal(r.attendanceSummary.absencePercent,20);
+  assert.equal(r.timeline.find(x=>x.sessionId==='s2').presenceRate,100);
+});

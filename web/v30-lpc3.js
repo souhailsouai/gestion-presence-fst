@@ -124,7 +124,11 @@ async function fetchRows(){
   state.students=results[0].data||[];state.sessions=results[1].data||[];
   var sessionIds=state.sessions.map(function(x){return x.id;});
   if(!sessionIds.length){state.attendance=[];return;}
-  var at=await c.from('attendance').select('id,teacher_id,session_id,student_id,status,comment,grade,grade_only,updated_at').in('session_id',sessionIds).is('deleted_at',null);
+  var plans=await c.from('session_plans').select('session_id,manipulation,status').in('session_id',sessionIds).is('deleted_at',null);
+  if(plans.error)throw plans.error;
+  var manipulationBySession=new Map((plans.data||[]).filter(function(p){return p.session_id&&p.manipulation;}).map(function(p){return [String(p.session_id),p.manipulation];}));
+  state.sessions.forEach(function(s){s.manipulation=manipulationBySession.get(String(s.id))||s.manipulation||'';});
+  var at=await c.from('attendance').select('id,teacher_id,session_id,student_id,status,comment,grade,grade_origin,manual_grade_backup,grade_only,updated_at').in('session_id',sessionIds).is('deleted_at',null);
   if(at.error)throw at.error;state.attendance=at.data||[];
 }
 
@@ -171,10 +175,18 @@ function renderSheet(){
     html+='<tr data-lpc3-student="'+esc(st.id)+'"><td>'+(i+1)+'</td><td>'+esc(st.last_name)+' '+esc(st.first_name)+'</td>'+
       '<td><select class="form-control lpc3-status">'+statusOptions(status)+'</select></td>'+
       '<td><input class="form-control lpc3-comment" value="'+esc(a?.comment||'')+'" placeholder="Commentaire"></td>'+
-      '<td><input type="number" min="0" max="20" step="0.25" class="form-control lpc3-grade" value="'+(a?.grade==null?'':esc(a.grade))+'" placeholder="—"></td></tr>';
+      '<td><input type="number" min="0" max="20" step="0.25" class="form-control lpc3-grade" value="'+(status==='absent'?0:(a?.grade==null?'':esc(a.grade)))+'" placeholder="—" '+((status==='absent'||status==='justifie')?'disabled':'')+'></td></tr>';
   });
   html+='</tbody></table></div><button id="lpc3-save" class="btn btn-success" type="button"><i class="fas fa-save"></i> Enregistrer la présence LPC3</button>';
   box.innerHTML=html;
+  box.querySelectorAll('.lpc3-status').forEach(function(select){
+    select.addEventListener('change',function(){
+      var tr=this.closest('tr[data-lpc3-student]'),grade=tr?.querySelector('.lpc3-grade');if(!grade)return;
+      if(this.value==='absent'){grade.value='0';grade.disabled=true;}
+      else if(this.value==='justifie'){grade.value='';grade.disabled=true;}
+      else grade.disabled=false;
+    });
+  });
   box.querySelector('#lpc3-save')?.addEventListener('click',function(){void saveAttendance();});
 }
 
@@ -185,11 +197,21 @@ async function saveAttendance(){
   box.querySelectorAll('tr[data-lpc3-student]').forEach(function(tr){
     var gradeText=tr.querySelector('.lpc3-grade')?.value||'',grade=gradeText===''?null:Number(gradeText);
     if(grade!==null&&(!Number.isFinite(grade)||grade<0||grade>20))throw new Error('Une note LPC3 doit être comprise entre 0 et 20.');
+    var status=tr.querySelector('.lpc3-status')?.value||'present';
+    var previous=attendanceFor(s.id,tr.dataset.lpc3Student);
+    var rule=root.FSTV31Domain?.applyAttendanceGradeRule?.({
+      status:status,
+      grade:grade,
+      gradeOrigin:previous?.grade_origin||previous?.gradeOrigin||(grade===null?null:'manual'),
+      manualGradeBackup:previous?.manual_grade_backup??previous?.manualGradeBackup??null
+    })||{valid:true,grade:grade,gradeOrigin:grade===null?null:'manual',manualGradeBackup:null};
+    if(!rule.valid)throw new Error(rule.message||'Note LPC3 invalide.');
     payload.push({
       teacher_id:OWNER_ID,session_id:s.id,student_id:tr.dataset.lpc3Student,
-      status:tr.querySelector('.lpc3-status')?.value||'present',
+      status:status,
       comment:tr.querySelector('.lpc3-comment')?.value||'',
-      grade:grade,grade_only:false,grade_updated_at:grade===null?null:new Date().toISOString()
+      grade:rule.grade,grade_origin:rule.gradeOrigin,manual_grade_backup:rule.manualGradeBackup,
+      grade_only:false,grade_updated_at:rule.grade===null?null:new Date().toISOString()
     });
   });
   try{
@@ -233,6 +255,6 @@ function wrapSwitch(){
 function init(){ensureScaffold();wrapSwitch();syncAccess();renderPlanning();setInterval(syncAccess,1200);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,refresh:refresh,isolateGenericUi:isolateGenericUi};
+root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,refresh:refresh,isolateGenericUi:isolateGenericUi,state:state};
 if(typeof module==='object'&&module.exports)module.exports={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE};
 })(typeof window!=='undefined'?window:globalThis);
