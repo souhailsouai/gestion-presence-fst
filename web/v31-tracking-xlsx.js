@@ -99,9 +99,26 @@
     for(const row of sheet.rows)rows.push(sheet.columns.map(c=>row[c]===null||row[c]===undefined?'':row[c]));
     const ws=lib.utils.aoa_to_sheet(rows);
     const headerRow=7;
-    ws['!autofilter']={ref:'A'+headerRow+':'+lib.utils.encode_col(sheet.columns.length-1)+headerRow};
+    const lastCol=lib.utils.encode_col(sheet.columns.length-1);
+    ws['!merges']=[
+      {s:{r:0,c:0},e:{r:0,c:sheet.columns.length-1}},
+      {s:{r:1,c:0},e:{r:1,c:sheet.columns.length-1}}
+    ];
+    ws['!rows']=[{hpt:24},{hpt:18},{hpt:18},{hpt:18},{hpt:18},{hpt:8},{hpt:30}];
+    ws['!margins']={left:0.25,right:0.25,top:0.5,bottom:0.5,header:0.2,footer:0.2};
+    ws['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:0,paperSize:9};
+    ws['!sheetPr']={pageSetUpPr:{fitToPage:true}};
+    ws['!autofilter']={ref:'A'+headerRow+':'+lastCol+headerRow};
     ws['!freeze']={xSplit:0,ySplit:headerRow};
-    ws['!cols']=sheet.columns.map(c=>({wch:Math.min(28,Math.max(11,String(c).length+2))}));
+    ws['!cols']=sheet.columns.map(c=>{
+      if(c==='N°')return {wch:5};
+      if(c==='Nom'||c==='Prénom')return {wch:18};
+      if(c==='Groupe')return {wch:14};
+      if(/ Statut$/.test(c))return {wch:21};
+      if(/ Note$/.test(c))return {wch:11};
+      if(/%$/.test(c))return {wch:12};
+      return {wch:Math.min(24,Math.max(12,String(c).length+2))};
+    });
     const pctCols=sheet.columns.map((c,i)=>/ %$/.test(c)?i:-1).filter(i=>i>=0);
     const gradeCols=sheet.columns.map((c,i)=>/ Note$/.test(c)?i:-1).filter(i=>i>=0);
     for(let r=headerRow+1;r<=rows.length;r++){
@@ -118,7 +135,7 @@
   }
   function classFilename(className,year){
     const cfg=CONFIG(),y=safe(year||cfg.ACADEMIC_YEAR_FILE);
-    return 'Suivi_TP_'+safe(classBaseName(className))+'_'+y+'.xlsx';
+    return 'Suivi_TP_'+safe(classBaseName(className)).replace(/-/g,'_')+'_'+y+'.xlsx';
   }
 
   function generate(models,options){
