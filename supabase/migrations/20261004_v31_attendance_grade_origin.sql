@@ -218,3 +218,145 @@ exception when others then
   return jsonb_build_object('ok',false,'code','INTERNAL_ERROR','correlation_id',v_correlation);
 end;
 $function$;
+
+
+-- Strict LPC3 boundary: the institutional owner is the only authenticated
+-- account allowed to read or mutate TP Ondes et Vibrations records.
+create or replace function private.is_lpc3_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select exists(
+    select 1 from public.super_admin_owner o
+    where o.singleton is true and o.user_id=(select auth.uid())
+  );
+$function$;
+
+create or replace function private.can_access_session(p_session_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select exists(
+    select 1
+    from public.sessions s
+    join public.classes c on c.id=s.class_id
+    where s.id=p_session_id
+      and s.deleted_at is null
+      and (
+        (c.module='TP Ondes et Vibrations' and private.is_lpc3_owner())
+        or
+        (c.module is distinct from 'TP Ondes et Vibrations'
+          and (private.is_admin() or s.teacher_id=(select auth.uid())))
+      )
+  );
+$function$;
+
+create or replace function private.can_access_student(p_student_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select exists(
+    select 1
+    from public.students s
+    join public.classes c on c.id=s.class_id
+    where s.id=p_student_id and s.deleted_at is null
+      and (
+        (c.module='TP Ondes et Vibrations' and private.is_lpc3_owner())
+        or
+        (c.module is distinct from 'TP Ondes et Vibrations' and (
+          private.is_admin()
+          or s.teacher_id=(select auth.uid())
+          or exists(select 1 from public.session_plans sp where sp.class_id=s.class_id and sp.teacher_id=(select auth.uid()) and sp.deleted_at is null)
+          or exists(select 1 from public.sessions se where se.class_id=s.class_id and se.teacher_id=(select auth.uid()) and se.deleted_at is null)
+        ))
+      )
+  );
+$function$;
+
+drop policy if exists sessions_select_authorized on public.sessions;
+create policy sessions_select_authorized on public.sessions
+for select to authenticated
+using (private.can_access_session(id));
+
+drop policy if exists students_select_authorized on public.students;
+create policy students_select_authorized on public.students
+for select to authenticated
+using (private.can_access_student(id));
+
+-- Keep admin CRUD for MPI1-PC1, but never allow a non-owner admin to mutate LPC3.
+drop policy if exists classes_update_authorized on public.classes;
+create policy classes_update_authorized on public.classes
+for update to authenticated
+using (
+  private.mutation_allowed() and current_user_is_admin()
+  and (module is distinct from 'TP Ondes et Vibrations' or private.is_lpc3_owner())
+)
+with check (
+  private.mutation_allowed() and current_user_is_admin()
+  and (module is distinct from 'TP Ondes et Vibrations' or private.is_lpc3_owner())
+);
+
+drop policy if exists classes_delete_authorized on public.classes;
+create policy classes_delete_authorized on public.classes
+for delete to authenticated
+using (
+  private.mutation_allowed() and current_user_is_admin()
+  and (module is distinct from 'TP Ondes et Vibrations' or private.is_lpc3_owner())
+);
+
+drop policy if exists sessions_update_authorized on public.sessions;
+create policy sessions_update_authorized on public.sessions
+for update to authenticated
+using (
+  private.mutation_allowed() and private.can_access_session(id)
+)
+with check (
+  private.mutation_allowed() and private.can_access_session(id)
+);
+
+drop policy if exists sessions_delete_authorized on public.sessions;
+create policy sessions_delete_authorized on public.sessions
+for delete to authenticated
+using (
+  private.mutation_allowed() and private.can_access_session(id)
+);
+
+drop policy if exists students_update_authorized on public.students;
+create policy students_update_authorized on public.students
+for update to authenticated
+using (
+  private.mutation_allowed()
+  and (
+    private.is_lpc3_owner() and exists(
+      select 1 from public.classes c where c.id=students.class_id and c.module='TP Ondes et Vibrations'
+    )
+    or current_user_is_admin() and exists(
+      select 1 from public.classes c where c.id=students.class_id and c.module is distinct from 'TP Ondes et Vibrations'
+    )
+  )
+)
+with check (private.can_access_student(id));
+
+drop policy if exists students_delete_authorized on public.students;
+create policy students_delete_authorized on public.students
+for delete to authenticated
+using (
+  private.mutation_allowed()
+  and (
+    private.is_lpc3_owner() and exists(
+      select 1 from public.classes c where c.id=students.class_id and c.module='TP Ondes et Vibrations'
+    )
+    or current_user_is_admin() and exists(
+      select 1 from public.classes c where c.id=students.class_id and c.module is distinct from 'TP Ondes et Vibrations'
+    )
+  )
+);
