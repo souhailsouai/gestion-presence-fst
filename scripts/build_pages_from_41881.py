@@ -23,6 +23,9 @@ html, xlsx_replacements = re.subn(
 assert xlsx_replacements == 1, 'Expected exactly one inline XLSX engine in locked baseline'
 
 tags = [
+    '<script src="./v31-config.js"></script>',
+    '<script src="./v31-domain.js"></script>',
+    '<script src="./v31-tracking-xlsx.js"></script>',
     '<script src="./v30-teacher-attendance-fix.js"></script>',
     '<script src="./v30-lpc3.js"></script>',
 ]
@@ -33,6 +36,9 @@ for tag in tags:
 out.write_text(html, encoding='utf-8')
 
 for marker in [
+    'v31-config.js',
+    'v31-domain.js',
+    'v31-tracking-xlsx.js',
     'v30-teacher-attendance-fix.js',
     'v30-lpc3.js',
     'presence-session',
