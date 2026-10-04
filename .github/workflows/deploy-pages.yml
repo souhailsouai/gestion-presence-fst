@@ -7,6 +7,8 @@ on:
       - 'index.html'
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
+      - 'shared/mobile.css'
+      - 'shared/mobile.js'
       - 'scripts/build_pages_from_41881.py'
       - 'scripts/v16_html_transform.py'
       - 'scripts/web-superadmin.patch.part*'
@@ -68,6 +70,10 @@ jobs:
           ! grep -Fq 'Km(e){var r=e.replace' web/index.html
           grep -Fq './v30-teacher-attendance-fix.js' web/index.html
           grep -Fq './v30-lpc3.js' web/index.html
+          grep -Fq 'data-fst-mobile-css="inline"' web/index.html
+          grep -Fq 'data-fst-mobile-js="inline"' web/index.html
+          grep -Fq 'mobile-lpc3-link' web/v30-lpc3.js
+          ! grep -Fq 'v31-app-version-footer' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'challengeAndVerify' web/index.html
 
