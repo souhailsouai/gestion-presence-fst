@@ -22,6 +22,42 @@ jobs:
           python-version: '3.12'
       - name: JavaScript unit and regression tests
         run: node --test tests/web/*.test.cjs
+      - name: Generate real V31 Excel workbooks
+        run: |
+          npm install --no-save xlsx@0.18.5
+          python -m pip install openpyxl
+          node tests/integration/generate-v31-xlsx.cjs artifacts/v31-xlsx
+          python - <<'PY'
+          from pathlib import Path
+          from openpyxl import load_workbook
+          files=sorted(Path('artifacts/v31-xlsx').glob('*.xlsx'))
+          assert len(files) == 8, [p.name for p in files]
+          mpi=[p for p in files if 'MPI1-PC1' in p.name]
+          lpc=[p for p in files if 'LPC3' in p.name]
+          assert len(mpi) == 7, [p.name for p in mpi]
+          assert len(lpc) == 1, [p.name for p in lpc]
+          for p in files:
+              wb=load_workbook(p, data_only=False)
+              assert wb.sheetnames == ['Suivi','Statistiques','Suivi par manipulation','Suivi par groupe','Notes']
+              ws=wb['Suivi']
+              headers=[ws.cell(4,c).value for c in range(1,ws.max_column+1)]
+              assert headers[:3] == ['Nom','Prénom','Groupe']
+              assert 'Taux présence' in headers and 'Taux absence' in headers
+              assert ws.freeze_panes == 'D5'
+              assert ws.auto_filter.ref is not None
+              assert ws.sheet_view.showGridLines is False
+          lwb=load_workbook(lpc[0], data_only=False)
+          values=[cell.value for row in lwb['Suivi'].iter_rows() for cell in row]
+          assert 0 in values
+          assert 'M1' in values and 'M2' in values
+          print('validated', [p.name for p in files])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v31-xlsx-integration
+          path: artifacts/v31-xlsx/*.xlsx
+          retention-days: 7
+
       - name: Build Pages candidate
         run: python scripts/build_pages_from_41881.py
       - name: Verify V31 candidate modules
@@ -30,3 +66,4 @@ jobs:
           grep -q 'v31-domain.js' web/index.html
           grep -q 'v31-tracking-xlsx.js' web/index.html
           grep -q 'v31-version-ui.js' web/index.html
+          grep -q 'v31-export-ui.js' web/index.html
