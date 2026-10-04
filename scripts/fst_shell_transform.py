@@ -58,6 +58,35 @@ def _replace_ranges(text,replacements):
     for start,end,new in sorted(replacements,reverse=True):text=text[:start]+new+text[end:]
     return text
 
+
+def _hydrate_brand_logos(brand_html: str, source_html: str) -> str:
+    """Reuse the exact existing login logos before any authentication runs.
+
+    A restored session skips renderAuthScreen(), so doLogin() cannot copy images
+    from that form. Supplying their original bytes here also avoids network/path
+    dependencies in Pages and in the single-file Windows/Web deliverable.
+    """
+    originals = {'utm': set(), 'fst': set()}
+    for match in re.finditer(r'<img\b[^>]*>', source_html):
+        node = Index(match.group()).nodes[0]
+        classes = node.attrs.get('class', '').split()
+        src = node.attrs.get('src', '')
+        for key in originals:
+            if key + '-logo' in classes and src.startswith('data:image/'):
+                originals[key].add(src)
+    tree = Index(brand_html)
+    replacements = []
+    for key, sources in originals.items():
+        if len(sources) != 1:
+            raise ValueError('Expected one original embedded ' + key.upper() + ' logo')
+        node = tree.by_id('internal-' + key + '-logo')
+        if not node.attrs.get('src'):
+            opening = brand_html[node.start:node.open_end]
+            opening = opening[:-1] + ' src="' + escape(next(iter(sources)), quote=True) + '">'
+            replacements.append((node.start, node.open_end, opening))
+    return _replace_ranges(brand_html, replacements)
+
+
 def _login_only_css(css):
     """Keep the approved login styling; legacy frame rules no longer affect the app."""
     out=[];pos=0
@@ -153,8 +182,9 @@ def apply_fst_shell(html: str, *, target: str, root: Path) -> str:
     header=tree.with_class('header',app);nav=tree.with_class('nav-tabs',app);content=tree.with_class('content',app)
     brand=tree.with_class('internal-brand-wrap',header)
     brand_html=html[brand.start:brand.end].replace('class="internal-brand-wrap"','id="fst-brand" class="internal-brand-wrap"',1)
-    # Reserve intrinsic logo boxes; actual image bytes are still supplied by the
-    # unmodified login flow. Do not create a second pair of image IDs.
+    # Preserve the original image bytes and IDs, including on session restore.
+    brand_html = _hydrate_brand_logos(brand_html, html)
+    # Reserve intrinsic logo boxes before the images finish decoding.
     brand_html=brand_html.replace('class="utm-mini"','class="utm-mini" width="48" height="48"').replace('class="fst-mini"','class="fst-mini" width="80" height="48"')
     def raw(node):return html[node.start:node.end]
     buttons=[n for n in tree.nodes if n.tag=='button' and header.start<n.start<n.end<header.end]

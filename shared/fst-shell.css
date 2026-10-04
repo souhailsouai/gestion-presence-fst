@@ -51,6 +51,27 @@ body.app-active #app-container.fst-shell{display:grid!important;grid-template-co
 #fst-main .form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;min-width:0;max-width:100%;align-items:end}
 #fst-main .form-group{min-width:0;max-width:100%}#fst-main .form-control{width:100%;max-width:100%;min-width:0}
 #fst-main #dashboard-stats.stats-grid{display:block!important;width:100%;min-width:0;margin-bottom:0}
+/* Both dashboard renderers are retained. Style the summary's actual children,
+   without turning the analytics toolbar/panels into summary-card columns. */
+#fst-main #dashboard-stats.stats-grid:has(> .stat-card),
+#fst-main #dashboard-stats.stats-grid:has(> .stats-card){display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:stretch}
+#fst-main #dashboard-stats>:is(.stat-card,.stats-card){min-width:0;margin:0;padding:16px;border:1px solid var(--fst-border);border-radius:10px;background:#fff;box-shadow:none;text-align:left;overflow-wrap:anywhere;transform:none}
+#fst-main #dashboard-stats>:is(.stat-card,.stats-card) :is(.stat-value,.number){margin:0 0 6px;font-size:28px;line-height:1.2;font-weight:700;font-variant-numeric:tabular-nums;color:var(--fst-blue)}
+#fst-main #dashboard-stats>:is(.stat-card,.stats-card) :is(.stat-label,.label){font-size:13px;line-height:1.45;color:var(--fst-muted)}
+#fst-main #v21-official-notices{padding:16px;border-radius:10px;box-shadow:none;min-width:0}
+#fst-main #v21-official-notices h3{margin:0 0 14px;font-size:20px;line-height:1.3;color:var(--fst-navy)}
+#fst-main #v21-official-notices .auth-note{margin:0;overflow-wrap:anywhere}
+@media(max-width:1199px){
+ #fst-main #dashboard-stats.stats-grid:has(> .stat-card),
+ #fst-main #dashboard-stats.stats-grid:has(> .stats-card){grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:767px){
+ #fst-main #dashboard-stats>:is(.stat-card,.stats-card){padding:12px;min-height:88px}
+ #fst-main #dashboard-stats>:is(.stat-card,.stats-card) :is(.stat-value,.number){font-size:26px}
+ #fst-main #v21-official-notices{padding:12px}
+ #fst-main #v21-official-notices h3{font-size:19px}
+ #fst-main #v21-official-notices .auth-note{font-size:13px;padding:12px}
+}
 #fst-main .v22-analytics-toolbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:12px;align-items:end;width:100%;min-width:0}
 #fst-main .v22-analytics-toolbar .form-group{width:100%;margin:0}
 #fst-main .v22-analytics-actions{display:flex;flex-wrap:wrap;gap:8px;min-width:0;align-self:end}

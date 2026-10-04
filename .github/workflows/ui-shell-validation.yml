@@ -47,13 +47,13 @@ jobs:
       - name: Build and test the actual Pages payload
         run: |
           python scripts/build_pages_from_41881.py
-          python -m unittest discover -s tests/browser -p 'test_fst_shell.py' -v
+          python -m unittest discover -s tests/browser -p 'test_*.py' -v
           python tests/browser/capture_fst_shell.py --artifact web/index.html --out artifacts/ui/pages
       - name: Build and test the standalone Web and Windows HTML
         run: |
           python scripts/build_online_web.py
           python scripts/build_single_file_release.py
-          python -m unittest discover -s tests/browser -p 'test_fst_shell.py' -v
+          python -m unittest discover -s tests/browser -p 'test_*.py' -v
           python tests/browser/capture_fst_shell.py --artifact web/index.html --out artifacts/ui/standalone
       - name: Upload offline UI evidence
         if: always()
