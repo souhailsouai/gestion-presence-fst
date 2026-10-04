@@ -43,7 +43,7 @@ test('workbook spec has one sheet per supplied class',()=>{
 test('filenames are stable, pedagogical and year-qualified',()=>{
   assert.equal(X.globalFilename('MPI1_PC1','2026_2027'),'Suivi_TP_MPI1_PC1_2026_2027.xlsx');
   assert.equal(X.globalFilename('LPC3','2026_2027'),'Suivi_TP_LPC3_2026_2027.xlsx');
-  assert.equal(X.classFilename('MPI1-A','2026_2027'),'Suivi_TP_MPI1-A_2026_2027.xlsx');
+  assert.equal(X.classFilename('MPI1-A','2026_2027'),'Suivi_TP_MPI1_A_2026_2027.xlsx');
 });
 
 test('LPC3 export is explicitly separate from MPI1-PC1 export',()=>{
