@@ -124,6 +124,10 @@ async function fetchRows(){
   state.students=results[0].data||[];state.sessions=results[1].data||[];
   var sessionIds=state.sessions.map(function(x){return x.id;});
   if(!sessionIds.length){state.attendance=[];return;}
+  var plans=await c.from('session_plans').select('session_id,manipulation,status').in('session_id',sessionIds).is('deleted_at',null);
+  if(plans.error)throw plans.error;
+  var manipulationBySession=new Map((plans.data||[]).filter(function(p){return p.session_id&&p.manipulation;}).map(function(p){return [String(p.session_id),p.manipulation];}));
+  state.sessions.forEach(function(s){s.manipulation=manipulationBySession.get(String(s.id))||s.manipulation||'';});
   var at=await c.from('attendance').select('id,teacher_id,session_id,student_id,status,comment,grade,grade_origin,manual_grade_backup,grade_only,updated_at').in('session_id',sessionIds).is('deleted_at',null);
   if(at.error)throw at.error;state.attendance=at.data||[];
 }
