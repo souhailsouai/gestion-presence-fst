@@ -8,6 +8,16 @@ out = web / 'index.html'
 
 html = source.read_text(encoding='utf-8')
 
+# The locked source retains historical labels. Correct this one delivered title
+# before writing the Pages payload, without hiding or removing the notice block.
+notices_heading = '<h3><i class="fas fa-bullhorn"></i> Avis officiels \u2014 V30</h3>'
+assert html.count(notices_heading) == 1, 'Expected one official notices heading in the locked source'
+html = html.replace(
+    notices_heading,
+    '<h3><i class="fas fa-bullhorn"></i> Avis officiels</h3>',
+    1,
+)
+
 # Keep the locked 41881 baseline untouched, but externalize the large SheetJS
 # engine in the Pages payload. This prevents browser HTML recovery from ever
 # rendering minified XLSX source as visible application content.
