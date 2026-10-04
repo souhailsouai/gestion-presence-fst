@@ -29,6 +29,13 @@ visible_labels = (
     ('Planning des s\u00e9ances \u2014 V30', 'Planning des s\u00e9ances'),
     ('Configuration des intervenants \u2014 V30', 'Configuration des intervenants'),
     ('Source officielle V30 :', 'Source officielle :'),
+    ('Le planning V20 doit contenir exactement 7 enseignants configur\u00e9s.', 'Le planning doit contenir exactement 7 enseignants configur\u00e9s.'),
+    ('R\u00e8gle V20 :', 'R\u00e8gle :'),
+    ('\u00c9dition manuelle du planning \u2014 V20', '\u00c9dition manuelle du planning'),
+    ('Mod\u00e8le d\u2019export V16 indisponible.', 'Mod\u00e8le d\u2019export indisponible.'),
+    ('Erreur de chargement : modules V16 indisponibles.', 'Erreur de chargement : modules indisponibles.'),
+    ('Mode de fonctionnement V20', 'Mode de fonctionnement'),
+    ('Modification manuelle des enseignants \u2014 V20', 'Modification manuelle des enseignants'),
 )
 for previous_label, display_label in visible_labels:
     assert previous_label in html, 'Expected legacy display label: ' + previous_label
