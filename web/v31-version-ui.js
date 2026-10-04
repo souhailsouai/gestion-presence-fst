@@ -1,24 +1,34 @@
 (function(root){
 'use strict';
-function install(){
-  const cfg=root.FSTV31Config;
-  if(!cfg||!root.document)return;
-  let style=document.getElementById('v31-footer-style');
-  if(!style){
-    style=document.createElement('style');
-    style.id='v31-footer-style';
-    style.textContent='#v31-app-version-footer{font-size:11px;line-height:1.4;color:#6b7280;text-align:center;padding:8px 12px 12px;opacity:.85}';
-    document.head.appendChild(style);
-  }
-  let footer=document.getElementById('v31-app-version-footer');
-  if(!footer){
-    footer=document.createElement('div');
-    footer.id='v31-app-version-footer';
-    footer.setAttribute('aria-label','Version technique de l’application');
-    document.body.appendChild(footer);
-  }
-  footer.textContent='© '+cfg.INSTITUTION_SHORT+' · '+cfg.APP_VERSION_LABEL;
+
+const VERSION_PATTERNS=[
+  /\bV30\b/i,
+  /\bV31\b/i,
+  /\bv3\.0\b/i,
+  /\bv3\.1\b/i,
+  /\bVersion\s*(?:V?30|V?31|3\.0|3\.1)\b/i
+];
+
+function looksLikeVisibleVersion(text){
+  const value=String(text||'').trim();
+  return VERSION_PATTERNS.some(function(re){return re.test(value);});
 }
-if(root.document?.readyState==='loading')root.document.addEventListener('DOMContentLoaded',install,{once:true});else install();
-root.FSTV31VersionUi={install};
+
+function install(){
+  const doc=root.document;
+  if(!doc)return;
+
+  ['v31-app-version-footer','v30-app-version-footer','app-version-footer'].forEach(function(id){
+    doc.getElementById(id)?.remove();
+  });
+
+  doc.querySelectorAll('[data-app-version-visible],[id*="version" i],[class*="version" i]').forEach(function(el){
+    if(looksLikeVisibleVersion(el.textContent))el.remove();
+  });
+}
+
+if(root.document?.readyState==='loading')root.document.addEventListener('DOMContentLoaded',install,{once:true});
+else install();
+
+root.FSTV31VersionUi={install,looksLikeVisibleVersion};
 })(typeof window!=='undefined'?window:globalThis);
