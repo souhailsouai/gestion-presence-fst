@@ -35,6 +35,12 @@ finally:
 
 html = out.read_text(encoding='utf-8')
 html = apply_v16_shell(html)
+mobile_css = (root / 'shared' / 'mobile.css').read_text(encoding='utf-8').strip()
+mobile_js = (root / 'shared' / 'mobile.js').read_text(encoding='utf-8').strip()
+if 'data-fst-mobile-css="inline"' not in html:
+    html = html.replace('</head>', '\n<style data-fst-mobile-css="inline">\n' + mobile_css + '\n</style>\n</head>', 1)
+if 'data-fst-mobile-js="inline"' not in html:
+    html = html.replace('</body>', '\n<script data-fst-mobile-js="inline">\n' + mobile_js + '\n</script>\n</body>', 1)
 tags = [
     '<script src="./v31-config.js"></script>',
     '<script src="./v31-domain.js"></script>',
@@ -74,6 +80,8 @@ markers = [
     '2026/2027',
     'data-v16-navigation="true"',
     'id="planning-v16" class="tab-content"',
+    'data-fst-mobile-css="inline"',
+    'data-fst-mobile-js="inline"',
     *tags,
 ]
 for marker in markers:

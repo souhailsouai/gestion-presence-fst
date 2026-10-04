@@ -6,6 +6,8 @@ on:
     paths:
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
+      - 'shared/mobile.css'
+      - 'shared/mobile.js'
       - 'scripts/build_online_web.py'
       - 'scripts/build_single_file_release.py'
       - 'scripts/v16_html_transform.py'
@@ -84,6 +86,10 @@ jobs:
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'challengeAndVerify' web/index.html
           grep -Fq 'VERSION_CONFLICT' web/index.html
+          grep -Fq 'data-fst-mobile-css="inline"' web/index.html
+          grep -Fq 'data-fst-mobile-js="inline"' web/index.html
+          grep -Fq 'mobile-lpc3-link' web/index.html
+          ! grep -Fq 'v31-app-version-footer' web/index.html
           ! grep -Fq './security-v2.js' web/index.html
           ! grep -Fq './v16-planning-ui.js' web/index.html
           ! grep -Fq 'data-fst-v515-planning-ui="inline"' web/index.html
