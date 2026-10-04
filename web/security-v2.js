@@ -246,6 +246,8 @@
       status: record.status || 'present',
       comment: record.comment || '',
       grade: record.grade == null ? null : Number(record.grade),
+      gradeOrigin: record.grade_origin || null,
+      manualGradeBackup: record.manual_grade_backup == null ? null : Number(record.manual_grade_backup),
       gradeUpdatedAt: record.updated_at || null,
       timestamp: record.updated_at || new Date().toISOString()
     }));
@@ -276,7 +278,9 @@
           student_id: String(student.id),
           status: record?.status || 'present',
           comment: record?.comment || '',
-          grade: record?.grade == null ? null : Number(record.grade)
+          grade: record?.grade == null ? null : Number(record.grade),
+          grade_origin: record?.gradeOrigin || null,
+          manual_grade_backup: record?.manualGradeBackup == null ? null : Number(record.manualGradeBackup)
         };
       });
   }
