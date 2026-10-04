@@ -56,6 +56,7 @@ tags = [
     '<script src="./v16-planning-xlsx.js"></script>',
     '<script src="./v31-tracking-xlsx.js"></script>',
     '<script src="./v31-version-ui.js"></script>',
+    '<script src="./v31-export-ui.js"></script>',
     '<script src="./v16-planning-editor.js"></script>',
     '<script src="./v16-dashboard-notices.js"></script>',
     '<script src="./v16-planning-ui.js"></script>',
