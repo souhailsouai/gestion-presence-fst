@@ -1,0 +1,32 @@
+name: V31 validation
+
+on:
+  push:
+    branches: [ feature/v31-presence-notes-lpc3 ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: JavaScript unit and regression tests
+        run: node --test tests/web/*.test.cjs
+      - name: Build Pages candidate
+        run: python scripts/build_pages_from_41881.py
+      - name: Verify V31 candidate modules
+        run: |
+          grep -q 'v31-config.js' web/index.html
+          grep -q 'v31-domain.js' web/index.html
+          grep -q 'v31-tracking-xlsx.js' web/index.html
+          grep -q 'v31-version-ui.js' web/index.html
