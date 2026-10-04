@@ -246,6 +246,8 @@
       status: record.status || 'present',
       comment: record.comment || '',
       grade: record.grade == null ? null : Number(record.grade),
+      gradeOrigin: record.grade_origin || null,
+      manualGradeBackup: record.manual_grade_backup == null ? null : Number(record.manual_grade_backup),
       gradeUpdatedAt: record.updated_at || null,
       timestamp: record.updated_at || new Date().toISOString()
     }));
@@ -272,11 +274,24 @@
         const record = typeof ensureAttendanceRecord === 'function'
           ? ensureAttendanceRecord(sessionId, student.id)
           : (data.attendance || []).find((item) => String(item.sessionId) === String(sessionId) && String(item.studentId) === String(student.id));
+        const rule=window.FSTV31Domain?.applyAttendanceGradeRule?.({
+          status:record?.status||'present',
+          grade:record?.grade,
+          gradeOrigin:record?.gradeOrigin,
+          manualGradeBackup:record?.manualGradeBackup
+        });
+        if(rule?.valid){
+          record.grade=rule.grade;
+          record.gradeOrigin=rule.gradeOrigin;
+          record.manualGradeBackup=rule.manualGradeBackup;
+        }
         return {
           student_id: String(student.id),
           status: record?.status || 'present',
           comment: record?.comment || '',
-          grade: record?.grade == null ? null : Number(record.grade)
+          grade: record?.grade == null ? null : Number(record.grade),
+          grade_origin: record?.gradeOrigin || null,
+          manual_grade_backup: record?.manualGradeBackup == null ? null : Number(record.manualGradeBackup)
         };
       });
   }
