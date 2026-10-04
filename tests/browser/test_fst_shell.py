@@ -131,6 +131,29 @@ class ShellNavigation(unittest.TestCase):
         p.wait_for_function("document.getElementById('lpc3-refresh').disabled === false")
         self.assertEqual(p.evaluate('__exports.length'),0)
 
+    def test_lpc3_report_does_not_invent_present_students_before_roll_call(self):
+        h=self.fixture(1366);p=h.page
+        self.assertTrue(p.evaluate('V30LPC3.refresh()'))
+        cells=p.locator('#lpc3-report tbody tr').first.locator('td').all_text_contents()
+        self.assertEqual(cells[2:],['1','0','0','0','0','1'])
+        self.assertIn('Non renseign',p.locator('#lpc3-report thead').inner_text())
+        self.assertEqual(p.evaluate('__fstTest.writes.length'),0)
+
+    def test_lpc3_report_keeps_four_states_and_excludes_grade_only_records(self):
+        h=self.fixture(1366);p=h.page
+        p.evaluate("""()=>{
+          const statuses=['present','absent','retard','justifie','present',null];
+          __fstTest.tables.students=statuses.map((_,i)=>({id:'report-'+i,class_id:'fixture-class',last_name:'Test',first_name:String(i)}));
+          __fstTest.tables.attendance=statuses.slice(0,5).map((status,i)=>({id:'mark-'+i,student_id:'report-'+i,session_id:'fixture-session',status,grade_only:i===4,grade:i===4?0:null,grade_origin:i===4?'manual':null}));
+        }""")
+        self.assertTrue(p.evaluate('V30LPC3.refresh()'))
+        cells=p.locator('#lpc3-report tbody tr').first.locator('td').all_text_contents()
+        self.assertEqual(cells[2:],['6','1','1','1','1','2'])
+        self.assertEqual(p.evaluate("V30LPC3.state.attendance.find(x=>x.id==='mark-4').grade"),0)
+        self.assertEqual(p.evaluate("V30LPC3.state.attendance.find(x=>x.id==='mark-4').grade_origin"),'manual')
+        self.assertEqual(p.evaluate('__fstTest.writes.length'),0)
+        self.assertEqual(h.errors,[])
+
     def test_export_mount_is_idempotent_without_polling(self):
         h=self.fixture(1366);p=h.page
         p.evaluate('for(let i=0;i<4;i++){FSTV31ExportUi.mount();FSTShell.init();}')

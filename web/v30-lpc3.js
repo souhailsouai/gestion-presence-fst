@@ -254,11 +254,14 @@ function renderReport(){
   var box=document.getElementById('lpc3-report');if(!box)return;
   var rows=state.sessions.map(function(s){
     var c=classById(s.class_id),students=studentsForClass(s.class_id),ats=students.map(function(st){return attendanceFor(s.id,st.id);});
-    var n=function(status){return ats.filter(function(a){return (a?.status||'present')===status;}).length;};
-    return '<tr><td>'+fmtDate(s.session_date)+'</td><td>'+esc(c?.name||'LPC3')+'</td><td>'+students.length+'</td><td>'+n('present')+'</td><td>'+n('absent')+'</td><td>'+n('retard')+'</td><td>'+n('justifie')+'</td></tr>';
+    // Missing roll call and grade-only entries are not evidence of presence.
+    var summary=root.FSTV31Domain.summarizeAttendance(ats.map(function(a){
+      return {status:a&&a.grade_only!==true?a.status:null,environment:'LPC3'};
+    }),{environment:'LPC3'});
+    return '<tr><td>'+fmtDate(s.session_date)+'</td><td>'+esc(c?.name||'LPC3')+'</td><td>'+students.length+'</td><td>'+summary.present+'</td><td>'+summary.absent+'</td><td>'+summary.late+'</td><td>'+summary.justified+'</td><td>'+summary.unrecordedSessions+'</td></tr>';
   }).join('');
   box.innerHTML='<div class="lpc3-summary"><div class="lpc3-kpi"><strong>'+state.sessions.length+'</strong><br>Séances</div><div class="lpc3-kpi"><strong>'+state.students.length+'</strong><br>Étudiants</div><div class="lpc3-kpi"><strong>'+ROOM+'</strong><br>Salle</div><div class="lpc3-kpi"><strong>'+START+'–'+END+'</strong><br>Horaire</div></div>'+
-    '<div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Groupe</th><th>Effectif</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    '<div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Groupe</th><th>Effectif</th><th>Présents</th><th>Absents</th><th>Retards</th><th>Justifiés</th><th>Non renseignés</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
 function invalidate(){
