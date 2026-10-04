@@ -81,7 +81,8 @@ function bindPanel(el,environment){
     try{
       if(environment==='LPC3'){
         if(!root.V30LPC3?.isOwner?.())throw new Error('Accès LPC3 non autorisé.');
-        await root.V30LPC3.refresh?.();
+        const refreshed=await root.V30LPC3.refresh?.();
+        if(refreshed!==true||!root.V30LPC3?.isOwner?.())throw new Error('Données LPC3 non confirmées.');
         const model=lpc3Model();if(!model)throw new Error('Données LPC3 indisponibles.');
         root.FSTV31TrackingXlsx.generate(model,{environment:'LPC3'});
       }else{
@@ -106,6 +107,7 @@ function mount(){
   return true;
 }
 if(root.document?.readyState==='loading')root.document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,0),{once:true});else setTimeout(mount,0);
-setInterval(mount,1500);
+for(const event of ['fst:shell-ready','fst:tab-activated','fst:lpc3-updated'])root.addEventListener?.(event,mount);
+root.addEventListener?.('fst:auth-changed',()=>{if(!root.V30LPC3?.isOwner?.())document.getElementById('v31-lpc3-export')?.remove();mount();});
 root.FSTV31ExportUi={mount,modelsFromRuntime,lpc3Model,loadPlanManipulations};
 })(typeof window!=='undefined'?window:globalThis);
