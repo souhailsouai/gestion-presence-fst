@@ -3,27 +3,22 @@ const path=require('node:path');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 
-function latestStudentInsertPolicy(){
-  const dir=path.join(__dirname,'../../supabase/migrations');
-  const sql=fs.readdirSync(dir).filter(n=>n.endsWith('.sql')).sort()
-    .map(n=>fs.readFileSync(path.join(dir,n),'utf8')).join('\n');
-  const marker='create policy students_insert_authorized on public.students';
-  const pos=sql.lastIndexOf(marker);
-  assert.notEqual(pos,-1,'students_insert_authorized policy missing');
-  const next=sql.indexOf('\ndrop policy ',pos+marker.length);
-  return sql.slice(pos,next===-1?sql.length:next);
-}
+const migrationPath=path.join(__dirname,'../../supabase/migrations/20261004191849_fix_teacher_student_insert_permission.sql');
 
 test('teacher insert policy authorizes assigned MPI1-PC1 groups independently of legacy student owner',()=>{
-  const policy=latestStudentInsertPolicy();
-  assert.match(policy,/session_plans[\s\S]*sp\.teacher_id=\(select auth\.uid\(\)\)/);
-  assert.match(policy,/sessions[\s\S]*se\.teacher_id=\(select auth\.uid\(\)\)/);
-  assert.doesNotMatch(policy,/students\.teacher_id=\(select auth\.uid\(\)\)/);
+  assert.equal(fs.existsSync(migrationPath),true,'teacher insert permission migration missing');
+  const policy=fs.readFileSync(migrationPath,'utf8');
+  assert.match(policy,/session_plans[\s\S]*sp\.teacher_id\s*=\s*\(select auth\.uid\(\)\)/);
+  assert.match(policy,/sessions[\s\S]*se\.teacher_id\s*=\s*\(select auth\.uid\(\)\)/);
+  assert.doesNotMatch(policy,/students\.teacher_id\s*=\s*\(select auth\.uid\(\)\)/);
+  assert.match(policy,/TP Ondes et Vibrations[\s\S]*private\.is_lpc3_owner/);
 });
 
 test('teacher student creation always stamps the authenticated teacher id',()=>{
   const src=fs.readFileSync(path.join(__dirname,'../../web/access-control.js'),'utf8');
-  const block=src.slice(src.indexOf('window.addStudent=async function'),src.indexOf('window.FSTAccessControl='));
+  const start=src.indexOf('window.addStudent=async function');
+  const end=src.indexOf('window.FSTAccessControl=',start);
+  const block=src.slice(start,end);
   assert.match(block,/teacher_id:currentTeacher\.id/);
   assert.doesNotMatch(block,/teacher_id:c\.teacherId\|\|currentTeacher\.id/);
 });
