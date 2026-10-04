@@ -76,9 +76,10 @@ test('all delivered heading text is version-free including inline HTML templates
 
 test('removing visible versions preserves logos, institution, year and technical module identifiers', () => {
   const source = fs.readFileSync('index.html', 'utf8');
-  // Reserved dimensions change, but image bytes, identity and all other attributes do not.
+  // Header dimensions and initial sources are supplied at build time. Exact logo
+  // bytes are checked against the original login images in fst-shell-build.test.cjs.
   const logoMarkup = text => [...text.matchAll(/<img\b[^>]*>/gi)].map(m =>
-    /id="internal-(utm|fst)-logo"/.test(m[0]) ? m[0].replace(/ (?:width|height)="[^"]*"/g, '') : m[0]);
+    /id="internal-(utm|fst)-logo"/.test(m[0]) ? m[0].replace(/ (?:width|height|src)="[^"]*"/g, '') : m[0]);
   assert.deepEqual(logoMarkup(html), logoMarkup(source));
   assert.match(html, /id="internal-utm-logo"[^>]*width="48"[^>]*height="48"/);
   assert.match(html, /id="internal-fst-logo"[^>]*width="80"[^>]*height="48"/);
