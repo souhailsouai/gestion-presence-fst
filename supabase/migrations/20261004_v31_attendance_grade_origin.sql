@@ -11,6 +11,24 @@ set grade_origin = 'manual'
 where grade is not null
   and grade_origin is null;
 
+-- Normalize historical unjustified absences to the V31 invariant.
+update public.attendance
+set grade=0,
+    grade_origin='absence_auto',
+    grade_updated_at=coalesce(grade_updated_at,now())
+where deleted_at is null
+  and status='absent'
+  and grade is null;
+
+-- A justified absence must never retain an automatically generated zero.
+update public.attendance
+set grade=null,
+    grade_origin=null,
+    manual_grade_backup=null
+where deleted_at is null
+  and status='justifie'
+  and grade_origin='absence_auto';
+
 alter table public.attendance
   drop constraint if exists attendance_grade_origin_check;
 
