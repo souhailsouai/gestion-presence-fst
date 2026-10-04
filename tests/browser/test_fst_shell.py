@@ -42,14 +42,25 @@ class ShellNavigation(unittest.TestCase):
             for owner,admin,mode in [(True,True,'admin'),(True,True,'teacher'),(False,False,'teacher'),(False,True,'admin')]:
                 with self.subTest(width=width,owner=owner,admin=admin,mode=mode):
                     h=self.fixture(width,owner,admin,mode);p=h.page
-                    self.assertEqual(p.locator('#lpc3-nav-tab').evaluate('(e)=>e.hidden'),not owner)
-                    self.assertEqual(p.locator('#admin-nav-tab').evaluate('(e)=>e.hidden'),not (admin and mode=='admin'))
-                    result=p.evaluate("FSTShell.activateTab('presence-lpc3')")
-                    self.assertEqual(result,owner)
-                    if not owner:
-                        self.assertFalse(p.evaluate("window.switchTab('presence-lpc3')"))
-                        self.assertFalse(p.locator('#presence-lpc3').evaluate("e=>e.classList.contains('active')"))
-                    h.close();self._cleanups.pop()
+                    try:
+                        self.assertEqual(p.locator('#lpc3-nav-tab').evaluate('(e)=>e.hidden'),not owner)
+                        self.assertEqual(p.locator('#admin-nav-tab').evaluate('(e)=>e.hidden'),not (admin and mode=='admin'))
+                        result=p.evaluate("FSTShell.activateTab('presence-lpc3')")
+                        self.assertEqual(result,owner)
+                        if not owner:
+                            self.assertFalse(p.evaluate("window.switchTab('presence-lpc3')"))
+                            self.assertFalse(p.locator('#presence-lpc3').evaluate("e=>e.classList.contains('active')"))
+                    finally:
+                        h.close();self._cleanups.pop()
+    def test_programmatic_activation_does_not_require_a_mouse_event(self):
+        h=self.fixture(1366);p=h.page
+        self.assertTrue(p.evaluate("FSTShell.activateTab('presence-lpc3')"))
+        p.wait_for_function("V30LPC3.state.classes.length === 1")
+        self.assertEqual(p.evaluate("__fstTest.reads.filter(x=>x.table==='classes').length"),1)
+        self.assertTrue(p.evaluate("FSTShell.activateTab('dashboard')"))
+        self.assertTrue(p.locator('#dashboard').evaluate("e=>e.classList.contains('active')"))
+        self.assertEqual(h.errors,[])
+
     def test_repeat_mount_resize_and_escape_restore_focus(self):
         h=self.fixture();p=h.page
         p.evaluate('for(let i=0;i<5;i++)FSTShell.init()')
@@ -149,6 +160,7 @@ class ShellContent(unittest.TestCase):
                 m=measure_layout(h.page)
                 self.assertLessEqual(m['rootOverflowPx'],1,m)
                 self.assertLessEqual(m['titleLineCount'],2,m)
+                self.assertLessEqual(m['appTitleLineCount'],2,m)
                 self.assertLessEqual(m['headerOverlapAreaPx2'],1,m)
                 self.assertTrue(m['essentialControlsInsideViewport'],m)
                 self.assertTrue(all(x['loaded'] and x['visible'] and x['insideViewport'] for x in m['logos']),m)
@@ -167,8 +179,31 @@ class ShellContent(unittest.TestCase):
         self.assertGreater(p.locator('#fixture-wide-table').evaluate('(e)=>e.scrollLeft'),0)
         p.locator('#fst-user-toggle').click();p.locator('#fst-user-menu [onclick="openPinModal()"] ').click()
         self.assertTrue(p.locator('.pin-modal-box').evaluate('(e)=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;}'))
+        self.assertTrue(measure_layout(p)['modalInsideViewport'])
+        self.assertEqual(measure_layout(p)['modalCount'],1)
         for i in range(4):p.keyboard.press('Tab')
         self.assertTrue(p.evaluate('!!document.activeElement.closest("#pin-modal")'))
+    def test_rendered_login_and_all_authorized_routes_have_no_visible_version(self):
+        import re
+        h=Harness(390,844);self.addCleanup(h.close);p=h.page
+        version=re.compile(r'\b(?:V\s*\d+(?:\.\d+)*|Version\s+\d+(?:\.\d+)*)\b',re.I)
+        self.assertIsNone(version.search(p.locator('body').inner_text()))
+        h.login_fixture()
+        # Planning requires an academic cycle; provide explicit read-only data.
+        p.evaluate("__fstTest.tables.v515_cycles=[{id:'fixture-cycle',academic_year:'2026/2027',semester:1}]")
+        routes=p.evaluate("JSON.parse(document.getElementById('fst-nav-config').textContent).groups.flatMap(x=>x.items).map(x=>x.tabId)")
+        for target in routes:
+            with self.subTest(target=target):
+                for _ in range(2):
+                    allowed=p.evaluate('(t)=>FSTShell.activateTab(t)',target)
+                    p.wait_for_timeout(30)
+                    if not allowed:
+                        self.assertEqual(p.locator('#'+target).count(),0,'An existing authorized route must not disappear')
+                        continue
+                    self.assertIsNone(version.search(p.locator('body').inner_text()),target)
+                    self.assertLessEqual(measure_layout(p)['rootOverflowPx'],1,target)
+        self.assertEqual(h.errors,[])
+
     def test_unsaved_inputs_survive_frame_actions(self):
         h=Harness(1366,900);self.addCleanup(h.close);h.login_fixture()
         p=h.page
@@ -189,5 +224,81 @@ class ShellContent(unittest.TestCase):
         p.locator('#fst-sidebar-toggle').click();p.keyboard.press('Escape')
         self.assertLessEqual(measure_layout(p)['rootOverflowPx'],1)
         self.assertEqual(h.errors,[])
+
+
+class ShellAuthentication(unittest.TestCase):
+    """Exercise the real form/router with an offline authentication provider.
+
+    This is frontend integration evidence, not a successful Supabase login.
+    """
+    def fixture(self, width=390, role='admin', owner=True, missing=False, reject=False):
+        h=Harness(width,844 if width<768 else 900);self.addCleanup(h.close)
+        h.page.evaluate('''({role,owner,missing,reject})=>{
+          const id=owner?V30LPC3.OWNER_ID:'00000000-0000-4000-8000-000000000001';
+          const profile={id,email:'fixture@example.invalid',username:'fixture',full_name:'Enseignant de test',role,account_state:'active',mfa_required:false};
+          __fstTest.tables.profiles=missing?[]:[profile];
+          __fstTest.tables.v515_cycles=[{id:'fixture-cycle',academic_year:'2026/2027',semester:1}];
+          __fstTest.authTrace=[];__fstTest.session=null;
+          supabaseClient.functions.invoke=async(name,args)=>{
+            __fstTest.authTrace.push({name,args});
+            if(name!=='pin-login'&&name!=='admin-pin-login')return {data:null,error:null};
+            if(reject)return {data:null,error:{message:'Fixture credential rejected'}};
+            return {data:{access_token:'fixture-access',refresh_token:'fixture-refresh'},error:null};
+          };
+          supabaseClient.auth.setSession=async(args)=>{
+            __fstTest.authTrace.push({name:'setSession',args});
+            __fstTest.session={user:{id}};
+            return {data:{user:{id},session:__fstTest.session},error:null};
+          };
+          supabaseClient.auth.getSession=async()=>({data:{session:__fstTest.session},error:null});
+          supabaseClient.auth.signInWithPassword=async(args)=>{__fstTest.authTrace.push({name:'signInWithPassword',args});return {data:{user:null},error:{message:'Fixture credentials rejected'}};};
+          supabaseClient.auth.signOut=async()=>{__fstTest.authTrace.push({name:'signOut'});__fstTest.session=null;return {error:null};};
+        }''',dict(role=role,owner=owner,missing=missing,reject=reject))
+        return h
+    def submit(self,p,mode):
+        p.locator('#login-role').select_option(mode)
+        p.locator('#login-email').fill('fixture')
+        p.locator('#login-pin').fill('000001')
+        p.locator('#auth-overlay button[onclick="loginTeacher()"]').click()
+    def test_actual_form_login_and_logout_synchronize_private_navigation(self):
+        for width in [390,1366]:
+            with self.subTest(width=width):
+                h=self.fixture(width);p=h.page
+                try:
+                    self.submit(p,'admin')
+                    p.wait_for_function("currentTeacher && FSTShell && document.getElementById('lpc3-nav-tab').hidden === false")
+                    self.assertEqual(p.evaluate('__fstTest.authTrace.filter(x=>x.name===\"setSession\").length'),1)
+                    p.locator('#fst-user-toggle').click();p.locator('#fst-user-menu [onclick="logoutTeacher()"]').click()
+                    p.wait_for_function('currentTeacher === null')
+                    p.wait_for_function("document.getElementById('lpc3-nav-tab').hidden === true")
+                    self.assertTrue(p.locator('#auth-overlay').is_visible())
+                    self.assertEqual(p.evaluate('__fstTest.writes.length'),0)
+                    self.assertEqual(h.errors,[])
+                finally:
+                    h.close();self._cleanups.pop()
+    def test_restored_teacher_session_does_not_open_admin_or_lpc3(self):
+        h=self.fixture(role='teacher',owner=False);p=h.page
+        p.evaluate("__fstTest.session={user:{id:'00000000-0000-4000-8000-000000000001'}};localStorage.setItem('presence_active_mode','admin')")
+        p.evaluate('restorePersistentSession()')
+        p.wait_for_function("currentTeacher && currentTeacher.activeMode === 'teacher'")
+        p.wait_for_function("document.getElementById('lpc3-nav-tab').hidden === true")
+        self.assertTrue(p.locator('#admin-nav-tab').evaluate('e=>e.hidden'))
+        self.assertFalse(p.evaluate("FSTShell.activateTab('presence-lpc3')"))
+        self.assertEqual(h.errors,[])
+    def test_rejected_credentials_keep_the_frame_logged_out(self):
+        h=self.fixture(reject=True);p=h.page;self.submit(p,'teacher')
+        # Pages preserves password fallback; V2 signs out after denial. Both
+        # must visibly reject the credentials without opening the frame.
+        p.locator('#auth-error.show').wait_for(state='visible')
+        self.assertTrue(p.locator('#auth-overlay').is_visible())
+        self.assertFalse(p.locator('#app-container').is_visible())
+        self.assertEqual(p.evaluate('__fstTest.writes.length'),0)
+        self.assertEqual(h.errors,[])
+    def test_missing_profile_keeps_the_frame_logged_out(self):
+        h=self.fixture(missing=True);p=h.page;self.submit(p,'teacher')
+        p.wait_for_function('__fstTest.authTrace.some(x=>x.name===\"signOut\")')
+        self.assertTrue(p.locator('#auth-overlay').is_visible())
+        self.assertFalse(p.locator('#app-container').is_visible())
+        self.assertFalse(p.evaluate("FSTShell.activateTab('presence-lpc3')"))
 
 if __name__=='__main__':unittest.main()

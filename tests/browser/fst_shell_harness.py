@@ -49,9 +49,9 @@ def offline_html(path=ARTIFACT):
     def script(match):
         src=match.group(1)
         if src.startswith('./'):
-            target=ROOT/'web'/src[2:]
+            target=Path(path).parent/src[2:]
             if not target.is_file():
-                target=Path(path).parent/src[2:]
+                target=ROOT/'web'/src[2:]
             if not target.is_file(): raise FileNotFoundError(src)
             return '<script>\n'+target.read_text(encoding='utf-8')+'\n</script>'
         return ''
@@ -121,8 +121,12 @@ def measure_layout(page):
       const lineHeight=parseFloat(getComputedStyle(title).lineHeight)||parseFloat(getComputedStyle(title).fontSize)*1.2;
       const titleLineCount=Math.max(1,Math.round(tr.height/lineHeight));
       const logos=[...app.querySelectorAll('#internal-utm-logo,#internal-fst-logo')].map(e=>({loaded:e.complete&&e.naturalWidth>0,visible:rect(e).width>0&&rect(e).height>0,insideViewport:inside(e)}));
+      const modalBoxes=[...document.querySelectorAll('.pin-modal.show .pin-modal-box,.modal.show .modal-content,.modal.active .modal-content,[role="dialog"][aria-modal="true"]:not(#fst-sidebar)')].filter(e=>rect(e).width>0&&rect(e).height>0&&getComputedStyle(e).visibility!=='hidden');
+      const brandTitle=app.querySelector('#fst-brand h1');
+      const brandVisible=brandTitle&&rect(brandTitle).width>2&&rect(brandTitle).height>2;
+      const brandLineHeight=brandTitle?(parseFloat(getComputedStyle(brandTitle).lineHeight)||24):24;
       const controls=[...header.querySelectorAll('button')].filter(e=>rect(e).width>0&&rect(e).height>0&&getComputedStyle(e).visibility!=='hidden');
       return {titleLineCount,headerOverlapAreaPx2:intersection,headerHeight:rect(header).height,titleWidth:tr.width,rootOverflowPx:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-innerWidth,
-        essentialControlsInsideViewport:controls.every(inside),modalInsideViewport:true,logos,
+        essentialControlsInsideViewport:controls.every(inside),modalInsideViewport:modalBoxes.every(inside),modalCount:modalBoxes.length,appTitleLineCount:brandVisible?Math.round(rect(brandTitle).height/brandLineHeight):0,logos,
         navCount:document.querySelectorAll('#fst-sidebar-nav').length,viewport:{width:innerWidth,height:innerHeight}};
     }''')

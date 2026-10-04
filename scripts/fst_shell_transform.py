@@ -118,6 +118,14 @@ def apply_fst_shell(html: str, *, target: str, root: Path) -> str:
         end=html.rfind('</body>')
         if end<0:raise ValueError('Missing document body')
         return html[:end]+'\n'+block+'\n'+html[end:]
+    # Programmatic restoration and route guards have no implicit mouse event.
+    # Replace only active-button lookup; keep the legacy router's side effects.
+    event_lookup = "event.target.closest('.nav-tab').classList.add('active');"
+    if html.count(event_lookup) != 1:
+        raise ValueError('Expected one legacy active-navigation lookup')
+    html = html.replace(event_lookup,
+        "document.querySelectorAll('.nav-tab').forEach(button => { "
+        "if (button.dataset.tab === tabName) button.classList.add('active'); });", 1)
     root=Path(root)
     registry=json.loads((root/'shared/fst-navigation.json').read_text(encoding='utf-8'))
     # Both historical mobile scripts redefine auth; preserve the last effective

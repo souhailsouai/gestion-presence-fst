@@ -7,6 +7,9 @@ on:
       - 'index.html'
       - 'gestion_presence_tp_theme_institutionnel.html'
       - 'web/**'
+      - 'shared/fst-*'
+      - 'scripts/fst_shell_transform.py'
+      - 'tests/browser/**'
       - 'shared/mobile.css'
       - 'shared/mobile.js'
       - 'scripts/build_pages_from_41881.py'
@@ -70,12 +73,18 @@ jobs:
           ! grep -Fq 'Km(e){var r=e.replace' web/index.html
           grep -Fq './v30-teacher-attendance-fix.js' web/index.html
           grep -Fq './v30-lpc3.js' web/index.html
-          grep -Fq 'data-fst-mobile-css="inline"' web/index.html
-          grep -Fq 'data-fst-mobile-js="inline"' web/index.html
-          grep -Fq 'mobile-lpc3-link' web/v30-lpc3.js
-          ! grep -Fq 'v31-app-version-footer' web/index.html
+          grep -Fq 'data-fst-shell-css="inline"' web/index.html
+          grep -Fq 'data-fst-shell-js="inline"' web/index.html
+          grep -Fq 'id="lpc3-nav-tab"' web/index.html
+          grep -Fq 'id="fst-sidebar-nav"' web/index.html
           grep -Fq 'save_attendance_sheet' web/index.html
           grep -Fq 'challengeAndVerify' web/index.html
+
+      - name: Verify rendered Pages before publication
+        run: |
+          python -m pip install -r tests/browser/requirements.txt
+          python -m playwright install --with-deps chromium
+          python -m unittest discover -s tests/browser -p 'test_fst_shell.py' -v
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
