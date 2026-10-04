@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+from fst_shell_transform import apply_fst_shell
 
 root = Path(__file__).resolve().parents[1]
 source = root / 'index.html'
@@ -57,6 +58,8 @@ html, xlsx_replacements = re.subn(
 )
 assert xlsx_replacements == 1, 'Expected exactly one inline XLSX engine in locked baseline'
 
+# Preserve the historical input order. The shared transform below retires the
+# visual controllers and retains their effective authentication implementation.
 mobile_css = (root / 'shared' / 'mobile.css').read_text(encoding='utf-8').strip()
 mobile_js = (root / 'shared' / 'mobile.js').read_text(encoding='utf-8').strip()
 if 'data-fst-mobile-css="inline"' not in html:
@@ -77,6 +80,7 @@ for tag in tags:
     if tag not in html:
         html = html.replace('</body>', '\n' + tag + '\n</body>', 1)
 
+html = apply_fst_shell(html, target='pages', root=root)
 out.write_text(html, encoding='utf-8')
 
 for marker in [
@@ -87,8 +91,9 @@ for marker in [
     'v31-export-ui.js',
     'v30-teacher-attendance-fix.js',
     'v30-lpc3.js',
-    'data-fst-mobile-css="inline"',
-    'data-fst-mobile-js="inline"',
+    'data-fst-shell-css="inline"',
+    'data-fst-shell-js="inline"',
+    'data-fst-auth-compat="inline"',
     'presence-session',
     'saveAttendance',
     './vendor/xlsx.full.min.js',
