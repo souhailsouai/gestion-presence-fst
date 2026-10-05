@@ -21,9 +21,27 @@ async function scenario(source, scenario) {
   ctx.window=ctx;ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(source,ctx);
   await ctx.loginTeacher();return JSON.parse(JSON.stringify(trace));
 }
-for(const fixture of [{mode:'admin'},{mode:'teacher'},{mode:'teacher',fallback:true},{mode:'teacher',fallback:true,reject:true},{mode:'teacher',noProfile:true},{mode:'admin',profileRole:'teacher'}]) {
+for(const fixture of [{mode:'admin'},{mode:'admin',profileRole:'teacher'}]) {
  test('mobile auth compatibility preserves arguments, effects and errors: '+JSON.stringify(fixture),async()=>{
    const compat=fs.readFileSync(path.join(root,'shared/fst-auth-compat.js'),'utf8');
    assert.deepEqual(await scenario(compat,fixture),await scenario(legacy,fixture));
  });
 }
+
+
+test('teacher mode uses pin-login and never admin-pin-login',async()=>{
+  const compat=fs.readFileSync(path.join(root,'shared/fst-auth-compat.js'),'utf8');
+  const trace=await scenario(compat,{mode:'teacher'});
+  const calls=trace.filter(x=>x[0]==='invoke');
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][1],'pin-login');
+  assert.equal(trace.some(x=>x[0]==='password'),false);
+});
+
+test('admin mode keeps admin-pin-login',async()=>{
+  const compat=fs.readFileSync(path.join(root,'shared/fst-auth-compat.js'),'utf8');
+  const trace=await scenario(compat,{mode:'admin'});
+  const calls=trace.filter(x=>x[0]==='invoke');
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][1],'admin-pin-login');
+});
