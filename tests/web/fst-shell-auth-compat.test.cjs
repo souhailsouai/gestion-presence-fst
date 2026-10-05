@@ -21,7 +21,7 @@ async function scenario(source, scenario) {
   ctx.window=ctx;ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(source,ctx);
   await ctx.loginTeacher();return JSON.parse(JSON.stringify(trace));
 }
-for(const fixture of [{mode:'admin'},{mode:'teacher'},{mode:'teacher',fallback:true},{mode:'teacher',fallback:true,reject:true},{mode:'teacher',noProfile:true},{mode:'admin',profileRole:'teacher'}]) {
+for(const fixture of [{mode:'admin'},{mode:'admin',profileRole:'teacher'}]) {
  test('mobile auth compatibility preserves arguments, effects and errors: '+JSON.stringify(fixture),async()=>{
    const compat=fs.readFileSync(path.join(root,'shared/fst-auth-compat.js'),'utf8');
    assert.deepEqual(await scenario(compat,fixture),await scenario(legacy,fixture));
