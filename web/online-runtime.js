@@ -95,7 +95,16 @@
   window.addStudent=async function(){
     if(!requireOnline())return; const lastname=document.getElementById('student-lastname').value.trim(),firstname=document.getElementById('student-firstname').value.trim(),classId=document.getElementById('student-class').value,email=document.getElementById('student-email').value.trim();
     if(!lastname||!firstname||!classId)return showAlert('Veuillez remplir tous les champs obligatoires','danger');
-    const x={id:crypto.randomUUID(),lastname,firstname,email,classId,createdAt:new Date().toISOString()}; if(!await insertRows('students',[studentRow(x)]))return; await refreshAuthoritativeState(); showAlert('Étudiant ajouté avec succès','success');
+    const x={id:crypto.randomUUID(),lastname,firstname,email,classId,createdAt:new Date().toISOString()};
+    const {error}=await supabaseClient.rpc('v31_add_student_authorized',{
+      p_student_id:x.id,
+      p_class_id:x.classId,
+      p_last_name:x.lastname,
+      p_first_name:x.firstname,
+      p_email:x.email||null
+    });
+    if(error){showAlert('Ajout impossible : '+error.message,'danger');return;}
+    await refreshAuthoritativeState(); showAlert('Étudiant ajouté avec succès','success');
   };
   window.createSession=async function(){
     if(!requireOnline())return; const date=document.getElementById('session-date').value,start=document.getElementById('session-start').value,end=document.getElementById('session-end').value,classId=document.getElementById('session-class').value;
