@@ -73,6 +73,10 @@ jobs:
           ! grep -Fq 'Km(e){var r=e.replace' web/index.html
           grep -Fq './v30-teacher-attendance-fix.js' web/index.html
           grep -Fq './v30-lpc3.js' web/index.html
+          grep -Fq './v30-student-add-rpc-fix.js' web/index.html
+          grep -Fq 'v31_add_student_authorized' web/v30-student-add-rpc-fix.js
+          ! grep -Fq ".from('students').insert" web/v30-student-add-rpc-fix.js
+          ! grep -Fq ".from('students').upsert" web/v30-student-add-rpc-fix.js
           grep -Fq 'data-fst-shell-css="inline"' web/index.html
           grep -Fq 'data-fst-shell-js="inline"' web/index.html
           grep -Fq 'id="lpc3-nav-tab"' web/index.html

@@ -68,6 +68,7 @@ tags = [
     '<script src="./v16-dashboard-notices.js"></script>',
     '<script src="./v16-planning-ui.js"></script>',
     '<script src="./v30-lpc3.js"></script>',
+    '<script src="./v30-student-add-rpc-fix.js"></script>',
 ]
 for tag in tags:
     if tag not in html:

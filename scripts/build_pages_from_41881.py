@@ -75,6 +75,7 @@ tags = [
     '<script src="./v31-export-ui.js"></script>',
     '<script src="./v30-teacher-attendance-fix.js"></script>',
     '<script src="./v30-lpc3.js"></script>',
+    '<script src="./v30-student-add-rpc-fix.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
@@ -91,6 +92,7 @@ for marker in [
     'v31-export-ui.js',
     'v30-teacher-attendance-fix.js',
     'v30-lpc3.js',
+    'v30-student-add-rpc-fix.js',
     'data-fst-shell-css="inline"',
     'data-fst-shell-js="inline"',
     'data-fst-auth-compat="inline"',
