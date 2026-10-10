@@ -1,22 +1,6 @@
 name: Deploy V16 to GitHub Pages
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'index.html'
-      - 'gestion_presence_tp_theme_institutionnel.html'
-      - 'web/**'
-      - 'shared/fst-*'
-      - 'scripts/fst_shell_transform.py'
-      - 'tests/browser/**'
-      - 'shared/mobile.css'
-      - 'shared/mobile.js'
-      - 'scripts/build_pages_from_41881.py'
-      - 'scripts/v16_html_transform.py'
-      - 'scripts/web-superadmin.patch.part*'
-      - 'tests/web/**'
-      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
