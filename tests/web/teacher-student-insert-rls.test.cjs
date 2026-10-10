@@ -14,11 +14,11 @@ test('teacher insert policy authorizes assigned MPI1-PC1 groups independently of
   assert.match(policy,/TP Ondes et Vibrations[\s\S]*private\.is_lpc3_owner/);
 });
 
-test('teacher student creation always stamps the authenticated teacher id',()=>{
+test('teacher student creation is delegated to the authorized RPC',()=>{
   const src=fs.readFileSync(path.join(__dirname,'../../web/access-control.js'),'utf8');
   const start=src.indexOf('window.addStudent=async function');
   const end=src.indexOf('window.FSTAccessControl=',start);
   const block=src.slice(start,end);
-  assert.match(block,/teacher_id:currentTeacher\.id/);
-  assert.doesNotMatch(block,/teacher_id:c\.teacherId\|\|currentTeacher\.id/);
+  assert.match(block,/rpc\('v31_add_student_authorized'/);
+  assert.doesNotMatch(block,/from\('students'\)\.(insert|upsert)/);
 });
