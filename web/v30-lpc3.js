@@ -21,7 +21,10 @@ function teacher(){
   try{return typeof currentTeacher!=='undefined'?currentTeacher:(root.currentTeacher||null);}
   catch(_){return root.currentTeacher||null;}
 }
-function isOwner(){return String(teacher()?.id||'')===OWNER_ID;}
+function isOwner(){
+  var u=teacher();
+  return String(u?.id||'')===OWNER_ID && (u?.role==='admin'||u?.isAdmin===true);
+}
 function client(){
   try{return typeof supabaseClient!=='undefined'?supabaseClient:(root.supabaseClient||null);}
   catch(_){return root.supabaseClient||null;}
@@ -87,13 +90,13 @@ function ensureScaffold(){
         '<span class="badge badge-info"><i class="fas fa-door-open"></i> Salle Onde</span>'+
         '<span class="badge badge-info"><i class="fas fa-users"></i> Groupes G1–G4</span>'+
       '</div>'+
-      '<div class="alert alert-info"><i class="fas fa-circle-info"></i><div><strong>Rubrique privée LPC3.</strong><br>Cette rubrique regroupe uniquement les TP d’Ondes et Vibrations de LPC3 et n’est affichée que pour Dr. Souhail Souai.</div></div>'+
+      '<div class="alert alert-info"><i class="fas fa-circle-info"></i><div><strong>Rubrique administrateur LPC3.</strong><br>Cette rubrique regroupe uniquement les TP d’Ondes et Vibrations de LPC3 et n’est affichée que pour Dr. Souhail Souai connecté comme administrateur.</div></div>'+
       '<div class="lpc3-grid">'+
         '<section class="lpc3-card"><h3>Planning LPC3</h3><div id="lpc3-planning"></div><div class="lpc3-note">15/10/2026 : jour férié, aucune séance. Le rattrapage final de G4 reste à fixer.</div></section>'+
         '<section class="lpc3-card"><h3>Étudiants LPC3</h3><div id="lpc3-students"></div></section>'+
       '</div>'+
       '<section class="lpc3-card" id="lpc3-student-management"><h3>Gestion des étudiants LPC3</h3>'+
-        '<div class="lpc3-note">Réservé à Dr. Souhail Souai. Ajout direct dans G1–G4 et changement de groupe avec date d’effet.</div>'+
+        '<div class="lpc3-note">Réservé à Dr. Souhail Souai en mode administrateur. Ajout direct dans G1–G4 et changement de groupe avec date d’effet.</div>'+
         '<div class="lpc3-manage-grid">'+
           '<div class="lpc3-manage-block"><h4><i class="fas fa-user-plus"></i> Ajouter un étudiant</h4>'+
             '<div class="lpc3-form-grid">'+

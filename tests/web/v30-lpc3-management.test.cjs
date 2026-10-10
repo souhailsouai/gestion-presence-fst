@@ -4,9 +4,10 @@ const assert=require('node:assert/strict');
 
 const src=fs.readFileSync('web/v30-lpc3.js','utf8');
 
-test('LPC3 management remains private to Souhail Souai',()=>{
+test('LPC3 management remains private to Souhail Souai admin profile',()=>{
   assert.match(src,/const OWNER_ID='e9a874d5-4e7e-48f2-a8bd-d59003599570'/);
-  assert.match(src,/function isOwner\(\).*OWNER_ID/);
+  assert.match(src,/function isOwner\(\)[\s\S]*OWNER_ID[\s\S]*role==='admin'/);
+  assert.match(src,/u\?\.isAdmin===true/);
   assert.match(src,/if\(!isOwner\(\)\)return root\.showAlert/);
 });
 
