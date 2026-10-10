@@ -2,11 +2,12 @@ const fs=require('node:fs');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 
-test('teacher student creation uses INSERT, not UPSERT',()=>{
+test('teacher student creation uses authorized RPC, not direct table write',()=>{
   const src=fs.readFileSync('web/online-runtime.js','utf8');
   const block=src.match(/window\.addStudent=async function\(\)\{[\s\S]*?\n  \};/);
   assert.ok(block,'addStudent block not found');
-  assert.match(block[0],/insertRows\('students'/);
+  assert.match(block[0],/rpc\('v31_add_student_authorized'/);
+  assert.doesNotMatch(block[0],/insertRows\('students'/);
   assert.doesNotMatch(block[0],/upsert\('students'/);
 });
 
