@@ -28,6 +28,7 @@ function client(){
 }
 function esc(v){return String(v??'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function fmtDate(v){var m=String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?m[3]+'/'+m[2]+'/'+m[1]:String(v||'');}
+function todayIso(){var d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+day;}
 function classById(id){return state.classes.find(function(c){return String(c.id)===String(id);});}
 function sessionById(id){return state.sessions.find(function(s){return String(s.id)===String(id);});}
 function studentsForClass(id){return state.students.filter(function(s){return String(s.class_id)===String(id);});}
@@ -51,10 +52,17 @@ function ensureStyle(){
     '#presence-lpc3 .lpc3-toolbar .form-group{min-width:280px;flex:1;margin:0}'+
     '#presence-lpc3 .lpc3-note{font-size:.9rem;color:var(--gray);margin-top:8px}'+
     '#presence-lpc3 .lpc3-student-list{margin:0;padding-left:22px}'+
+    '#presence-lpc3 .lpc3-manage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:12px}'+
+    '#presence-lpc3 .lpc3-manage-block{border:1px solid #dce6f2;border-radius:10px;padding:12px;background:#f9fbfe}'+
+    '#presence-lpc3 .lpc3-manage-block h4{margin:0 0 10px}'+
+    '#presence-lpc3 .lpc3-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}'+
+    '#presence-lpc3 .lpc3-form-grid .form-group{margin:0}'+
+    '#presence-lpc3 .lpc3-form-grid .span-2{grid-column:1/-1}'+
+    '#presence-lpc3 .lpc3-manage-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}'+
     '#presence-lpc3 .lpc3-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0}'+
     '#presence-lpc3 .lpc3-kpi{padding:10px;border-radius:10px;background:#f5f9ff;text-align:center}'+
     '#presence-lpc3 .table-responsive{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}'+
-    '@media(max-width:768px){#presence-lpc3{min-width:0}#presence-lpc3 .lpc3-grid{grid-template-columns:minmax(0,1fr)}#presence-lpc3 .lpc3-card{min-width:0;padding:12px}#presence-lpc3 .lpc3-toolbar{align-items:stretch}#presence-lpc3 .lpc3-toolbar .form-group{min-width:100%;flex-basis:100%}#presence-lpc3 .lpc3-toolbar .btn,#presence-lpc3 #lpc3-save{width:100%}#presence-lpc3 .lpc3-head .badge{max-width:100%;white-space:normal}#presence-lpc3 table{min-width:680px}}';
+    '@media(max-width:768px){#presence-lpc3{min-width:0}#presence-lpc3 .lpc3-grid,#presence-lpc3 .lpc3-manage-grid{grid-template-columns:minmax(0,1fr)}#presence-lpc3 .lpc3-card{min-width:0;padding:12px}#presence-lpc3 .lpc3-toolbar{align-items:stretch}#presence-lpc3 .lpc3-toolbar .form-group{min-width:100%;flex-basis:100%}#presence-lpc3 .lpc3-toolbar .btn,#presence-lpc3 #lpc3-save,#presence-lpc3 .lpc3-manage-actions .btn{width:100%}#presence-lpc3 .lpc3-form-grid{grid-template-columns:minmax(0,1fr)}#presence-lpc3 .lpc3-form-grid .span-2{grid-column:auto}#presence-lpc3 .lpc3-head .badge{max-width:100%;white-space:normal}#presence-lpc3 table{min-width:680px}}';
   document.head.appendChild(s);
 }
 
@@ -84,7 +92,29 @@ function ensureScaffold(){
         '<section class="lpc3-card"><h3>Planning LPC3</h3><div id="lpc3-planning"></div><div class="lpc3-note">15/10/2026 : jour férié, aucune séance. Le rattrapage final de G4 reste à fixer.</div></section>'+
         '<section class="lpc3-card"><h3>Étudiants LPC3</h3><div id="lpc3-students"></div></section>'+
       '</div>'+
-      '<section class="lpc3-card"><h3>Saisie de présence LPC3</h3>'+
+      '<section class="lpc3-card" id="lpc3-student-management"><h3>Gestion des étudiants LPC3</h3>'+
+        '<div class="lpc3-note">Réservé à Dr. Souhail Souai. Ajout direct dans G1–G4 et changement de groupe avec date d’effet.</div>'+
+        '<div class="lpc3-manage-grid">'+
+          '<div class="lpc3-manage-block"><h4><i class="fas fa-user-plus"></i> Ajouter un étudiant</h4>'+
+            '<div class="lpc3-form-grid">'+
+              '<div class="form-group"><label>Nom *</label><input id="lpc3-add-lastname" class="form-control" autocomplete="off"></div>'+
+              '<div class="form-group"><label>Prénom *</label><input id="lpc3-add-firstname" class="form-control" autocomplete="off"></div>'+
+              '<div class="form-group"><label>E-mail</label><input id="lpc3-add-email" type="email" class="form-control" autocomplete="off"></div>'+
+              '<div class="form-group"><label>Groupe *</label><select id="lpc3-add-group" class="form-control"></select></div>'+
+            '</div>'+
+            '<div class="lpc3-manage-actions"><button id="lpc3-add-student" class="btn btn-success" type="button"><i class="fas fa-user-plus"></i> Ajouter à LPC3</button></div>'+
+          '</div>'+
+          '<div class="lpc3-manage-block"><h4><i class="fas fa-right-left"></i> Changer de groupe</h4>'+
+            '<div class="lpc3-form-grid">'+
+              '<div class="form-group span-2"><label>Étudiant *</label><select id="lpc3-move-student" class="form-control"></select></div>'+
+              '<div class="form-group"><label>Nouveau groupe *</label><select id="lpc3-move-group" class="form-control"></select></div>'+
+              '<div class="form-group"><label>Date d’effet *</label><input id="lpc3-move-date" type="date" class="form-control"></div>'+
+            '</div>'+
+            '<div class="lpc3-manage-actions"><button id="lpc3-move-student-btn" class="btn btn-info" type="button"><i class="fas fa-right-left"></i> Modifier le groupe</button></div>'+
+          '</div>'+
+        '</div>'+
+      '</section>'+
+      '<section class="lpc3-card" style="margin-top:14px"><h3>Saisie de présence LPC3</h3>'+
         '<div class="lpc3-toolbar"><div class="form-group"><label>Sélectionner une séance</label><select id="lpc3-session" class="form-control"></select></div>'+
         '<button id="lpc3-refresh" class="btn btn-info" type="button"><i class="fas fa-rotate"></i> Actualiser</button></div>'+
         '<div id="lpc3-sheet"></div></section>'+
@@ -92,6 +122,9 @@ function ensureScaffold(){
     (host.querySelector('#fst-main')||host.querySelector('.content')||host).appendChild(tab);
     tab.querySelector('#lpc3-session').addEventListener('change',function(){state.selectedSessionId=this.value;renderSheet();});
     tab.querySelector('#lpc3-refresh').addEventListener('click',function(){void refresh();});
+    tab.querySelector('#lpc3-add-student').addEventListener('click',function(){void addLpc3Student();});
+    tab.querySelector('#lpc3-move-student-btn').addEventListener('click',function(){void moveLpc3Student();});
+    var moveDate=tab.querySelector('#lpc3-move-date');if(moveDate&&!moveDate.value)moveDate.value=todayIso();
   }
 }
 
@@ -178,6 +211,75 @@ function renderStudents(){
     return '<div style="margin-bottom:12px"><strong>'+esc(c.name)+' — '+students.length+' étudiant(s)</strong>'+
       '<ol class="lpc3-student-list">'+students.map(function(s){return '<li>'+esc(s.last_name)+' '+esc(s.first_name)+'</li>';}).join('')+'</ol></div>';
   }).join('')||'<div class="alert alert-warning">Aucun étudiant LPC3 chargé.</div>';
+}
+
+function renderManagement(){
+  if(!isOwner())return;
+  var addGroup=document.getElementById('lpc3-add-group'),moveGroup=document.getElementById('lpc3-move-group'),studentSelect=document.getElementById('lpc3-move-student');
+  var groups=state.classes.slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''),'fr');});
+  var groupOptions='<option value="">Sélectionner un groupe</option>'+groups.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>';}).join('');
+  if(addGroup){var previousAdd=addGroup.value;addGroup.innerHTML=groupOptions;if(previousAdd&&groups.some(function(c){return String(c.id)===String(previousAdd);})){addGroup.value=previousAdd;}}
+  if(moveGroup){var previousMove=moveGroup.value;moveGroup.innerHTML=groupOptions;if(previousMove&&groups.some(function(c){return String(c.id)===String(previousMove);})){moveGroup.value=previousMove;}}
+  if(studentSelect){
+    var previousStudent=studentSelect.value;
+    var students=state.students.slice().sort(function(a,b){return (String(a.last_name||'')+' '+String(a.first_name||'')).localeCompare(String(b.last_name||'')+' '+String(b.first_name||''),'fr');});
+    studentSelect.innerHTML='<option value="">Sélectionner un étudiant</option>'+students.map(function(s){
+      var c=classById(s.class_id);return '<option value="'+esc(s.id)+'">'+esc(s.last_name)+' '+esc(s.first_name)+' — '+esc(c?.name||'LPC3')+'</option>';
+    }).join('');
+    if(previousStudent&&students.some(function(s){return String(s.id)===String(previousStudent);})){studentSelect.value=previousStudent;}
+  }
+  var moveDate=document.getElementById('lpc3-move-date');if(moveDate&&!moveDate.value)moveDate.value=todayIso();
+}
+
+async function addLpc3Student(){
+  if(!isOwner())return root.showAlert?.('Accès LPC3 non autorisé.','danger');
+  var c=client();if(!c)return root.showAlert?.('Service Supabase indisponible.','danger');
+  var lastname=document.getElementById('lpc3-add-lastname')?.value.trim()||'';
+  var firstname=document.getElementById('lpc3-add-firstname')?.value.trim()||'';
+  var email=document.getElementById('lpc3-add-email')?.value.trim()||'';
+  var classId=document.getElementById('lpc3-add-group')?.value||'';
+  var target=classById(classId);
+  if(!lastname||!firstname||!target)return root.showAlert?.('Nom, prénom et groupe LPC3 sont obligatoires.','danger');
+  var button=document.getElementById('lpc3-add-student');if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
+  try{
+    var result=await c.rpc('v31_add_student_authorized',{
+      p_student_id:crypto.randomUUID(),
+      p_class_id:target.id,
+      p_last_name:lastname,
+      p_first_name:firstname,
+      p_email:email||null
+    });
+    if(result.error)throw result.error;
+    var last=document.getElementById('lpc3-add-lastname'),first=document.getElementById('lpc3-add-firstname'),mail=document.getElementById('lpc3-add-email');
+    if(last)last.value='';if(first)first.value='';if(mail)mail.value='';
+    root.showAlert?.('Étudiant ajouté à '+target.name+'.','success');
+    readEpoch++;inFlight=null;await refresh();
+  }catch(e){root.showAlert?.('Ajout LPC3 impossible : '+(e?.message||e),'danger');}
+  finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');}}
+}
+
+async function moveLpc3Student(){
+  if(!isOwner())return root.showAlert?.('Accès LPC3 non autorisé.','danger');
+  var c=client();if(!c)return root.showAlert?.('Service Supabase indisponible.','danger');
+  var studentId=document.getElementById('lpc3-move-student')?.value||'';
+  var classId=document.getElementById('lpc3-move-group')?.value||'';
+  var effectiveFrom=document.getElementById('lpc3-move-date')?.value||'';
+  var student=state.students.find(function(s){return String(s.id)===String(studentId);}),target=classById(classId),current=student?classById(student.class_id):null;
+  if(!student||!target||!effectiveFrom)return root.showAlert?.('Étudiant, nouveau groupe et date d’effet sont obligatoires.','danger');
+  if(String(student.class_id)===String(target.id))return root.showAlert?.('Cet étudiant appartient déjà à '+target.name+'.','info');
+  var button=document.getElementById('lpc3-move-student-btn');if(button){button.disabled=true;button.setAttribute('aria-busy','true');}
+  try{
+    var result=await c.rpc('v30_teacher_assign_student',{
+      p_student_id:student.id,
+      p_class_id:target.id,
+      p_effective_from:effectiveFrom
+    });
+    if(result.error)throw result.error;
+    if(result.data&&result.data.ok===false)throw new Error(result.data.message||result.data.code||'Modification refusée.');
+    root.showAlert?.((student.last_name+' '+student.first_name)+' : '+(current?.name||'LPC3')+' → '+target.name+' à partir du '+fmtDate(effectiveFrom)+'.','success');
+    readEpoch++;inFlight=null;await refresh();
+  }catch(e){root.showAlert?.('Modification du groupe LPC3 impossible : '+(e?.message||e),'danger');}
+  finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');}}
 }
 
 function renderSessionSelect(){
@@ -268,7 +370,7 @@ function invalidate(){
   readEpoch++;
   inFlight=null;
   Object.assign(state,{classes:[],students:[],sessions:[],attendance:[],selectedSessionId:''});
-  for(const id of ['lpc3-students','lpc3-sheet','lpc3-report','lpc3-session']){
+  for(const id of ['lpc3-students','lpc3-sheet','lpc3-report','lpc3-session','lpc3-add-group','lpc3-move-group','lpc3-move-student']){
     const element=document.getElementById(id);if(element)element.replaceChildren();
   }
   const refreshButton=document.getElementById('lpc3-refresh');if(refreshButton){refreshButton.disabled=false;refreshButton.removeAttribute('aria-busy');}
@@ -286,7 +388,7 @@ function refresh(){
       const snapshot=await fetchRows();
       if(!valid())return false;
       Object.assign(state,snapshot);
-      renderPlanning();renderStudents();renderSessionSelect();renderSheet();renderReport();isolateGenericUi();
+      renderPlanning();renderStudents();renderManagement();renderSessionSelect();renderSheet();renderReport();isolateGenericUi();
       root.dispatchEvent?.(new root.CustomEvent('fst:lpc3-updated',{detail:{userId:identity}}));
       return true;
     }catch(e){
@@ -324,6 +426,6 @@ function init(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,syncAccess:syncAccess,refresh:refresh,invalidate:invalidate,isolateGenericUi:isolateGenericUi,state:state};
+root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,syncAccess:syncAccess,refresh:refresh,invalidate:invalidate,isolateGenericUi:isolateGenericUi,addStudent:addLpc3Student,moveStudent:moveLpc3Student,state:state};
 if(typeof module==='object'&&module.exports)module.exports={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE};
 })(typeof window!=='undefined'?window:globalThis);
