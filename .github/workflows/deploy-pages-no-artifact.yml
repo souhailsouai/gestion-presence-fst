@@ -80,19 +80,3 @@ jobs:
           git add -A
           git commit -m "Publish Pages ${GITHUB_SHA}"
           git push --force origin HEAD:gh-pages
-
-      - name: Switch GitHub Pages to gh-pages branch
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          status="$(curl -sS -o pages-response.json -w '%{http_code}' \
-            -X PUT \
-            -H 'Accept: application/vnd.github+json' \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H 'X-GitHub-Api-Version: 2026-03-10' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages" \
-            -d '{"build_type":"legacy","source":{"branch":"gh-pages","path":"/"}}')"
-          cat pages-response.json || true
-          test "$status" = "204"
