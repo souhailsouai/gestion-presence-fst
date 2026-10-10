@@ -1,0 +1,98 @@
+name: Deploy Pages without artifacts
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'index.html'
+      - 'web/**'
+      - 'shared/fst-*'
+      - 'shared/mobile.css'
+      - 'shared/mobile.js'
+      - 'scripts/build_pages_from_41881.py'
+      - 'scripts/fst_shell_transform.py'
+      - 'tests/web/**'
+      - '.github/workflows/deploy-pages-no-artifact.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: github-pages-no-artifact
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify JavaScript and regression contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check web/security-v2.js
+          for file in web/v515-*.js web/v16-*.js web/v30-*.js; do
+            node --check "$file"
+          done
+          for test in tests/web/*.test.cjs; do
+            node "$test"
+          done
+
+      - name: Build Pages payload
+        run: python scripts/build_pages_from_41881.py
+
+      - name: Verify LPC3 management is in payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s web/index.html
+          grep -Fq './v30-lpc3.js' web/index.html
+          grep -Fq 'lpc3-student-management' web/v30-lpc3.js
+          grep -Fq 'v31_add_student_authorized' web/v30-lpc3.js
+          grep -Fq 'v30_teacher_assign_student' web/v30-lpc3.js
+
+      - name: Publish web directory to gh-pages branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_dir="$(mktemp -d)"
+          cp -a web/. "$publish_dir/"
+          touch "$publish_dir/.nojekyll"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan gh-pages-deploy
+          git rm -rf . >/dev/null 2>&1 || true
+          cp -a "$publish_dir/." .
+          git add -A
+          git commit -m "Publish Pages ${GITHUB_SHA}"
+          git push --force origin HEAD:gh-pages
+
+      - name: Switch GitHub Pages to gh-pages branch
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status="$(curl -sS -o pages-response.json -w '%{http_code}' \
+            -X PUT \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages" \
+            -d '{"build_type":"legacy","source":{"branch":"gh-pages","path":"/"}}')"
+          cat pages-response.json || true
+          test "$status" = "204"
