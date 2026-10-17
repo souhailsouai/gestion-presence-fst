@@ -63,7 +63,7 @@ test('PC1 2026-2027 roster operation contains the validated 45 students in G1-G6
     assert.ok(sql.includes(tuple),`Missing ${row.last} ${row.first} in G${row.group}`);
   }
   assert.deepEqual([...counts.entries()],[[1,9],[2,8],[3,7],[4,7],[5,7],[6,7]]);
-  assert.match(sql,/PC1-A-G1/);
-  assert.match(sql,/PC1-A-G6/);
+  assert.match(sql,/PC1-A-G'\|\|r\.group_no/);
+  assert.match(sql,/group_no between 1 and 6/);
   assert.doesNotMatch(sql,/delete\s+from\s+public\.students/i);
 });
