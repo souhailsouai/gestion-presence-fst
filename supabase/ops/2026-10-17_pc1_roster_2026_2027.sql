@@ -79,8 +79,10 @@ begin
     and not exists(
       select 1
       from pc1_roster_2026_2027 r
-      where lower(regexp_replace(trim(concat_ws(' ',s.last_name,s.first_name)),'\\s+',' ','g'))
-            = lower(regexp_replace(trim(r.last_name||' '||r.first_name),'\\s+',' ','g'))
+      where lower(regexp_replace(trim(concat_ws(' ',s.last_name,s.first_name)),'\\s+',' ','g')) in (
+              lower(regexp_replace(trim(r.last_name||' '||r.first_name),'\\s+',' ','g')),
+              lower(regexp_replace(trim(r.first_name||' '||r.last_name),'\\s+',' ','g'))
+            )
     );
   if v_unexpected <> 0 then
     raise exception 'Refusing PC1 roster sync: % unexpected active student(s) found', v_unexpected;
@@ -101,8 +103,10 @@ with matched as (
    and c.deleted_at is null
   join public.students s
     on s.deleted_at is null
-   and lower(regexp_replace(trim(concat_ws(' ',s.last_name,s.first_name)),'\\s+',' ','g'))
-       = lower(regexp_replace(trim(r.last_name||' '||r.first_name),'\\s+',' ','g'))
+   and lower(regexp_replace(trim(concat_ws(' ',s.last_name,s.first_name)),'\\s+',' ','g')) in (
+         lower(regexp_replace(trim(r.last_name||' '||r.first_name),'\\s+',' ','g')),
+         lower(regexp_replace(trim(r.first_name||' '||r.last_name),'\\s+',' ','g'))
+       )
 )
 update public.students s
 set last_name=m.last_name,
@@ -130,8 +134,10 @@ where not exists(
   join public.classes sc on sc.id=s.class_id
   where sc.name ~ '^PC1-A-G[1-6]$'
     and s.deleted_at is null
-    and lower(regexp_replace(trim(concat_ws(' ',s.last_name,s.first_name)),'\\s+',' ','g'))
-        = lower(regexp_replace(trim(r.last_name||' '||r.first_name),'\\s+',' ','g'))
+    and lower(regexp_replace(trim(concat_ws(' ',s.last_name,s.first_name)),'\\s+',' ','g')) in (
+          lower(regexp_replace(trim(r.last_name||' '||r.first_name),'\\s+',' ','g')),
+          lower(regexp_replace(trim(r.first_name||' '||r.last_name),'\\s+',' ','g'))
+        )
 );
 
 do $$
