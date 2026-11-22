@@ -5,7 +5,7 @@ const fs=require('node:fs');
 const lpc3=fs.readFileSync('web/v30-lpc3.js','utf8');
 const mobile=fs.readFileSync('shared/mobile.js','utf8');
 const pages=fs.readFileSync('scripts/build_pages_from_41881.py','utf8');
-const online=fs.readFileSync('scripts/build_online_web.py','utf8');
+const online=fs.readFileSync('scripts/build_pages_from_41881.py','utf8');
 const versionUi=fs.readFileSync('web/v31-version-ui.js','utf8');
 
 test('LPC3 mobile entry reuses the same owner authorization as desktop',()=>{

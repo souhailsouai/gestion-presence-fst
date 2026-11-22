@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const cp = require('node:child_process');
 
 function buildV16() {
-  cp.execFileSync('python', ['scripts/build_online_web.py'], {stdio: 'pipe'});
+  cp.execFileSync('python', ['scripts/build_pages_from_41881.py'], {stdio: 'pipe'});
   return fs.readFileSync('web/index.html', 'utf8');
 }
 

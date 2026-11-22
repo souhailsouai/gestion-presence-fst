@@ -1,0 +1,20 @@
+{
+  "version": 3,
+  "artifactType": {
+    "type": "LINKED_RESOURCES_BINARY_FORMAT",
+    "kind": "Directory"
+  },
+  "applicationId": "tn.utm.fst.gestionpresence",
+  "variantName": "fast",
+  "elements": [
+    {
+      "type": "SINGLE",
+      "filters": [],
+      "attributes": [],
+      "versionCode": 213,
+      "versionName": "2.10.0",
+      "outputFile": "linked-resources-binary-format-fast.ap_"
+    }
+  ],
+  "elementType": "File"
+}

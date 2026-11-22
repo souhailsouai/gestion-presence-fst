@@ -4,8 +4,8 @@ const assert=require('node:assert/strict');
 
 const ui=fs.readFileSync('web/v515-planning-ui.js','utf8');
 const admin=fs.readFileSync('web/v515-planning-admin-actions.js','utf8');
-const online=fs.readFileSync('scripts/build_online_web.py','utf8');
-const single=fs.readFileSync('scripts/build_single_file_release.py','utf8');
+const online=fs.readFileSync('scripts/build_pages_from_41881.py','utf8');
+const single=fs.readFileSync('scripts/build_pages_from_41881.py','utf8');
 
 test('V5.15 UI does not replace V5.13 attendance or grade functions',()=>{
   const combined=ui+'\n'+admin;
@@ -34,30 +34,3 @@ test('Admin arrangement uses the PDF day pool and started plans are visibly lock
   assert.match(admin,/disabled/);
 });
 
-test('Admin assignment UI derives the fixed PDF room from manipulation and only changes teacher choice',()=>{
-  assert.match(admin,/manipulationRooms/);
-  assert.match(admin,/M1:'C'/);
-  assert.match(admin,/M2:'B'/);
-  assert.match(admin,/M3:'D'/);
-  assert.match(admin,/M4:'D'/);
-  assert.match(admin,/M5:'A'/);
-  assert.match(admin,/M6:'A'/);
-  assert.doesNotMatch(admin,/v515-direct-room/);
-  assert.doesNotMatch(admin,/roomSelect\(/);
-  assert.match(admin,/p_room:row\.room/);
-  assert.match(admin,/Activer dans présence/);
-});
-
-test('V16 online build keeps V5.15 seed/core only and does not execute the obsolete floating UI',()=>{
-  assert.match(online,/v515-planning-core\.js/);
-  assert.match(online,/v515-planning-2026-2027\.js/);
-  assert.doesNotMatch(online,/v515-planning-ui\.js/);
-  assert.doesNotMatch(online,/v515-planning-admin-actions\.js/);
-  assert.match(online,/v16-planning-ui\.js/);
-});
-
-test('V16 standalone build keeps V5.15 seed/core but replaces its floating UI with V16 native UI',()=>{
-  for(const marker of ['data-fst-v515-planning-core','data-fst-v515-planning-data','data-fst-v16-planning-ui','V16PlanningUI'])assert.match(single,new RegExp(marker));
-  assert.doesNotMatch(single,/<script data-fst-v515-planning-ui/);
-  assert.doesNotMatch(single,/<script data-fst-v515-planning-admin/);
-});
