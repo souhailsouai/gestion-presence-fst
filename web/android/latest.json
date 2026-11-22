@@ -1,6 +1,6 @@
 {
-  "version": "2.10.0",
-  "notes": "Statistiques filtrables par intervenant, manipulation et période ; configuration des intervenants du S1 par jour ; page Aide.",
+  "version": "2.10.1",
+  "notes": "Planning S1 : les 6 groupes affichent leur enseignant ; salles fixes M1→C, M2/M5→B, M3/M6→A, M4→D.",
   "apk": "Presence-FST.apk",
-  "size": 3200227
+  "size": 3200291
 }
