@@ -1,5 +1,6 @@
 package tn.utm.fst.gestionpresence.nativeapp.ui
 
+import kotlinx.coroutines.launch
 import tn.utm.fst.gestionpresence.nativeapp.ui.components.showBiometricPrompt
 import tn.utm.fst.gestionpresence.nativeapp.ui.components.biometricAvailable
 import androidx.compose.ui.platform.LocalContext
@@ -494,6 +495,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
         }
     ) { padding ->
         if (state.offerBiometric) BiometricOffer(viewModel)
+        UpdateChecker()
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (!state.online) OfflineCard()
             Notice(state)
@@ -1401,6 +1403,56 @@ private fun ExportScreen(state: MainUiState) {
     }
 }
 
+/** Vérifie s'il existe une version plus récente de l'application et propose de l'installer. */
+@Composable
+private fun UpdateChecker(manual: Boolean = false) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var release by remember { mutableStateOf<tn.utm.fst.gestionpresence.nativeapp.feature.update.AppRelease?>(null) }
+    var dismissed by rememberSaveable { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+    var info by remember { mutableStateOf<String?>(null) }
+    var progress by remember { mutableStateOf<Float?>(null) }
+    val U = tn.utm.fst.gestionpresence.nativeapp.feature.update.AppUpdater
+    fun check() { scope.launch { checking = true; info = null; release = U.latest(); checking = false; if (release == null && manual) info = "L’application est à jour (version ${BuildConfig.VERSION_NAME})." } }
+    if (!manual) LaunchedEffect(Unit) { check() }
+    if (manual) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(onClick = { dismissed = false; check() }, enabled = !checking, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(8.dp)); Text(if (checking) "Recherche…" else "Rechercher une mise à jour")
+            }
+            info?.let { Text(it, color = Uphf.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+        }
+    }
+    val r = release ?: return
+    if (dismissed) return
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (progress == null) dismissed = true },
+        icon = { Icon(Icons.Default.CheckCircle, null, tint = Uphf.Teal) },
+        title = { Text("Nouvelle version ${r.version}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Version installée : ${BuildConfig.VERSION_NAME}.", color = Uphf.Muted)
+                if (r.notes.isNotBlank()) Text(r.notes.take(600), color = Uphf.Text, style = MaterialTheme.typography.bodySmall)
+                progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth(), color = Uphf.Teal, trackColor = Uphf.TealSoft); Text("Téléchargement… ${(it * 100).toInt()} %", style = MaterialTheme.typography.bodySmall) }
+                info?.let { Text(it, color = Uphf.Bad, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(enabled = progress == null, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), onClick = {
+                if (!U.canInstall(context)) { info = "Autorisez « Installer des applications inconnues » pour Présence FST, puis revenez et touchez à nouveau « Mettre à jour »."; U.openInstallPermission(context); return@Button }
+                scope.launch {
+                    info = null; progress = 0f
+                    try { val apk = U.download(context, r) { progress = it }; progress = null; U.install(context, apk) }
+                    catch (e: Throwable) { progress = null; info = e.message ?: "Téléchargement impossible." }
+                }
+            }) { Text("Mettre à jour") }
+        },
+        dismissButton = { TextButton(enabled = progress == null, onClick = { dismissed = true }) { Text("Plus tard") } },
+        containerColor = Color.White
+    )
+}
+
 /* ------------------------------------------------------------------ */
 /*  Statistiques                                                        */
 /* ------------------------------------------------------------------ */
@@ -1553,6 +1605,7 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
                 Icon(Icons.AutoMirrored.Filled.Logout, null); Spacer(Modifier.width(8.dp)); Text("Se déconnecter")
             }
         }
+        item { UpdateChecker(manual = true) }
         item { Text("Version ${BuildConfig.VERSION_NAME} · Faculté des Sciences de Tunis", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
     }
 }
