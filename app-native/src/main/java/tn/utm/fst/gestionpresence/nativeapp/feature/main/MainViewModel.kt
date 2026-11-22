@@ -40,7 +40,9 @@ enum class AppScreen {
     MORE,
     STUDENT_DETAIL,
     LOCKED,
-    S2_ADMIN
+    S2_ADMIN,
+    SWAP,
+    EXPORT
 }
 
 data class MainUiState(
@@ -365,6 +367,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun assignStudent(studentId: String, classId: String, effectiveFrom: String) = mutate("Groupe modifié à partir du ${effectiveFrom.split('-').reversed().joinToString("/")}.") {
         repository.assignStudent(studentId, classId, effectiveFrom)
+    }
+
+    fun assignS1Teacher(sessionId: String, groupNo: Int, code: String, teacherId: String, room: String) =
+        mutate("Enseignant modifié.") { repository.assignS1Teacher(sessionId, groupNo, code, teacherId, room) }
+
+    fun swapTeachers(a: String, dayA: Int, b: String, dayB: Int, effective: String, scope: String) {
+        viewModelScope.launch {
+            setLoading(true); clearNotice()
+            try {
+                val n = repository.swapTeachers(a, dayA, b, dayB, effective, scope)
+                val data = repository.load()
+                _state.value = _state.value.copy(loading = false, data = data, reports = repository.reports(data), message = "Permutation appliquée ($n affectation(s)).", error = null)
+            } catch (e: Throwable) { handle(e) }
+        }
     }
 
     fun completeSession(session: TeachingSession) = mutate("Séance terminée.") {
