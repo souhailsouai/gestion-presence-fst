@@ -222,8 +222,10 @@ def apply_fst_shell(html: str, *, target: str, root: Path) -> str:
     html=_replace_ranges(html,[(header.start,header.end,replacement),(nav.start,nav.end,''),(content.start,content.open_end,'<main class="content" id="fst-main" tabindex="-1">'),(content.close_start,content.end,'</main></div>'),(app.start,app.open_end,app_open)])
     config='<script type="application/json" id="fst-nav-config">'+json.dumps(registry,ensure_ascii=True).replace('</','<\\/')+'</script>'
     css=(root/'shared/fst-shell.css').read_text(encoding='utf-8')
+    theme_path=root/'shared/fst-utm-theme.css'
+    theme_css=theme_path.read_text(encoding='utf-8') if theme_path.exists() else ''
     js=(root/'shared/fst-shell.js').read_text(encoding='utf-8')
-    html=html.replace('</head>','<style data-fst-auth-presentation="inline">\n'+'\n'.join(login_css)+'\n</style>\n<style data-fst-shell-css="inline">\n'+css+'\n</style>\n</head>',1)
+    html=html.replace('</head>','<style data-fst-auth-presentation="inline">\n'+'\n'.join(login_css)+'\n</style>\n<style data-fst-shell-css="inline">\n'+css+'\n</style>\n<style data-fst-utm-theme="inline">\n'+theme_css+'\n</style>\n</head>',1)
     end=html.rfind('</body>')
     if end<0:raise ValueError('Missing document body')
     html=html[:end]+config+'\n<script data-fst-shell-js="inline">\n'+js+'\n</script>\n'+html[end:]

@@ -82,6 +82,24 @@ for tag in tags:
         html = html.replace('</body>', '\n' + tag + '\n</body>', 1)
 
 html = apply_fst_shell(html, target='pages', root=root)
+
+# Pages only: serve the sidebar copies of the two institutional logos as small
+# cached files instead of repeating the 1536px base64 images (~400 KB less).
+import hashlib, json, shutil
+assets_src = root / 'shared' / 'assets'
+logo_map = json.loads((assets_src / 'logo-map.json').read_text(encoding='utf-8'))
+(web / 'assets').mkdir(exist_ok=True)
+for logo_name in set(logo_map.values()):
+    shutil.copyfile(assets_src / logo_name, web / 'assets' / logo_name)
+def _logo_file(match):
+    name = logo_map.get(hashlib.sha256(match.group(0).encode()).hexdigest())
+    return './assets/' + name if name else match.group(0)
+# Only the sidebar copies are replaced: the login images stay byte-identical.
+def _internal_logo(tag):
+    return re.sub(r'data:image/[a-z]+;base64,[A-Za-z0-9+/=]{50000,}', _logo_file, tag.group(0))
+html, logo_replacements = re.subn(r'<img\b[^>]*\bid="internal-(?:utm|fst)-logo"[^>]*>', _internal_logo, html)
+assert logo_replacements == 2 and './assets/fst-logo.jpg' in html and './assets/utm-logo.jpg' in html, 'Sidebar logos were not externalized'
+
 out.write_text(html, encoding='utf-8')
 
 for marker in [
