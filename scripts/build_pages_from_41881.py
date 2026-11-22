@@ -76,12 +76,35 @@ tags = [
     '<script src="./v30-teacher-attendance-fix.js"></script>',
     '<script src="./v30-lpc3.js"></script>',
     '<script src="./v30-student-add-rpc-fix.js"></script>',
+    '<script src="./v32-notices.js"></script>',
+    '<script src="./v32-student-search.js"></script>',
+    '<script src="./v33-s2-core.js"></script>',
+    '<script src="./v33-semestres.js"></script>',
+    '<script src="./v33-statistiques.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
         html = html.replace('</body>', '\n' + tag + '\n</body>', 1)
 
 html = apply_fst_shell(html, target='pages', root=root)
+
+# Pages only: serve the sidebar copies of the two institutional logos as small
+# cached files instead of repeating the 1536px base64 images (~400 KB less).
+import hashlib, json, shutil
+assets_src = root / 'shared' / 'assets'
+logo_map = json.loads((assets_src / 'logo-map.json').read_text(encoding='utf-8'))
+(web / 'assets').mkdir(exist_ok=True)
+for logo_name in set(logo_map.values()):
+    shutil.copyfile(assets_src / logo_name, web / 'assets' / logo_name)
+def _logo_file(match):
+    name = logo_map.get(hashlib.sha256(match.group(0).encode()).hexdigest())
+    return './assets/' + name if name else match.group(0)
+# Only the sidebar copies are replaced: the login images stay byte-identical.
+def _internal_logo(tag):
+    return re.sub(r'data:image/[a-z]+;base64,[A-Za-z0-9+/=]{50000,}', _logo_file, tag.group(0))
+html, logo_replacements = re.subn(r'<img\b[^>]*\bid="internal-(?:utm|fst)-logo"[^>]*>', _internal_logo, html)
+assert logo_replacements == 2 and './assets/fst-logo.jpg' in html and './assets/utm-logo.jpg' in html, 'Sidebar logos were not externalized'
+
 out.write_text(html, encoding='utf-8')
 
 for marker in [
@@ -93,6 +116,11 @@ for marker in [
     'v30-teacher-attendance-fix.js',
     'v30-lpc3.js',
     'v30-student-add-rpc-fix.js',
+    'v32-notices.js',
+    'v32-student-search.js',
+    'v33-s2-core.js',
+    'v33-semestres.js',
+    'v33-statistiques.js',
     'data-fst-shell-css="inline"',
     'data-fst-shell-js="inline"',
     'data-fst-auth-compat="inline"',
