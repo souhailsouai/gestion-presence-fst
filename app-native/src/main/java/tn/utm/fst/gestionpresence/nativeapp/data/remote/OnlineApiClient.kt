@@ -117,9 +117,12 @@ class OnlineApiClient(
             authenticatedHeaders(session)
             parameter("id", "eq.${session.userId}")
             parameter("select", "id,email,username,full_name,role,account_state,mfa_required")
-            header(HttpHeaders.Accept, "application/vnd.pgrst.object+json")
         }
-        val body = response.requireObject()
+        val body = when (val value = response.requireJson()) {
+            is JsonArray -> value.firstOrNull()?.jsonObject ?: throw ApiException("UNAUTHENTICATED", "Profil introuvable.")
+            is JsonObject -> value
+            else -> throw ApiException("UNAUTHENTICATED", "Profil introuvable.")
+        }
         return UserProfile(
             id = body.requiredString("id"),
             email = body.string("email"),

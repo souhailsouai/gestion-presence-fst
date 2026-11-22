@@ -13,8 +13,8 @@ android {
         applicationId = "tn.utm.fst.gestionpresence"
         minSdk = 26
         targetSdk = 35
-        versionCode = 200
-        versionName = "2.0.0"
+        versionCode = 201
+        versionName = "2.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"https://dbslzmvzbxczpqyektpx.supabase.co\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_wKwmPnXS_Q7REGU57hTIyw_eqxhIXLT\"")
