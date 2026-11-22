@@ -30,12 +30,14 @@ import java.io.File
 data class AppRelease(val version: String, val notes: String, val apkUrl: String, val sizeBytes: Long)
 
 /**
- * Mise à jour intégrée : les versions de l'application sont publiées comme « releases » GitHub
- * du dépôt (étiquette android-vX.Y.Z, fichier .apk joint). L'application compare avec sa version,
+ * Mise à jour intégrée : la dernière version est publiée avec le site (android/latest.json + .apk),
+ * ou comme « release » GitHub (étiquette android-vX.Y.Z). L'application compare avec sa version,
  * télécharge le fichier puis ouvre l'installateur d'Android (l'utilisateur confirme).
  */
 object AppUpdater {
     private const val RELEASES = "https://api.github.com/repos/souhailsouai/gestion-presence-fst/releases?per_page=20"
+    /** Fiche de version publiée avec le site (GitHub Pages) : {"version","notes","apk","size"}. */
+    private const val PAGES = "https://souhailsouai.github.io/gestion-presence-fst/android/"
     private val json = Json { ignoreUnknownKeys = true }
     private val http by lazy { HttpClient(OkHttp) { expectSuccess = false } }
 
@@ -46,7 +48,19 @@ object AppUpdater {
         return false
     }
 
-    suspend fun latest(): AppRelease? = runCatching {
+    suspend fun latest(): AppRelease? = fromPages() ?: fromReleases()
+
+    private suspend fun fromPages(): AppRelease? = runCatching {
+        val res = http.get(PAGES + "latest.json?t=" + System.currentTimeMillis())
+        if (!res.status.isSuccess()) return null
+        val o = json.parseToJsonElement(res.bodyAsText()).jsonObject
+        val version = o["version"]!!.jsonPrimitive.content
+        val apk = o["apk"]!!.jsonPrimitive.content
+        AppRelease(version, o["notes"]?.jsonPrimitive?.contentOrNull.orEmpty(), if (apk.startsWith("http")) apk else PAGES + apk, o["size"]?.jsonPrimitive?.longOrNull ?: 0L)
+            .takeIf { isNewer(it.version) }
+    }.getOrNull()
+
+    private suspend fun fromReleases(): AppRelease? = runCatching {
         val res = http.get(RELEASES) { header("Accept", "application/vnd.github+json") }
         if (!res.status.isSuccess()) return null
         json.parseToJsonElement(res.bodyAsText()).jsonArray.mapNotNull { el ->
