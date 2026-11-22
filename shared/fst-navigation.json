@@ -1,7 +1,7 @@
 {"groups":[
  {"label":"Principal","items":[{"tabId":"dashboard","label":"Tableau de bord","icon":"dashboard"},{"tabId":"presence","label":"Pr\u00e9sence","icon":"check"}]},
- {"label":"Enseignement","items":[{"tabId":"classes","label":"Classes & Groupes","icon":"groups"},{"tabId":"emploi","label":"Emploi du temps","icon":"calendar"},{"tabId":"seances","label":"S\u00e9ances","icon":"calendar"},{"tabId":"planning-v16","label":"Planning des s\u00e9ances","icon":"calendar"}]},
- {"label":"Gestion","items":[{"tabId":"enseignants","label":"Enseignants","icon":"teacher"},{"tabId":"etudiants","label":"\u00c9tudiants","icon":"groups"},{"tabId":"rapports","label":"Rapports","icon":"report"}]},
+ {"label":"Enseignement","items":[{"tabId":"semestres","label":"Semestres S1 / S2","icon":"layers"},{"tabId":"classes","label":"Classes & Groupes","icon":"groups"},{"tabId":"emploi","label":"Emploi du temps","icon":"calendar"},{"tabId":"seances","label":"S\u00e9ances","icon":"calendar"},{"tabId":"planning-v16","label":"Planning des s\u00e9ances","icon":"calendar"}]},
+ {"label":"Gestion","items":[{"tabId":"enseignants","label":"Enseignants","icon":"teacher"},{"tabId":"etudiants","label":"\u00c9tudiants","icon":"groups"},{"tabId":"rapports","label":"Rapports","icon":"report"},{"tabId":"statistiques","label":"Statistiques","icon":"chart"}]},
  {"label":"Module sp\u00e9cifique","items":[{"tabId":"presence-lpc3","label":"LPC3","icon":"wave","id":"lpc3-nav-tab","permission":"lpc3"}]},
  {"label":"Administration","items":[{"tabId":"administration","label":"Administration","icon":"settings","id":"admin-nav-tab","permission":"admin"}]}
 ]}
