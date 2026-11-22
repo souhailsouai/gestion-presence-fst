@@ -6,7 +6,7 @@
   'use strict';
   if(!planning)throw new Error('V515Planning is required');
 
-  const manipulationRooms={M1:'C',M2:'B',M3:'D',M4:'D',M5:'A',M6:'A'};
+  const manipulationRooms={M1:'C',M2:'B',M3:'A',M4:'D',M5:'B',M6:'A'};
   const teacherPools={
     monday:['Khaoula Rais','Souhail Souai','Nadia Bouaziz','Olfa Turki'],
     thursday:['Khaoula Rais','Souhail Souai','Tarek Sbeouelji','Mouna Triki'],

@@ -276,7 +276,17 @@ class OnlineApiClient(
 
     /** Planning S1 (cycle V5.15) : séances, affectations, enseignants disponibles par jour. */
     suspend fun s1Plan(session: AuthSession): Pair<List<PlanSession>, Map<Int, List<String>>> = runCatching {
-        val rooms = mapOf("M1" to "C", "M2" to "B", "M3" to "D", "M4" to "D", "M5" to "A", "M6" to "A")
+        val rooms = mapOf("M1" to "C", "M2" to "B", "M3" to "A", "M4" to "D", "M5" to "B", "M6" to "A")
+        // Source de référence : session_plans (une ligne par classe-groupe et par date, 6 groupes avec enseignant et salle).
+        val classNames = getPaged(session, "classes", "id,name", mapOf("deleted_at" to "is.null"), "id").map { it.jsonObject }
+            .associate { it.requiredString("id") to (it.string("name") ?: "") }
+        val groupRe = Regex("^(.*)-G(\\d+)$")
+        val plans = getPaged(session, "session_plans", "class_id,plan_date,manipulation,teacher_id,room,status", mapOf("deleted_at" to "is.null"), "plan_date").map { it.jsonObject }
+            .filter { it.string("status")?.lowercase() != "cancelled" }
+            .mapNotNull { p ->
+                val m = groupRe.find(classNames[p.string("class_id")] ?: return@mapNotNull null) ?: return@mapNotNull null
+                Triple(m.groupValues[1], p.string("plan_date") ?: "", m.groupValues[2].toInt()) to p
+            }.toMap()
         val sessions = getPaged(session, "v515_sessions", "id,session_date,start_time,end_time,class_name,is_teaching_session,class_occurrence", emptyMap(), "session_date").map { it.jsonObject }
             .filter { it.boolean("is_teaching_session") != false && it.int("class_occurrence") != null }
         val assignments = getPaged(session, "v515_assignments", "session_id,group_no,manipulation_code,teacher_id,room", emptyMap(), "session_id").map { it.jsonObject }
@@ -289,8 +299,10 @@ class OnlineApiClient(
                 startTime = row.requiredString("start_time").take(5), endTime = row.requiredString("end_time").take(5), occurrence = occ, locked = false,
                 slots = (1..6).map { g ->
                     val code = "M" + (((g - 1) + (occ - 1)) % 6 + 1)
+                    val plan = plans[Triple(row.requiredString("class_name"), row.requiredString("session_date"), g)]
                     val a = assignments.firstOrNull { it.string("session_id") == row.requiredString("id") && it.int("group_no") == g }
-                    PlanSlot("", false, g, a?.string("manipulation_code") ?: code, a?.string("teacher_id"), a?.string("room") ?: rooms[code])
+                    val manip = plan?.string("manipulation") ?: a?.string("manipulation_code") ?: code
+                    PlanSlot("", false, g, manip, plan?.string("teacher_id") ?: a?.string("teacher_id"), rooms[manip] ?: plan?.string("room") ?: a?.string("room"))
                 }
             )
         } to pool

@@ -48,6 +48,7 @@
     return blockers;
   }
 
+  const ROOM_BY_MANIP=Object.freeze({M1:'C',M2:'B',M3:'A',M4:'D',M5:'B',M6:'A'});
   function validateWeek(rows,teachers,options={}){
     const teaching=(rows||[]).filter(r=>r.isTeachingSession!==false&&r.className),blockers=[];
     const teacherIds=(teachers||[]).map(t=>typeof t==='string'?t:t.id).filter(Boolean);
@@ -55,7 +56,7 @@
       const groups=row.groups||[],rooms=groups.map(g=>g.room).filter(Boolean),ids=groups.map(g=>g.teacherId).filter(Boolean);
       if(groups.length!==4||ids.length!==4||new Set(ids).size!==4)blockers.push({code:'DAY_TEACHER_COUNT',date:row.date,message:'Chaque jour de TP doit avoir exactement 4 enseignants distincts.'});
       if(groups.some(g=>!g.room))blockers.push({code:'ROOM_REQUIRED',date:row.date,message:'Toutes les salles doivent être choisies.'});
-      if(rooms.length!==new Set(rooms).size)blockers.push({code:'ROOM_TIME_CONFLICT',date:row.date,message:'Deux groupes simultanés ne peuvent pas utiliser la même salle.'});
+      {const cap=r=>Math.max(1,Object.values(ROOM_BY_MANIP).filter(x=>x===r).length),n={};rooms.forEach(r=>n[r]=(n[r]||0)+1);if(Object.keys(n).some(r=>n[r]>cap(r)))blockers.push({code:'ROOM_TIME_CONFLICT',date:row.date,message:'Trop de groupes simultanés dans la même salle (A et B : 2 manipulations, C et D : 1).'});}
     }
     blockers.push(...validateManipulationHistory(teaching));
     if(options.skipTeacherDistribution)return {ok:blockers.length===0,blockers,distribution:{}};

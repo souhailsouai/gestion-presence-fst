@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const manipulationRooms={M1:'C',M2:'B',M3:'D',M4:'D',M5:'A',M6:'A'};
+  const manipulationRooms={M1:'C',M2:'B',M3:'A',M4:'D',M5:'B',M6:'A'};
   function admin(){try{return Boolean(typeof currentTeacher!=='undefined'&&currentTeacher?.isAdmin);}catch(_){return false;}}
   function client(){try{return typeof supabaseClient!=='undefined'?supabaseClient:null;}catch(_){return null;}}
   function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

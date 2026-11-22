@@ -115,10 +115,16 @@ test('teacher on three days is blocked',()=>{
   assert.ok(result.blockers.some(b=>b.code==='MAX_TWO_DAYS_PER_TEACHER'));
 });
 
-test('duplicate room within one session is blocked',()=>{
-  const row=teachingRow('2026-09-14','A',['t1','t2','t3','t4'],undefined,['A','A','C','D']);
+test('single-station room used twice in one session is blocked',()=>{
+  const row=teachingRow('2026-09-14','A',['t1','t2','t3','t4'],undefined,['C','C','A','D']);
   const result=stateApi.validateWeek([row],allTeachers,{skipTeacherDistribution:true});
   assert.ok(result.blockers.some(b=>b.code==='ROOM_TIME_CONFLICT'));
+});
+
+test('rooms A and B host two manipulations at once (M2+M5 in B, M3+M6 in A)',()=>{
+  const row=teachingRow('2026-09-14','A',['t1','t2','t3','t4'],['M2','M5','M3','M6'],['B','B','A','A']);
+  const result=stateApi.validateWeek([row],allTeachers,{skipTeacherDistribution:true});
+  assert.ok(!result.blockers.some(b=>b.code==='ROOM_TIME_CONFLICT'));
 });
 
 test('repeated manipulation for the same class and group is blocked',()=>{

@@ -38,7 +38,7 @@ test('four classes remain 5/6 with the approved missing sequence',()=>{
 });
 
 test('PDF manipulation rooms are fixed',()=>{
-  assert.deepEqual(data.manipulationRooms,{M1:'C',M2:'B',M3:'D',M4:'D',M5:'A',M6:'A'});
+  assert.deepEqual(data.manipulationRooms,{M1:'C',M2:'B',M3:'A',M4:'D',M5:'B',M6:'A'});
   for(const row of data.calendarRows.filter(r=>r.isTeachingSession)){
     for(const post of row.posts){
       assert.equal(post.room,data.manipulationRooms[post.manipulation],`${row.date} G${post.groupNo}`);
