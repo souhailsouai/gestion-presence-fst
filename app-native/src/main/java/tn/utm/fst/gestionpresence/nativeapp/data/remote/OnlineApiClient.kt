@@ -1,5 +1,8 @@
 package tn.utm.fst.gestionpresence.nativeapp.data.remote
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 import android.util.Base64
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -10,6 +13,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -43,6 +47,8 @@ import tn.utm.fst.gestionpresence.nativeapp.core.model.ApiException
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AppContract
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceDraft
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceRecord
+import tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSession
+import tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSlot
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceSheet
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceStatus
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AuthSession
@@ -114,9 +120,12 @@ class OnlineApiClient(
             authenticatedHeaders(session)
             parameter("id", "eq.${session.userId}")
             parameter("select", "id,email,username,full_name,role,account_state,mfa_required")
-            header(HttpHeaders.Accept, "application/vnd.pgrst.object+json")
         }
-        val body = response.requireObject()
+        val body = when (val value = response.requireJson()) {
+            is JsonArray -> value.firstOrNull()?.jsonObject ?: throw ApiException("UNAUTHENTICATED", "Profil introuvable.")
+            is JsonObject -> value
+            else -> throw ApiException("UNAUTHENTICATED", "Profil introuvable.")
+        }
         return UserProfile(
             id = body.requiredString("id"),
             email = body.string("email"),
@@ -146,7 +155,7 @@ class OnlineApiClient(
     }
 
     suspend fun classes(session: AuthSession): List<AcademicClass> =
-        getArray(session, "classes", "*").map { element ->
+        getPaged(session, "classes", "*", mapOf("deleted_at" to "is.null"), "id").map { element ->
             val row = element.jsonObject
             AcademicClass(
                 id = row.requiredString("id"),
@@ -165,7 +174,7 @@ class OnlineApiClient(
         }.sortedBy { it.name }
 
     suspend fun students(session: AuthSession): List<Student> =
-        getArray(session, "students", "*").map { element ->
+        getPaged(session, "students", "*", mapOf("deleted_at" to "is.null"), "id").map { element ->
             val row = element.jsonObject
             Student(
                 id = row.requiredString("id"),
@@ -179,7 +188,7 @@ class OnlineApiClient(
         }.sortedWith(compareBy<Student> { it.lastName }.thenBy { it.firstName })
 
     suspend fun sessions(session: AuthSession): List<TeachingSession> =
-        getArray(session, "sessions", "*").map { element ->
+        getPaged(session, "sessions", "*", mapOf("deleted_at" to "is.null"), "id").map { element ->
             val row = element.jsonObject
             TeachingSession(
                 id = row.requiredString("id"),
@@ -194,7 +203,140 @@ class OnlineApiClient(
         }.sortedWith(compareByDescending<TeachingSession> { it.sessionDate }.thenBy { it.startTime })
 
     suspend fun attendance(session: AuthSession): List<AttendanceRecord> =
-        getArray(session, "attendance", "*").map { element -> attendanceRecord(element.jsonObject) }
+        getPaged(session, "attendance", "id,session_id,student_id,status,comment,grade,revision,updated_at,makeup_date,makeup_note", mapOf("deleted_at" to "is.null"), "id").map { element -> attendanceRecord(element.jsonObject) }
+
+    // ---- Accès génériques (gestion du S2) ----
+    suspend fun rows(session: AuthSession, table: String, select: String = "*", filters: Map<String, String> = emptyMap(), order: String): List<JsonObject> =
+        getPaged(session, table, select, filters, order).map { it.jsonObject }
+
+    suspend fun upsertRows(session: AuthSession, table: String, rows: JsonArray, onConflict: String) {
+        val response = http.post("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            parameter("on_conflict", onConflict)
+            header("Prefer", "resolution=merge-duplicates,return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(rows)
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun insertRows(session: AuthSession, table: String, rows: JsonArray) {
+        val response = http.post("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            header("Prefer", "return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(rows)
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun patchRows(session: AuthSession, table: String, filters: Map<String, String>, body: JsonObject) {
+        require(filters.isNotEmpty())
+        val response = http.patch("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            filters.forEach { (k, v) -> parameter(k, v) }
+            header("Prefer", "return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun deleteWhere(session: AuthSession, table: String, filters: Map<String, String>) {
+        require(filters.isNotEmpty())
+        val response = http.delete("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            filters.forEach { (k, v) -> parameter(k, v) }
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun callRpc(session: AuthSession, function: String, body: JsonObject): JsonElement = rpc(session, function, body)
+
+    /** Planning du semestre 2 (tables v33_s2_*), lecture seule. */
+    suspend fun s2Plan(session: AuthSession): List<PlanSession> = runCatching {
+        getPaged(session, "v33_s2_sessions", "id,class_name,session_date,start_time,end_time,occurrence,locked,v33_s2_slots(id,locked,group_no,manipulation_code,teacher_id,room)", emptyMap(), "session_date")
+            .map { element ->
+                val row = element.jsonObject
+                PlanSession(
+                    id = row.requiredString("id"),
+                    className = row.requiredString("class_name"),
+                    date = row.requiredString("session_date"),
+                    startTime = row.requiredString("start_time").take(5),
+                    endTime = row.requiredString("end_time").take(5),
+                    occurrence = row.int("occurrence") ?: 1,
+                    locked = row.boolean("locked") ?: false,
+                    slots = (row["v33_s2_slots"] as? JsonArray).orEmpty().map { slot ->
+                        val o = slot.jsonObject
+                        PlanSlot(o.string("id") ?: "", o.boolean("locked") ?: false, o.int("group_no") ?: 0, o.string("manipulation_code") ?: "", o.string("teacher_id"), o.string("room"))
+                    }.sortedBy { it.groupNo }
+                )
+            }
+    }.getOrDefault(emptyList())
+
+    /** Planning S1 (cycle V5.15) : séances, affectations, enseignants disponibles par jour. */
+    suspend fun s1Plan(session: AuthSession): Pair<List<PlanSession>, Map<Int, List<String>>> = runCatching {
+        val rooms = mapOf("M1" to "C", "M2" to "B", "M3" to "D", "M4" to "D", "M5" to "A", "M6" to "A")
+        val sessions = getPaged(session, "v515_sessions", "id,session_date,start_time,end_time,class_name,is_teaching_session,class_occurrence", emptyMap(), "session_date").map { it.jsonObject }
+            .filter { it.boolean("is_teaching_session") != false && it.int("class_occurrence") != null }
+        val assignments = getPaged(session, "v515_assignments", "session_id,group_no,manipulation_code,teacher_id,room", emptyMap(), "session_id").map { it.jsonObject }
+        val pool = getPaged(session, "v515_teacher_day_pool", "weekday,teacher_id,active", emptyMap(), "weekday").map { it.jsonObject }
+            .filter { it.boolean("active") != false }.groupBy({ it.int("weekday") ?: 0 }, { it.requiredString("teacher_id") })
+        sessions.map { row ->
+            val occ = row.int("class_occurrence") ?: 1
+            PlanSession(
+                id = row.requiredString("id"), className = row.requiredString("class_name"), date = row.requiredString("session_date"),
+                startTime = row.requiredString("start_time").take(5), endTime = row.requiredString("end_time").take(5), occurrence = occ, locked = false,
+                slots = (1..6).map { g ->
+                    val code = "M" + (((g - 1) + (occ - 1)) % 6 + 1)
+                    val a = assignments.firstOrNull { it.string("session_id") == row.requiredString("id") && it.int("group_no") == g }
+                    PlanSlot("", false, g, a?.string("manipulation_code") ?: code, a?.string("teacher_id"), a?.string("room") ?: rooms[code])
+                }
+            )
+        } to pool
+    }.getOrDefault(emptyList<PlanSession>() to emptyMap())
+
+    /** Manipulation de chaque séance S1 (session_plans), pour l'export de suivi. */
+    suspend fun sessionManipulations(session: AuthSession): Map<String, String> = runCatching {
+        getPaged(session, "session_plans", "session_id,manipulation,status", mapOf("deleted_at" to "is.null", "session_id" to "not.is.null"), "session_id")
+            .map { it.jsonObject }.filter { it.string("manipulation") != null && it.string("status")?.lowercase() != "cancelled" }
+            .associate { it.requiredString("session_id") to it.requiredString("manipulation") }
+    }.getOrDefault(emptyMap())
+
+    /** Noms des enseignants (id → nom complet), si la lecture est autorisée. */
+    suspend fun teacherNames(session: AuthSession): Map<String, String> = runCatching {
+        getPaged(session, "profiles", "id,full_name", emptyMap(), "full_name").associate { element ->
+            val row = element.jsonObject
+            row.requiredString("id") to (row.string("full_name") ?: "—")
+        }
+    }.getOrDefault(emptyMap())
+
+    /** Titres des manipulations du S2 (M1 → nom). */
+    suspend fun manipulationTitles(session: AuthSession): Map<String, String> = runCatching {
+        getPaged(session, "v33_s2_manipulations", "code,title", emptyMap(), "code").mapNotNull { element ->
+            val row = element.jsonObject
+            row.string("title")?.let { row.requiredString("code") to it }
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    /** Rattrapage : date posée → présent ; date retirée → absent. */
+    suspend fun setMakeup(session: AuthSession, attendanceId: String, date: String?, note: String?) {
+        val response = http.patch("$baseUrl/rest/v1/attendance") {
+            authenticatedHeaders(session)
+            parameter("id", "eq.$attendanceId")
+            header("Prefer", "return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                if (date == null) {
+                    put("status", "absent"); put("makeup_date", JsonNull); put("makeup_note", JsonNull)
+                } else {
+                    put("status", "present"); put("makeup_date", date)
+                    if (note.isNullOrBlank()) put("makeup_note", JsonNull) else put("makeup_note", note.take(300))
+                }
+            })
+        }
+        response.requireSuccess()
+    }
 
     suspend fun teacherDirectory(session: AuthSession): List<TeacherDirectoryEntry> {
         val result = rpc(session, "teacher_directory_v2", buildJsonObject { })
@@ -280,12 +422,13 @@ class OnlineApiClient(
     }
 
     suspend fun mfaFactors(session: AuthSession): List<MfaFactor> {
-        val response = http.get("$baseUrl/auth/v1/factors") { authenticatedHeaders(session) }
+        // Supabase Auth n'a pas de GET /factors : les facteurs sont dans l'objet utilisateur.
+        val response = http.get("$baseUrl/auth/v1/user") { authenticatedHeaders(session) }
         val value = response.requireJson()
         val candidates = when (value) {
             is JsonArray -> value
-            is JsonObject -> value["all"] as? JsonArray
-                ?: value["totp"] as? JsonArray
+            is JsonObject -> value["factors"] as? JsonArray
+                ?: value["all"] as? JsonArray
                 ?: JsonArray(emptyList())
             else -> JsonArray(emptyList())
         }
@@ -368,6 +511,36 @@ class OnlineApiClient(
             parameter("deleted_at", "is.null")
         }
         return response.requireJson().jsonArray
+    }
+
+    private suspend fun getPaged(
+        session: AuthSession,
+        table: String,
+        select: String,
+        filters: Map<String, String>,
+        order: String
+    ): List<JsonElement> {
+        val page = 1000
+        suspend fun fetch(from: Int, count: Boolean): Pair<JsonArray, Int?> {
+            val response = http.get("$baseUrl/rest/v1/$table") {
+                authenticatedHeaders(session)
+                parameter("select", select)
+                filters.forEach { (key, value) -> parameter(key, value) }
+                parameter("order", order)
+                header("Range-Unit", "items")
+                header("Range", "$from-${from + page - 1}")
+                if (count) header("Prefer", "count=exact")
+            }
+            val total = response.headers["Content-Range"]?.substringAfter('/')?.toIntOrNull()
+            return response.requireJson().jsonArray to total
+        }
+        // Première page avec le total, puis les pages restantes en parallèle.
+        val (first, total) = fetch(0, count = true)
+        if (total == null || total <= first.size) return first
+        val rest = coroutineScope {
+            (page until total step page).map { from -> async { fetch(from, count = false).first } }.awaitAll()
+        }
+        return first + rest.flatten()
     }
 
     private suspend fun upsert(session: AuthSession, table: String, row: JsonObject) {
@@ -453,7 +626,9 @@ class OnlineApiClient(
             comment = row.string("comment") ?: "",
             grade = row.double("grade"),
             revision = row.long("revision") ?: 1L,
-            updatedAt = row.string("updated_at")
+            updatedAt = row.string("updated_at"),
+            makeupDate = row.string("makeup_date"),
+            makeupNote = row.string("makeup_note")
         )
 
     private fun jwtClaim(jwt: String, key: String): String? = runCatching {

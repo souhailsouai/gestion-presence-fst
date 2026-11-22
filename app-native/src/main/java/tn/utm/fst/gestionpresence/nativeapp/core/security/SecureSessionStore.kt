@@ -59,7 +59,22 @@ class SecureSessionStore(context: Context) {
         )
     }.getOrNull()
 
+    fun hasSession(): Boolean = preferences.contains(KEY_CIPHERTEXT)
+
+    /** Déverrouillage biométrique : la session reste chiffrée par le Keystore, l'empreinte en conditionne l'ouverture. */
+    var biometricEnabled: Boolean
+        get() = preferences.getBoolean(KEY_BIOMETRIC, false)
+        set(value) { preferences.edit().putBoolean(KEY_BIOMETRIC, value).apply() }
+
+    var biometricOffered: Boolean
+        get() = preferences.getBoolean(KEY_BIOMETRIC_OFFERED, false)
+        set(value) { preferences.edit().putBoolean(KEY_BIOMETRIC_OFFERED, value).apply() }
+
     fun clear() {
+        preferences.edit().remove(KEY_IV).remove(KEY_CIPHERTEXT).apply()
+    }
+
+    fun clearAll() {
         preferences.edit().clear().apply()
     }
 
@@ -87,5 +102,7 @@ class SecureSessionStore(context: Context) {
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val KEY_IV = "session_iv"
         const val KEY_CIPHERTEXT = "session_ciphertext"
+        const val KEY_BIOMETRIC = "biometric_enabled"
+        const val KEY_BIOMETRIC_OFFERED = "biometric_offered"
     }
 }
