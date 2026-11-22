@@ -1,0 +1,4 @@
+# Données personnelles : ne jamais versionner de listes d'étudiants.
+supabase/ops/*roster*
+*.xlsx
+*.csv
