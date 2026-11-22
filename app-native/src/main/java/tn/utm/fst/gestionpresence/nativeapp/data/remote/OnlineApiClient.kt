@@ -342,12 +342,13 @@ class OnlineApiClient(
     }
 
     suspend fun mfaFactors(session: AuthSession): List<MfaFactor> {
-        val response = http.get("$baseUrl/auth/v1/factors") { authenticatedHeaders(session) }
+        // Supabase Auth n'a pas de GET /factors : les facteurs sont dans l'objet utilisateur.
+        val response = http.get("$baseUrl/auth/v1/user") { authenticatedHeaders(session) }
         val value = response.requireJson()
         val candidates = when (value) {
             is JsonArray -> value
-            is JsonObject -> value["all"] as? JsonArray
-                ?: value["totp"] as? JsonArray
+            is JsonObject -> value["factors"] as? JsonArray
+                ?: value["all"] as? JsonArray
                 ?: JsonArray(emptyList())
             else -> JsonArray(emptyList())
         }
