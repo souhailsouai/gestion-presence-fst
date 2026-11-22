@@ -40,6 +40,11 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Build Pages payload
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python scripts/build_pages_from_41881.py
+
       - name: Verify JavaScript and regression contracts
         shell: bash
         run: |
@@ -51,11 +56,6 @@ jobs:
           for test in tests/web/*.test.cjs; do
             node "$test"
           done
-
-      - name: Build Pages payload
-        env:
-          PYTHONDONTWRITEBYTECODE: '1'
-        run: python scripts/build_pages_from_41881.py
 
       - name: Verify LPC3 management is in payload
         shell: bash
