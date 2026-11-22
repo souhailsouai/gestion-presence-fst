@@ -541,3 +541,60 @@ body[data-semester="S2"] .v33-banner,.v33-banner{border-left-color:var(--brand-n
 #v33-stats .v33s-heat th,#v33-stats .v33s-table th,#v33-root .v33-grid th{background:#f3f6fb!important;color:#5b6b82!important;border:0!important}
 #v33-stats .v33s-heat thead th{background:transparent!important}
 #v33-stats .v33s-kpi.warn .v33s-ico{background:#f6efe9;color:#9a7356}
+/* ===== V34 : palette calme « Ardoise & sauge » (remplace toutes les couleurs vives) ===== */
+:root{
+  --brand-navy:#44566e;--brand-navy-deep:#38495e;--brand-navy-soft:#edf1f5;
+  --brand-yellow:#d9cbb0;--brand-yellow-soft:#f8f4ec;
+  --brand-red:#b07a72;--brand-red-soft:#f7eeec;
+  --brand-sand:#c8b9a8;--brand-sand-soft:#f8f5f1;
+  --brand-sage:#7f9c8f;--brand-sage-soft:#eef4f1;
+  --brand-stripe:linear-gradient(90deg,#c9d5dd,#d9cbb0 50%,#c5d6cd);
+  --fst-navy:#44566e;--fst-blue:#526a86;--fst-gold:#cdbb98;
+  --fst-ink:#2f3a47;--fst-muted:#6d7886;--fst-border:#e3e7ec;--fst-canvas:#f4f5f3;
+  --primary:#526a86;--app-navy:#44566e;--app-gold:#cdbb98
+}
+body,#app-container,.content,#fst-main{background:#f4f5f3!important}
+#fst-sidebar-brand>#fst-brand.internal-brand-wrap{background:linear-gradient(160deg,#4a5d76,#3c4d63)!important}
+#fst-sidebar-brand>#fst-brand.internal-brand-wrap::after,#fst-topbar::after{height:2px;opacity:.7}
+#fst-sidebar-nav .fst-nav-group-label{color:#9aa6b4!important}
+#fst-sidebar-nav .nav-tab.active{border-left-color:var(--brand-sage)!important}
+#fst-sidebar-nav .nav-tab.active .fst-icon{color:var(--brand-sage)!important}
+.academic-year{color:#7a6a58!important}
+.btn-primary,.btn.btn-primary{background:var(--brand-navy)!important;border-color:var(--brand-navy)!important}
+.btn-primary:hover,.btn.btn-primary:hover{background:var(--brand-navy-deep)!important}
+/* Écrans V33 */
+.v33x{--line:#e5e9ee;--soft:#f3f5f7;--ink:#2f3a47;--mut:#6d7886}
+.v33x .v33-hero::before{background:linear-gradient(180deg,#7f9c8f,#c8b9a8)}
+.v33x .v33-tag,.v33s-sem,body[data-semester="S2"] .v33s-sem{background:#eef4f1;border-color:#d6e4dc;color:#4f6b5f}
+.v33x .v33-m{color:#44566e}
+.v33x .v33-cellbtn:hover{border-color:#cdbb98;background:#faf7f1}
+.v33x .v33-cellbtn.locked{border-color:#d9cbb0}
+.v33x .v33-grid tr.locked td:first-child{box-shadow:inset 3px 0 0 #cdbb98}
+.v33x .v33-exrow td{background:#f8f4ec!important;color:#7a6a58}
+.v33x .v33-status.ok,.v33x .v33-balance.ok>i{background:#eef4f1;color:#4f6b5f}
+.v33x .v33-status.warn,.v33x .v33-balance.warn>i,.v33x .v33-issue.attention{background:#f8f4ec;color:#7a6a58}
+.v33x .v33-status.err,.v33x .v33-issue.erreur{background:#f7eeec;color:#8c5a53}
+.v33x .v33-station.set{border-left-color:#7f9c8f}
+.v33x .v33-lk{color:#b9a47f}
+.v33x .v33-meter i{background:linear-gradient(90deg,#9db5aa,#7f9c8f)}
+.v33x .v33-flash{animation:none;box-shadow:0 0 0 3px #d9cbb0}
+.v33-toast{background:#3c4d63}.v33-toast.ok i{color:#b9d3c6}.v33-toast.err{background:#8c5a53}
+#v33-sem-switch{background:#edf1f5}
+#v33-sem-switch button,body[data-semester="S2"] #v33-sem-switch button{color:#44566e}
+#v33-sem-switch button[aria-pressed="true"],body[data-semester="S2"] #v33-sem-switch button[aria-pressed="true"]{background:#44566e;color:#fff}
+/* Statistiques */
+.v33s{--v33-good:#6f9483;--v33-mid:#c3a26a;--v33-bad:#b07a72;--v33-line:#e5e9ee}
+.v33s-fill{background:linear-gradient(90deg,#8ea2b8,#5f7590)}
+.v33s-fill.good{background:linear-gradient(90deg,#a8c2b6,#6f9483)}.v33s-fill.mid{background:linear-gradient(90deg,#e2d0a8,#c3a26a)}.v33s-fill.bad{background:linear-gradient(90deg,#d8b3ad,#b07a72)}
+.v33s-heat .h-good{background:#dfeae4;color:#4f6b5f}.v33s-heat .h-mid{background:#f3ead7;color:#7a6440}.v33s-heat .h-bad{background:#f1e1de;color:#8c5a53}
+.v33s-kpi.good b{color:#5d8170}.v33s-kpi.bad b{color:#9c665e}
+.v33s-kpi.good .v33s-ico{background:#eef4f1;color:#5d8170}.v33s-kpi.bad .v33s-ico{background:#f7eeec;color:#9c665e}
+.v33s-line{stroke:#5f7590}.v33s-pt circle{fill:#5f7590}
+.v33s-chip.on{background:#44566e;border-color:#44566e}
+.v33s-av{background:#c8b9a8}.v33s-people li{background:#f8f5f1}
+.v33s-badge,.v33s-pill.bad{background:#f7eeec;color:#9c665e}
+.v33s-mini i.good{background:#7f9c8f}.v33s-mini i.mid{background:#c3a26a}.v33s-mini i.bad{background:#b07a72}
+.btn-success,.btn.btn-success,button.btn-success{background:#6f9483!important;border-color:#6f9483!important;color:#fff!important}
+.btn-success:hover{background:#5d8170!important}
+.btn-danger,.btn.btn-danger{background:#b07a72!important;border-color:#b07a72!important}
+.btn-warning,.btn.btn-warning{background:#c3a26a!important;border-color:#c3a26a!important;color:#fff!important}
