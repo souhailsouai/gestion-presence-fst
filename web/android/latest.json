@@ -1,6 +1,6 @@
 {
-  "version": "2.9.0",
-  "notes": "Nouveau : comptes enseignants, rapport de présence en PDF, modification, suppression et import d'étudiants, sauvegardes JSON et CSV, avis officiels sur l'accueil.",
+  "version": "2.10.0",
+  "notes": "Statistiques filtrables par intervenant, manipulation et période ; configuration des intervenants du S1 par jour ; page Aide.",
   "apk": "Presence-FST.apk",
-  "size": 3183839
+  "size": 3200227
 }
