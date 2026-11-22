@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Build Pages payload
+        run: python scripts/build_pages_from_41881.py
       - name: JavaScript unit and regression tests
         run: node --test tests/web/*.test.cjs
       - name: Generate real V31 Excel workbooks

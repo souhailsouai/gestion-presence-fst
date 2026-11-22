@@ -66,7 +66,7 @@ class AdminTools(private val repository: PresenceRepository) {
     /** Lignes « Nom ; Prénom ; Email ; Classe/Groupe » depuis un CSV ou un Excel (ligne d'en-tête ignorée). */
     fun parseImport(name: String, bytes: ByteArray): List<ImportRow> {
         val rows: List<List<String>> = if (name.lowercase().endsWith(".csv") || !(bytes.size > 4 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte())) {
-            val text = bytes.decodeToString().removePrefix("﻿")
+            val text = bytes.decodeToString().removePrefix("\uFEFF")
             val sep = if (text.lineSequence().first().count { it == ';' } >= text.lineSequence().first().count { it == ',' }) ';' else ','
             text.lines().filter { it.isNotBlank() }.map { line -> line.split(sep).map { it.trim().trim('"') } }
         } else {
@@ -150,7 +150,7 @@ class AdminTools(private val repository: PresenceRepository) {
             lines += listOf(s?.s("session_date"), c?.s("name")?.substringBeforeLast("-G"), c?.s("name"), P[s?.s("teacher_id")]?.s("full_name"),
                 st?.s("last_name"), st?.s("first_name"), a.s("status"), a.s("grade"), a.s("comment"), a.s("makeup_date")).joinToString(";") { q(it) }
         }
-        file(context, "presences_${LocalDate.now()}.csv").apply { writeText("﻿" + lines.joinToString("\r\n")) }
+        file(context, "presences_${LocalDate.now()}.csv").apply { writeText("\uFEFF" + lines.joinToString("\r\n")) }
     }
 
     private fun file(context: Context, name: String) = File(File(context.cacheDir, "reports").apply { mkdirs() }, name)

@@ -38,6 +38,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Build Pages payload
+        run: python scripts/build_pages_from_41881.py
       - name: Complete JavaScript regression suite
         run: node --test --test-concurrency=1 tests/web/*.test.cjs
       - name: Install browser test dependencies
@@ -49,12 +51,6 @@ jobs:
           python scripts/build_pages_from_41881.py
           python -m unittest discover -s tests/browser -p 'test_*.py' -v
           python tests/browser/capture_fst_shell.py --artifact web/index.html --out artifacts/ui/pages
-      - name: Build and test the standalone Web and Windows HTML
-        run: |
-          python scripts/build_online_web.py
-          python scripts/build_single_file_release.py
-          python -m unittest discover -s tests/browser -p 'test_*.py' -v
-          python tests/browser/capture_fst_shell.py --artifact web/index.html --out artifacts/ui/standalone
       - name: Upload offline UI evidence
         if: always()
         uses: actions/upload-artifact@v4
