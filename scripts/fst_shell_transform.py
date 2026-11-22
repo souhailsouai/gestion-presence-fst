@@ -135,7 +135,47 @@ ICONS={
 def icon(name):
     return '<svg class="fst-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+ICONS[name]+'</svg>'
 
+def _fix_teacher_write_paths(html: str) -> str:
+    """Fix legacy teacher write calls without weakening RLS.
+
+    The generated legacy student form requested INSERT ... RETURNING through
+    supabase-js (.select('id')), which causes the otherwise-authorized teacher
+    insert to fail under RLS. The generated attendance loader also filtered rows
+    by legacy attendance.teacher_id instead of trusting session-scoped RLS,
+    hiding editable records after teacher reassignment.
+    """
+    student_pattern = re.compile(
+        r"const \{data:inserted,error\}=await supabaseClient\.from\('students'\)\.insert\((\{id,teacher_id:currentTeacher\.id,class_id:classId,last_name:lastname,first_name:firstname,email:email\|\|null\})\)\.select\('id'\);"
+    )
+    html, student_count = student_pattern.subn(
+        r"const {error}=await supabaseClient.from('students').insert(\1);",
+        html,
+        count=1,
+    )
+    if student_count != 1:
+        raise ValueError('Expected one legacy teacher student INSERT ... RETURNING path')
+    html, result_count = re.subn(
+        r"if\(error\|\|inserted\?\.length!==1\)return showAlert\('Ajout impossible : '\+\(error\?\.message\|\|'écriture refusée'\),'danger'\);",
+        "if(error)return showAlert('Ajout impossible : '+(error?.message||'écriture refusée'),'danger');",
+        html,
+        count=1,
+    )
+    if result_count != 1:
+        raise ValueError('Expected one legacy student insert result check')
+
+    attendance_filter = "const attendanceQ=isAdmin?supabaseClient.from('attendance').select('*'):supabaseClient.from('attendance').select('*').eq('teacher_id',currentTeacher.id);"
+    if html.count(attendance_filter) != 1:
+        raise ValueError('Expected one teacher_id-filtered attendance fetch')
+    html = html.replace(
+        attendance_filter,
+        "const attendanceQ=supabaseClient.from('attendance').select('*');",
+        1,
+    )
+    return html
+
+
 def apply_fst_shell(html: str, *, target: str, root: Path) -> str:
+    html = _fix_teacher_write_paths(html)
     if target not in {'pages','online','standalone'}:raise ValueError('Invalid build target')
     if 'data-fst-shell="shared"' in html:
         # Online -> standalone adds inlined business modules. Keep the frame

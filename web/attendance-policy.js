@@ -13,7 +13,7 @@
     // assigned to the authenticated teacher; filtering by owner hides valid students
     // when a group/student was created or reassigned by another authorized account.
     const studentQ=supabaseClient.from('students').select('*');
-    const attendanceQ=isAdmin?supabaseClient.from('attendance').select('*'):supabaseClient.from('attendance').select('*').eq('teacher_id',currentTeacher.id);
+    const attendanceQ=supabaseClient.from('attendance').select('*');
     const [c,st,se,a]=await Promise.all([classQ,studentQ,sessionQ,attendanceQ,acl()?.refreshTeacherNames?.()]);
     const err=c.error||st.error||se.error||a.error;if(err)throw err;
     const mapped={
