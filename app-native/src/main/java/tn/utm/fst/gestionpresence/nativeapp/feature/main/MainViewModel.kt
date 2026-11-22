@@ -93,6 +93,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Recharge les données après une modification du S2 (planning recalculé côté serveur). */
     fun reloadData(message: String? = null) = mutate(message ?: "") { }
 
+    /** Action S2 (planning, groupes) puis rechargement des données. */
+    fun s2Action(message: String, block: suspend () -> Unit) = mutate(message) { block() }
+
     fun lock() {
         repository.lock()
         _state.value = MainUiState(screen = AppScreen.LOCKED, loading = false, online = repository.isOnline(), biometricEnabled = true)
@@ -358,6 +361,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 handle(error)
             }
         }
+    }
+
+    fun assignStudent(studentId: String, classId: String, effectiveFrom: String) = mutate("Groupe modifié à partir du ${effectiveFrom.split('-').reversed().joinToString("/")}.") {
+        repository.assignStudent(studentId, classId, effectiveFrom)
     }
 
     fun completeSession(session: TeachingSession) = mutate("Séance terminée.") {

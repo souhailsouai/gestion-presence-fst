@@ -207,15 +207,28 @@ class PresenceRepository(context: Context) {
 
     suspend fun addStudent(classId: String, lastName: String, firstName: String, email: String?) {
         requireOnline()
-        val session = authorizedSession()
-        api.upsertStudent(session, buildJsonObject {
-            put("id", UUID.randomUUID().toString())
-            put("teacher_id", session.userId)
-            put("class_id", classId)
-            put("last_name", lastName.trim())
-            put("first_name", firstName.trim())
-            if (email.isNullOrBlank()) put("email", JsonNull) else put("email", email.trim())
+        require(lastName.isNotBlank() && firstName.isNotBlank()) { "Nom et prénom obligatoires." }
+        // Même chemin que le site (contrôle des droits côté serveur, y compris LPC3).
+        api.callRpc(authorizedSession(), "v31_add_student_authorized", buildJsonObject {
+            put("p_student_id", UUID.randomUUID().toString())
+            put("p_class_id", classId)
+            put("p_last_name", lastName.trim())
+            put("p_first_name", firstName.trim())
+            if (email.isNullOrBlank()) put("p_email", JsonNull) else put("p_email", email.trim())
         })
+    }
+
+    /** Changement de groupe à partir d'une date d'effet (les présences passées restent attachées). */
+    suspend fun assignStudent(studentId: String, classId: String, effectiveFrom: String) {
+        requireOnline()
+        LocalDate.parse(effectiveFrom)
+        val res = api.callRpc(authorizedSession(), "v30_teacher_assign_student", buildJsonObject {
+            put("p_student_id", studentId); put("p_class_id", classId); put("p_effective_from", effectiveFrom)
+        })
+        (res as? JsonObject)?.let { o ->
+            val ok = (o["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            if (ok == "false") throw ApiException("VALIDATION_ERROR", (o["message"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "Modification refusée.")
+        }
     }
 
     suspend fun addSession(classId: String, date: String, startTime: String, endTime: String) {
