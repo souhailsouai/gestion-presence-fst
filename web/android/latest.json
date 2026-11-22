@@ -1,6 +1,6 @@
 {
-  "version": "2.11.0",
-  "notes": "Séances du planning S1 à venir visibles (Séances et Accueil) avec « Faire l’appel » pour saisir présences et notes le jour du TP.",
+  "version": "2.11.1",
+  "notes": "LPC3 : dernière séance le 26/11, examen le 10/12, pas de LPC3 au S2.",
   "apk": "Presence-FST.apk",
   "size": 3200291
 }
