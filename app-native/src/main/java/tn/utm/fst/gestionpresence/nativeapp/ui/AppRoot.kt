@@ -1160,7 +1160,7 @@ private fun S1PlanCard(p: PlanSession, data: RepositoryData, me: String?, admin:
                     Text("Enseignants disponibles le ${dayName(p.date).lowercase()} :", color = Uphf.Muted)
                     pool.sortedBy { data.teacherNames[it] ?: it }.forEach { id ->
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable {
-                            edit = null; admin.assignS1Teacher(p.id, slot.groupNo, slot.manipulation, id, slot.room ?: "")
+                            edit = null; admin.assignS1Teacher(slot.id, slot.groupNo, slot.manipulation, id, slot.room ?: "")
                         }.padding(10.dp)) { Text(data.teacherNames[id] ?: id, fontWeight = if (id == slot.teacherId) FontWeight.Bold else FontWeight.Normal, color = Uphf.Title) }
                     }
                 }

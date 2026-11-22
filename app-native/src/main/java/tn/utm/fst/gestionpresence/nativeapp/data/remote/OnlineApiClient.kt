@@ -274,38 +274,36 @@ class OnlineApiClient(
             }
     }.getOrDefault(emptyList())
 
-    /** Planning S1 (cycle V5.15) : séances, affectations, enseignants disponibles par jour. */
+    /** Planning S1 : construit depuis session_plans (planning réel : une ligne par classe-groupe et par date,
+     *  avec manipulation, enseignant et salle), du lundi au vendredi, pour MPI1-A à E et PC1. */
     suspend fun s1Plan(session: AuthSession): Pair<List<PlanSession>, Map<Int, List<String>>> = runCatching {
         val rooms = mapOf("M1" to "C", "M2" to "B", "M3" to "A", "M4" to "D", "M5" to "B", "M6" to "A")
-        // Source de référence : session_plans (une ligne par classe-groupe et par date, 6 groupes avec enseignant et salle).
         val classNames = getPaged(session, "classes", "id,name", mapOf("deleted_at" to "is.null"), "id").map { it.jsonObject }
             .associate { it.requiredString("id") to (it.string("name") ?: "") }
-        val groupRe = Regex("^(.*)-G(\\d+)$")
-        val plans = getPaged(session, "session_plans", "class_id,plan_date,manipulation,teacher_id,room,status", mapOf("deleted_at" to "is.null"), "plan_date").map { it.jsonObject }
+        val groupRe = Regex("^((?:MPI1|PC1)-[A-Z])-G(\\d+)$")
+        data class Row(val id: String, val cls: String, val group: Int, val date: String, val start: String, val end: String, val manip: String, val teacher: String?, val room: String?)
+        val rows = getPaged(session, "session_plans", "id,class_id,plan_date,start_time,end_time,manipulation,teacher_id,room,status",
+            mapOf("deleted_at" to "is.null"), "plan_date").map { it.jsonObject }
             .filter { it.string("status")?.lowercase() != "cancelled" }
-            .mapNotNull { p ->
-                val m = groupRe.find(classNames[p.string("class_id")] ?: return@mapNotNull null) ?: return@mapNotNull null
-                Triple(m.groupValues[1], p.string("plan_date") ?: "", m.groupValues[2].toInt()) to p
-            }.toMap()
-        val sessions = getPaged(session, "v515_sessions", "id,session_date,start_time,end_time,class_name,is_teaching_session,class_occurrence", emptyMap(), "session_date").map { it.jsonObject }
-            .filter { it.boolean("is_teaching_session") != false && it.int("class_occurrence") != null }
-        val assignments = getPaged(session, "v515_assignments", "session_id,group_no,manipulation_code,teacher_id,room", emptyMap(), "session_id").map { it.jsonObject }
+            .mapNotNull { o ->
+                val m = groupRe.find(classNames[o.string("class_id")] ?: return@mapNotNull null) ?: return@mapNotNull null
+                val manip = o.string("manipulation") ?: return@mapNotNull null
+                Row(o.requiredString("id"), m.groupValues[1], m.groupValues[2].toInt(), o.string("plan_date") ?: return@mapNotNull null,
+                    (o.string("start_time") ?: "").take(5), (o.string("end_time") ?: "").take(5), manip, o.string("teacher_id"), rooms[manip] ?: o.string("room"))
+            }
         val pool = getPaged(session, "v515_teacher_day_pool", "weekday,teacher_id,active", emptyMap(), "weekday").map { it.jsonObject }
             .filter { it.boolean("active") != false }.groupBy({ it.int("weekday") ?: 0 }, { it.requiredString("teacher_id") })
-        sessions.map { row ->
-            val occ = row.int("class_occurrence") ?: 1
-            PlanSession(
-                id = row.requiredString("id"), className = row.requiredString("class_name"), date = row.requiredString("session_date"),
-                startTime = row.requiredString("start_time").take(5), endTime = row.requiredString("end_time").take(5), occurrence = occ, locked = false,
-                slots = (1..6).map { g ->
-                    val code = "M" + (((g - 1) + (occ - 1)) % 6 + 1)
-                    val plan = plans[Triple(row.requiredString("class_name"), row.requiredString("session_date"), g)]
-                    val a = assignments.firstOrNull { it.string("session_id") == row.requiredString("id") && it.int("group_no") == g }
-                    val manip = plan?.string("manipulation") ?: a?.string("manipulation_code") ?: code
-                    PlanSlot("", false, g, manip, plan?.string("teacher_id") ?: a?.string("teacher_id"), rooms[manip] ?: plan?.string("room") ?: a?.string("room"))
-                }
-            )
-        } to pool
+        val plans = rows.groupBy { it.cls }.flatMap { (cls, list) ->
+            list.groupBy { it.date }.toSortedMap().entries.mapIndexed { index, (date, groups) ->
+                val first = groups.first()
+                PlanSession(
+                    id = "$cls|$date", className = cls, date = date, startTime = first.start, endTime = first.end,
+                    occurrence = index + 1, locked = false,
+                    slots = groups.sortedBy { it.group }.map { PlanSlot(it.id, false, it.group, it.manip, it.teacher, it.room) }
+                )
+            }
+        }.sortedWith(compareBy({ it.date }, { it.startTime }, { it.className }))
+        plans to pool
     }.getOrDefault(emptyList<PlanSession>() to emptyMap())
 
     /** Manipulation de chaque séance S1 (session_plans), pour l'export de suivi. */

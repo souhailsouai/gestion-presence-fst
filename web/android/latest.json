@@ -1,6 +1,6 @@
 {
-  "version": "2.10.1",
-  "notes": "Planning S1 : les 6 groupes affichent leur enseignant ; salles fixes M1→C, M2/M5→B, M3/M6→A, M4→D.",
+  "version": "2.10.2",
+  "notes": "Planning S1 complet de lundi à vendredi (MPI1-A à E et PC1) : chaque date réelle avec ses 6 groupes, manipulation, salle et enseignant.",
   "apk": "Presence-FST.apk",
   "size": 3200291
 }
