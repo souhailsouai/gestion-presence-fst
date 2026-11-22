@@ -1,6 +1,6 @@
 {
-  "version": "2.7.0",
-  "notes": "Ouverture plus rapide : les données se chargent pendant la connexion. Listes et statistiques plus fluides. Enregistrement de l'appel instantané. Mises à jour proposées directement dans l'application.",
+  "version": "2.8.0",
+  "notes": "Application nettement plus rapide (code optimisé), transitions entre écrans plus vives, appel enregistré instantanément.",
   "apk": "Presence-FST.apk",
-  "size": 14569579
+  "size": 2912011
 }
