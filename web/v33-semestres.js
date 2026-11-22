@@ -15,7 +15,7 @@
   const CLASSES=['MPI1-A','MPI1-B','MPI1-C','MPI1-D','MPI1-E','PC1-A'];
   const KIND={ferie:'Jour férié',vacances:'Vacances',ds:'Semaine des DS',examen:'Examens',autre:'Autre'};
   const VIEWS=[['planning','Planning','fa-calendar-days'],['groupes','Groupes','fa-people-group'],['enseignants','Enseignants','fa-chalkboard-user'],['manips','Manipulations','fa-flask'],['dates','Dates exclues','fa-calendar-xmark'],['parametres','Paramètres','fa-sliders'],['versions','Versions','fa-clock-rotate-left']];
-  const state={sem:'S1',view:'planning',planView:'classe',planClass:'MPI1-A',planTeacher:'',groupClass:'MPI1-A',teacherDay:null,data:null,hash:'',busy:0,timer:null};
+  const state={sem:'S1',view:'planning',planView:'classe',planClass:'MPI1-A',planTeacher:'',planMonth:'all',groupClass:'MPI1-A',teacherDay:null,data:null,hash:'',busy:0,timer:null};
 
   /* ---------- Sélecteur de semestre ---------- */
   function setSemester(s){
@@ -158,11 +158,13 @@
       ${admin?`<section class="v33-card v33-actions-card"><div class="v33-row">
           <button type="button" class="btn btn-primary v33-btn" data-act="gen"><i class="fas fa-wand-magic-sparkles"></i> ${d.sessions.length?'Regénérer':'Générer le planning'}</button>
           <div class="v33-inline"><label for="v33-from">Recalculer à partir du</label><input type="date" id="v33-from" min="${d.settings.start_date}" value="${d.settings.start_date}"><button type="button" class="btn v33-btn ghost" data-act="regen">Recalculer</button></div>
-          <button type="button" class="btn v33-btn ghost" data-act="version"><i class="fas fa-bookmark"></i> Version</button></div></section>`:''}
+          <button type="button" class="btn v33-btn ghost" data-act="version"><i class="fas fa-bookmark"></i> Version</button></div>
+          <p class="v33-muted v33-autonote"><i class="fas fa-rotate"></i> Recalcul automatique : chaque date ou semaine exclue ajoutée, validée ou retirée replanifie le S2 à partir de cette date (sauvegarde faite avant, séances verrouillées conservées). Fin du S2 : ${d.settings.end_date?C().fmt(d.settings.end_date):'non fixée'}.</p></section>`:''}
       ${d.sessions.length?`<div class="v33-toolbar">
         <div class="v33-seg" role="tablist" aria-label="Vue">${[['classe','Par classe'],['enseignant','Par enseignant'],['semaine','Par semaine']].map(([k,l])=>`<button type="button" data-pv="${k}" aria-pressed="${k===state.planView}">${l}</button>`).join('')}</div>
         <div class="v33-grow"></div>${status}
         <button type="button" class="btn v33-btn ghost" data-act="pdf"><i class="fas fa-file-pdf"></i> PDF</button><button type="button" class="btn v33-btn ghost" data-act="pdfall"><i class="fas fa-file-pdf"></i> Toutes</button></div>
+        ${monthChips(d)}
         ${state.planView==='classe'?chips(CLASSES.map(c=>[c,c,d.sessions.filter(s=>s.class_name===c).length+' séances']),state.planClass,'pc','Classe'):''}
         ${state.planView==='enseignant'?chips(teachers.map(t=>[t,short(tname(t)),null]),state.planTeacher,'pt','Enseignant'):''}
         <div id="v33-issues" hidden class="v33-card">${errors.concat(warns).concat(infos).map(i=>`<p class="v33-issue ${i.level}">${esc(i.text)}</p>`).join('')||'<p class="v33-issue info">Chaque date respecte le début du S2 et les dates exclues validées, sans enseignant en double.</p>'}</div>
@@ -173,12 +175,21 @@
       if(pv){state.planView=pv.dataset.pv;return renderView();}
       if(pc){state.planClass=pc.dataset.pc;return renderView();}
       if(pt){state.planTeacher=pt.dataset.pt;return renderView();}
+      const pm=e.target.closest('[data-pm]');if(pm){state.planMonth=pm.dataset.pm;return renderView();}
       if(e.target.closest('[data-issues]')){const b=v.querySelector('#v33-issues');b.hidden=!b.hidden;return;}
       if(e.target.closest('[data-act]'))return toolbar(e,d);
       planClick(e,d);
     };
     const plan=v.querySelector('#v33-plan');if(!plan)return;
-    if(state.planView==='classe')planByClass(plan,d,admin);else if(state.planView==='enseignant')planByTeacher(plan,d);else planByWeek(plan,d);
+    const dv=state.planMonth==='all'?d:Object.assign({},d,{sessions:d.sessions.filter(s=>s.session_date.slice(0,7)===state.planMonth)});
+    if(state.planView==='classe')planByClass(plan,dv,admin);else if(state.planView==='enseignant')planByTeacher(plan,dv);else planByWeek(plan,dv);
+  }
+  const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  function monthChips(d){
+    const ms=[...new Set(d.sessions.map(s=>s.session_date.slice(0,7)))].sort();
+    if(ms.length<2)return '';
+    if(state.planMonth!=='all'&&!ms.includes(state.planMonth))state.planMonth='all';
+    return `<div class="v33-seg v33-months" role="tablist" aria-label="Mois"><button type="button" data-pm="all" aria-pressed="${state.planMonth==='all'}">Tout le S2</button>${ms.map(m=>`<button type="button" data-pm="${m}" aria-pressed="${m===state.planMonth}">${MONTHS[Number(m.slice(5))-1].replace(/^./,c=>c.toUpperCase())}</button>`).join('')}</div>`;
   }
   async function toolbar(e,d){
     const a=e.target.closest('[data-act]').dataset.act;
@@ -434,12 +445,17 @@
     if(!admin)return;
     v.onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const a=f.get('a'),b=f.get('b')||a;if(b<a){toast('La fin précède le début','err');return;}
       const row={starts_on:a,ends_on:b,label:String(f.get('l')).trim(),kind:f.get('k'),source:'manuel',validated:true};const tmp=Object.assign({id:'tmp'+Date.now()},row);
-      mutate('Date exclue ajoutée',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',row);});};
+      mutate('Date exclue ajoutée',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',row);await afterExcluded();});};
     v.onclick=e=>{const wk=e.target.closest('[data-week]');if(wk){toggleWeek(d,wk.dataset.week);return;}
       const va=e.target.closest('[data-val]'),de=e.target.closest('[data-del]');
-      if(va){const x=d.excluded.find(y=>y.id===va.dataset.val);const nv=!x.validated;mutate(nv?'Date validée':'Validation retirée',()=>{x.validated=nv;},async()=>{await q(client().from('v33_s2_excluded_dates').update({validated:nv}).eq('id',x.id).select('id'));audit('validate_excluded',{id:x.id,validated:nv});});}
-      if(de&&confirm('Supprimer cette date ?')){const id=de.dataset.del;mutate('Date supprimée',()=>{d.excluded=d.excluded.filter(y=>y.id!==id);},async()=>{await q(client().from('v33_s2_excluded_dates').delete().eq('id',id).select('id'));audit('delete_excluded',{id});});}};
+      if(va){const x=d.excluded.find(y=>y.id===va.dataset.val);const nv=!x.validated;mutate(nv?'Date validée':'Validation retirée',()=>{x.validated=nv;},async()=>{await q(client().from('v33_s2_excluded_dates').update({validated:nv}).eq('id',x.id).select('id'));audit('validate_excluded',{id:x.id,validated:nv});await afterExcluded();});}
+      if(de&&confirm('Supprimer cette date ?')){const id=de.dataset.del;mutate('Date supprimée',()=>{d.excluded=d.excluded.filter(y=>y.id!==id);},async()=>{await q(client().from('v33_s2_excluded_dates').delete().eq('id',id).select('id'));audit('delete_excluded',{id});await afterExcluded();});}};
     v.onchange=e=>{if(e.target.id==='v33-cal')importCalendar(e.target.files[0]);};
+  }
+  /* Le serveur replanifie après chaque changement de date exclue validée : on recharge pour l'afficher. */
+  async function afterExcluded(){
+    if(!state.data?.sessions?.length)return;
+    await load(true);toast('Planning recalculé automatiquement');renderView();
   }
   /* Semaines du S2 : un clic exclut toute la semaine (lundi → samedi). */
   function s2Weeks(d){
@@ -465,13 +481,13 @@
     const w={mon,sat:C().addDays(mon,5)};const st=weekState(d,w);
     if(st.full&&st.full.starts_on===w.mon&&st.full.ends_on===w.sat){
       if(!confirm('Rétablir la semaine du '+C().fmt(w.mon)+' ? (« '+st.full.label+' »)'))return;
-      const id=st.full.id;mutate('Semaine rétablie',()=>{d.excluded=d.excluded.filter(y=>y.id!==id);},async()=>{await q(client().from('v33_s2_excluded_dates').delete().eq('id',id).select('id'));audit('delete_excluded',{id,week:mon});});return;}
+      const id=st.full.id;mutate('Semaine rétablie',()=>{d.excluded=d.excluded.filter(y=>y.id!==id);},async()=>{await q(client().from('v33_s2_excluded_dates').delete().eq('id',id).select('id'));audit('delete_excluded',{id,week:mon});await afterExcluded();});return;}
     if(st.full){toast('Cette semaine fait partie de « '+st.full.label+' » : modifiez-la dans la liste ci-dessous.','err');return;}
     const label=prompt('Exclure la semaine du '+C().fmt(w.mon)+' au '+C().fmt(w.sat)+'.\nLibellé :','Semaine exclue');
     if(label===null)return;const l=label.trim()||'Semaine exclue';
     const k=/vacance|cong/i.test(l)?'vacances':/\bds\b|devoir/i.test(l)?'ds':/examen/i.test(l)?'examen':/f[ée]ri/i.test(l)?'ferie':'autre';
     const row={starts_on:w.mon,ends_on:w.sat,label:l.slice(0,160),kind:k,source:'manuel',validated:true};const tmp=Object.assign({id:'tmp'+Date.now()},row);
-    mutate('Semaine exclue',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',Object.assign({week:true},row));});
+    mutate('Semaine exclue',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',Object.assign({week:true},row));await afterExcluded();});
   }
   function dateItem(x,admin){
     return `<div class="v33-item ${x.validated?'':'prop'}"><div class="v33-date"><b>${C().fmt(x.starts_on).slice(0,5)}</b><small>${x.ends_on!==x.starts_on?'→ '+C().fmt(x.ends_on).slice(0,5):C().fmt(x.starts_on).slice(6)}</small></div><div><b>${esc(x.label)}</b><small>${KIND[x.kind]||x.kind} · ${x.source==='calendrier'?'importée du calendrier':'saisie'}</small></div>

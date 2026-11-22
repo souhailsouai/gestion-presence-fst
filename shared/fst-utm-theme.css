@@ -766,3 +766,8 @@ h1,h2,h3,h4,#fst-page-title,.v33x .v33-hero h3,.v33x .v33-h,.v33s-card h3{font-f
 .v33x .v33-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 0;font-size:.8rem}
 .v33x .v33-wk-dot{display:inline-block;width:12px;height:12px;border-radius:3px;border:1.5px solid #e3e6ea;background:#fff;margin-left:6px}
 .v33x .v33-wk-dot.part{background:#f6f0e6;border-color:#dcc8a3}.v33x .v33-wk-dot.off{background:#eef1f4;border-color:#b4554b}
+
+/* V37 — mois du planning S2 et note de recalcul */
+.v33x .v33-months{margin:8px 0 4px;flex-wrap:wrap}
+.v33x .v33-autonote{margin:10px 0 0;font-size:.85rem;line-height:1.45}
+.v33x .v33-autonote i{color:var(--u-teal,#0b7a9c);margin-right:4px}
