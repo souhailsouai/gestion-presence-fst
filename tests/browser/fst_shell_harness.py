@@ -56,6 +56,15 @@ def offline_html(path=ARTIFACT):
             return '<script>\n'+target.read_text(encoding='utf-8')+'\n</script>'
         return ''
     html=re.sub(r'<script\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>\s*</script>',script,html)
+    # Pages serves the sidebar logos as ./assets files; inline them because every request is aborted here.
+    import base64,mimetypes
+    def asset(match):
+        target=Path(path).parent/match.group(1)[2:]
+        if not target.is_file():target=ROOT/'web'/match.group(1)[2:]
+        if not target.is_file():return match.group(0)
+        mime=mimetypes.guess_type(str(target))[0] or 'application/octet-stream'
+        return 'src="data:'+mime+';base64,'+base64.b64encode(target.read_bytes()).decode()+'"'
+    html=re.sub(r'src="(\./assets/[^"]+)"',asset,html)
     # External icons may be absent; markup and all business JS remain unmodified.
     html=re.sub(r'<link\b[^>]*href=["\']https?://[^>]+>', '', html)
     return html.replace('<head>','<head><script>'+STUB+'</script>',1)
