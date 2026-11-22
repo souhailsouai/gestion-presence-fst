@@ -1,5 +1,8 @@
 package tn.utm.fst.gestionpresence.nativeapp.data.remote
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 import android.util.Base64
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -440,10 +443,8 @@ class OnlineApiClient(
         filters: Map<String, String>,
         order: String
     ): List<JsonElement> {
-        val out = mutableListOf<JsonElement>()
-        var from = 0
         val page = 1000
-        while (true) {
+        suspend fun fetch(from: Int, count: Boolean): Pair<JsonArray, Int?> {
             val response = http.get("$baseUrl/rest/v1/$table") {
                 authenticatedHeaders(session)
                 parameter("select", select)
@@ -451,13 +452,18 @@ class OnlineApiClient(
                 parameter("order", order)
                 header("Range-Unit", "items")
                 header("Range", "$from-${from + page - 1}")
+                if (count) header("Prefer", "count=exact")
             }
-            val batch = response.requireJson().jsonArray
-            out.addAll(batch)
-            if (batch.size < page) break
-            from += page
+            val total = response.headers["Content-Range"]?.substringAfter('/')?.toIntOrNull()
+            return response.requireJson().jsonArray to total
         }
-        return out
+        // Première page avec le total, puis les pages restantes en parallèle.
+        val (first, total) = fetch(0, count = true)
+        if (total == null || total <= first.size) return first
+        val rest = coroutineScope {
+            (page until total step page).map { from -> async { fetch(from, count = false).first } }.awaitAll()
+        }
+        return first + rest.flatten()
     }
 
     private suspend fun upsert(session: AuthSession, table: String, row: JsonObject) {
