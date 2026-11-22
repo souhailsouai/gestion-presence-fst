@@ -111,12 +111,13 @@ class PresenceRepository(context: Context) {
     }
 
     /** S1 : changer l'enseignant d'un groupe (séance pas encore commencée). */
-    suspend fun assignS1Teacher(sessionId: String, groupNo: Int, code: String, teacherId: String, room: String) {
+    /** Change l'enseignant d'un groupe du planning S1 (ligne session_plans). */
+    suspend fun assignS1Teacher(planId: String, groupNo: Int, code: String, teacherId: String, room: String) {
         requireOnline()
-        val r = api.callRpc(authorizedSession(), "v515_assign_teacher", buildJsonObject {
-            put("p_session_id", sessionId); put("p_group_no", groupNo); put("p_manipulation_code", code); put("p_teacher_id", teacherId); put("p_room", room)
+        require(planId.isNotBlank()) { "Séance du planning introuvable." }
+        api.patchRows(authorizedSession(), "session_plans", mapOf("id" to "eq.$planId"), buildJsonObject {
+            put("teacher_id", teacherId)
         })
-        checkOk(r, "Affectation impossible.")
     }
 
     /** Permutation de deux enseignants entre deux jours (cette semaine ou toutes les semaines futures). */
