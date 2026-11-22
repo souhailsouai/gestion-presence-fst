@@ -1,6 +1,6 @@
 {
-  "version": "2.10.2",
-  "notes": "Planning S1 complet de lundi à vendredi (MPI1-A à E et PC1) : chaque date réelle avec ses 6 groupes, manipulation, salle et enseignant.",
+  "version": "2.11.0",
+  "notes": "Séances du planning S1 à venir visibles (Séances et Accueil) avec « Faire l’appel » pour saisir présences et notes le jour du TP.",
   "apk": "Presence-FST.apk",
   "size": 3200291
 }

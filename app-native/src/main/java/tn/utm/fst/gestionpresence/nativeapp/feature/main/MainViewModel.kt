@@ -237,6 +237,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteStudent(id: String) = mutate("Étudiant supprimé.") { repository.deleteStudent(id) }
     fun deleteSession(id: String) = mutate("Séance supprimée.") { repository.deleteSession(id) }
 
+    /** Ouvre l'appel d'un groupe du planning : crée la séance réelle puis affiche la feuille d'appel. */
+    fun openPlannedSession(planId: String) {
+        viewModelScope.launch {
+            setLoading(true); clearNotice()
+            try {
+                val sessionId = repository.startPlannedSession(planId)
+                val data = repository.load()
+                _state.value = _state.value.copy(data = data, reports = repository.reports(data), online = repository.isOnline())
+                selectAttendanceSession(sessionId)
+            } catch (error: Throwable) {
+                handle(error)
+            }
+        }
+    }
+
     fun selectAttendanceSession(sessionId: String) {
         viewModelScope.launch {
             setLoading(true)

@@ -111,6 +111,14 @@ class PresenceRepository(context: Context) {
     }
 
     /** S1 : changer l'enseignant d'un groupe (séance pas encore commencée). */
+    /** Ouvre (crée si besoin) la séance réelle d'un groupe du planning S1, comme le site (start_session_plan). */
+    suspend fun startPlannedSession(planId: String): String {
+        requireOnline()
+        val r = api.callRpc(authorizedSession(), "start_session_plan", buildJsonObject { put("p_plan_id", planId) })
+        return (r as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() && it != "null" }
+            ?: throw IllegalStateException("Séance non créée.")
+    }
+
     /** Change l'enseignant d'un groupe du planning S1 (ligne session_plans). */
     suspend fun assignS1Teacher(planId: String, groupNo: Int, code: String, teacherId: String, room: String) {
         requireOnline()
