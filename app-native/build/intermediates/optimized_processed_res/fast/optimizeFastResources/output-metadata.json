@@ -1,0 +1,20 @@
+{
+  "version": 3,
+  "artifactType": {
+    "type": "OPTIMIZED_PROCESSED_RES",
+    "kind": "Directory"
+  },
+  "applicationId": "tn.utm.fst.gestionpresence",
+  "variantName": "fast",
+  "elements": [
+    {
+      "type": "SINGLE",
+      "filters": [],
+      "attributes": [],
+      "versionCode": 213,
+      "versionName": "2.10.0",
+      "outputFile": "resources-fast-optimize.ap_"
+    }
+  ],
+  "elementType": "File"
+}

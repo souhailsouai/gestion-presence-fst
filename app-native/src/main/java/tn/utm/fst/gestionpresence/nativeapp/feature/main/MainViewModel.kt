@@ -34,7 +34,19 @@ enum class AppScreen {
     ATTENDANCE,
     REPORTS,
     ADMIN,
-    ACCOUNT
+    ACCOUNT,
+    PLANNING,
+    STATS,
+    MORE,
+    STUDENT_DETAIL,
+    LOCKED,
+    S2_ADMIN,
+    SWAP,
+    EXPORT,
+    ACCOUNTS,
+    REPORT_PDF,
+    S1_CONFIG,
+    HELP
 }
 
 data class MainUiState(
@@ -52,7 +64,10 @@ data class MainUiState(
     val pendingOperationId: String? = null,
     val reports: List<ReportSummary> = emptyList(),
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val selectedStudentId: String? = null,
+    val biometricEnabled: Boolean = false,
+    val offerBiometric: Boolean = false
 ) {
     val authenticated: Boolean get() = profile != null
     val isAdmin: Boolean get() = profile?.isAdmin == true
@@ -60,11 +75,52 @@ data class MainUiState(
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PresenceRepository(application)
+    val s2 = tn.utm.fst.gestionpresence.nativeapp.feature.s2.S2Admin(repository)
+    val admin = tn.utm.fst.gestionpresence.nativeapp.feature.admin.AdminTools(repository)
     private val _state = MutableStateFlow(MainUiState(online = repository.isOnline()))
     val state: StateFlow<MainUiState> = _state.asStateFlow()
 
     init {
-        restore()
+        if (repository.biometricEnabled && repository.hasSavedSession()) {
+            // Écran de déverrouillage immédiat : aucune requête réseau avant l'empreinte.
+            _state.value = MainUiState(screen = AppScreen.LOCKED, loading = false, online = repository.isOnline(), biometricEnabled = true)
+        } else {
+            restore()
+        }
+    }
+
+    /** Appelé après une authentification biométrique réussie. */
+    fun unlocked() = restore()
+
+    /** Abandon de l'empreinte : retour au formulaire (la session enregistrée est conservée). */
+    fun usePassword() {
+        _state.value = MainUiState(screen = AppScreen.LOGIN, loading = false, online = repository.isOnline(), biometricEnabled = repository.biometricEnabled)
+    }
+
+    /** Recharge les données après une modification du S2 (planning recalculé côté serveur). */
+    fun reloadData(message: String? = null) = mutate(message ?: "") { }
+
+    /** Action S2 (planning, groupes) puis rechargement des données. */
+    fun s2Action(message: String, block: suspend () -> Unit) = mutate(message) { block() }
+
+    fun lock() {
+        repository.lock()
+        _state.value = MainUiState(screen = AppScreen.LOCKED, loading = false, online = repository.isOnline(), biometricEnabled = true)
+    }
+
+    fun setBiometric(enabled: Boolean) {
+        repository.biometricEnabled = enabled
+        _state.value = _state.value.copy(
+            biometricEnabled = enabled,
+            offerBiometric = false,
+            message = if (enabled) "Connexion par empreinte activée." else "Connexion par empreinte désactivée.",
+            error = null
+        )
+    }
+
+    fun dismissBiometricOffer() {
+        repository.biometricOffered = true
+        _state.value = _state.value.copy(offerBiometric = false)
     }
 
     fun restore() {
@@ -249,7 +305,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     operationId = operationId,
                     records = _state.value.attendanceDrafts.values.toList()
                 )
-                val updatedData = repository.load()
+                // Mise à jour locale avec la feuille renvoyée par le serveur : pas de rechargement complet.
+                val current = _state.value.data
+                val updatedData = if (current != null && sheet.records.isNotEmpty())
+                    current.copy(attendance = current.attendance.filter { it.sessionId != sessionId } + sheet.records)
+                else repository.load()
                 _state.value = _state.value.copy(
                     loading = false,
                     online = repository.isOnline(),
@@ -282,6 +342,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 handle(error, fallbackScreen = AppScreen.ATTENDANCE, preserveOperation = true)
             }
+        }
+    }
+
+    fun openStudent(studentId: String) {
+        _state.value = _state.value.copy(screen = AppScreen.STUDENT_DETAIL, selectedStudentId = studentId, message = null, error = null)
+    }
+
+    fun markAllPresent() {
+        val drafts = _state.value.attendanceDrafts.mapValues { (_, draft) -> draft.copy(status = AttendanceStatus.PRESENT) }
+        _state.value = _state.value.copy(attendanceDrafts = drafts, error = null)
+    }
+
+    /** Rattrapage d'une absence enregistrée (date au format AAAA-MM-JJ, ou null pour annuler). */
+    fun setMakeup(attendanceId: String, date: String?) {
+        viewModelScope.launch {
+            clearNotice()
+            try {
+                repository.setMakeup(attendanceId, date, if (date != null) "Rattrapé (application Android)" else null)
+                val data = repository.load()
+                _state.value = _state.value.copy(
+                    online = repository.isOnline(),
+                    data = data,
+                    reports = repository.reports(data),
+                    message = if (date != null) "Rattrapage enregistré." else "Rattrapage annulé.",
+                    error = null
+                )
+            } catch (error: Throwable) {
+                handle(error)
+            }
+        }
+    }
+
+    fun assignStudent(studentId: String, classId: String, effectiveFrom: String) = mutate("Groupe modifié à partir du ${effectiveFrom.split('-').reversed().joinToString("/")}.") {
+        repository.assignStudent(studentId, classId, effectiveFrom)
+    }
+
+    fun assignS1Teacher(sessionId: String, groupNo: Int, code: String, teacherId: String, room: String) =
+        mutate("Enseignant modifié.") { repository.assignS1Teacher(sessionId, groupNo, code, teacherId, room) }
+
+    fun swapTeachers(a: String, dayA: Int, b: String, dayB: Int, effective: String, scope: String) {
+        viewModelScope.launch {
+            setLoading(true); clearNotice()
+            try {
+                val n = repository.swapTeachers(a, dayA, b, dayB, effective, scope)
+                val data = repository.load()
+                _state.value = _state.value.copy(loading = false, data = data, reports = repository.reports(data), message = "Permutation appliquée ($n affectation(s)).", error = null)
+            } catch (e: Throwable) { handle(e) }
         }
     }
 
@@ -357,11 +464,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 mfaFactorId = enrollment.factorId
             )
         } else {
-            loadApplication(AppScreen.HOME)
+            loadApplication(AppScreen.HOME, bundle.factors)
         }
     }
 
-    private suspend fun loadApplication(screen: AppScreen) {
+    private suspend fun loadApplication(screen: AppScreen, factors: List<MfaFactor>? = null) {
         val data = repository.load()
         val profile = repository.profile() ?: throw ApiException("UNAUTHENTICATED", "Profil absent.")
         _state.value = _state.value.copy(
@@ -370,11 +477,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             online = repository.isOnline(),
             profile = profile,
             data = data,
-            factors = runCatching { repository.mfaFactors() }.getOrDefault(emptyList()),
+            factors = factors ?: _state.value.factors,
             mfaEnrollment = null,
             mfaFactorId = null,
             reports = repository.reports(data),
-            error = null
+            error = null,
+            biometricEnabled = repository.biometricEnabled,
+            offerBiometric = !repository.biometricEnabled && !repository.biometricOffered
         )
     }
 
@@ -405,7 +514,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     online = repository.isOnline(),
                     data = data,
                     reports = repository.reports(data),
-                    message = successMessage,
+                    message = successMessage.ifBlank { null },
                     error = null
                 )
             } catch (error: Throwable) {

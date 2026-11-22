@@ -1,0 +1,4 @@
+#Sun Nov 22 20:51:03 CET 2026
+base.0=/home/claude/gestion-presence-fst/app-native/build/intermediates/dex/fast/minifyFastWithR8/classes.dex
+path.0=classes.dex
+renamed.0=classes.dex

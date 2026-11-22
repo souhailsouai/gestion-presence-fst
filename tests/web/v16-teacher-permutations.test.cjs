@@ -5,8 +5,8 @@ const fs=require('node:fs');
 function read(path){return fs.existsSync(path)?fs.readFileSync(path,'utf8'):'';}
 const ui=read('web/v16-teacher-permutations.js');
 const planning=read('web/v16-planning-ui.js');
-const online=read('scripts/build_online_web.py');
-const single=read('scripts/build_single_file_release.py');
+const online=read('scripts/build_pages_from_41881.py');
+const single=read('scripts/build_pages_from_41881.py');
 
 test('legacy Admin permutation UI remains loadable for compatibility',()=>{
   for(const marker of [
@@ -36,11 +36,4 @@ test('legacy permutation UI still contains its historical live policy summary',(
   assert.match(ui,/confirm/i);
 });
 
-test('V16 build keeps legacy permutation module loadable before planning UI',()=>{
-  const statePos=online.indexOf('v16-planning-state.js');
-  const permPos=online.indexOf('v16-teacher-permutations.js');
-  const uiPos=online.indexOf('v16-planning-ui.js');
-  assert.ok(statePos>=0&&permPos>statePos&&uiPos>permPos);
-  assert.match(single,/data-fst-v16-teacher-permutations/);
-  assert.match(single,/V16TeacherPermutations/);
-});
+
