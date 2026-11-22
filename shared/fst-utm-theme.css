@@ -329,3 +329,5 @@ body[data-semester="S2"] .v33s-sem{background:var(--brand-red)}
 .v33s-table td:nth-child(4){min-width:96px}
 .v33s-more{margin-top:10px}
 @media (max-width:1100px){.v33s-mini{display:none}}
+@media (max-width:1199px){#v33-sem-switch{padding:2px;margin-right:4px}#v33-sem-switch button{padding:4px 9px;min-height:30px;font-size:.82rem}}
+@media (min-width:768px) and (max-width:1199px){#fst-topbar .fst-heading{min-width:0}#v33-sem-switch{flex:none}}
