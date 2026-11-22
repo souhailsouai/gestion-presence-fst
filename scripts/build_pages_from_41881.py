@@ -78,6 +78,9 @@ tags = [
     '<script src="./v30-student-add-rpc-fix.js"></script>',
     '<script src="./v32-notices.js"></script>',
     '<script src="./v32-student-search.js"></script>',
+    '<script src="./v33-s2-core.js"></script>',
+    '<script src="./v33-semestres.js"></script>',
+    '<script src="./v33-statistiques.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
@@ -115,6 +118,9 @@ for marker in [
     'v30-student-add-rpc-fix.js',
     'v32-notices.js',
     'v32-student-search.js',
+    'v33-s2-core.js',
+    'v33-semestres.js',
+    'v33-statistiques.js',
     'data-fst-shell-css="inline"',
     'data-fst-shell-js="inline"',
     'data-fst-auth-compat="inline"',

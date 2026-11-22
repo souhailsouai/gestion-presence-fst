@@ -128,6 +128,8 @@ ICONS={
  'settings':'<path d="M12 3 3 7v6c0 4 6 8 9 9 3-1 9-5 9-9V7z"/><path d="m8 12 3 3 5-6"/>',
  'menu':'<path d="M4 6h16M4 12h16M4 18h16"/>',
  'user':'<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',
+ 'layers':'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+ 'chart':'<path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/>',
  'chevron':'<path d="m8 10 4 4 4-4"/>',
 }
 def icon(name):
