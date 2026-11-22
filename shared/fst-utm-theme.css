@@ -752,3 +752,17 @@ h1,h2,h3,h4,#fst-page-title,.v33x .v33-hero h3,.v33x .v33-h,.v33s-card h3{font-f
 @media (prefers-reduced-motion:reduce){.institutional-login-shell::after{animation:none!important}}
 @media (max-width:767px){.v33x .v33-seg{width:100%}.v33x .v33-seg button{flex:1;padding:8px 6px;font-size:.82rem;white-space:nowrap;min-height:36px}}
 #fst-main #dashboard-stats>:is(.stat-card,.stats-card){border-radius:8px!important}
+
+/* V37 — semaines exclues du S2 */
+.v33x .v33-weekgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;margin-top:6px}
+.v33x .v33-wk{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border:1.5px solid var(--u-line,#e3e6ea);background:#fff;border-radius:10px;padding:9px 12px;font:inherit;cursor:pointer;text-align:left;transition:transform .15s,box-shadow .15s,background .2s}
+.v33x .v33-wk:not([disabled]):hover{transform:translateY(-2px);box-shadow:0 6px 14px rgba(28,61,94,.08)}
+.v33x .v33-wk b{color:var(--u-title,#1c3d5e);font-size:.95rem}
+.v33x .v33-wk small{color:#6b7682;font-size:.78rem}
+.v33x .v33-wk em{font-style:normal;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--u-teal,#0b7a9c)}
+.v33x .v33-wk.part{background:#f6f0e6;border-color:#dcc8a3}.v33x .v33-wk.part em{color:#9a7333}
+.v33x .v33-wk.prop{border-style:dashed}.v33x .v33-wk.prop em{color:#9a7333}
+.v33x .v33-wk.off{background:#eef1f4;border-color:#cfd6de}.v33x .v33-wk.off b,.v33x .v33-wk.off small{color:#8a949e;text-decoration:line-through}.v33x .v33-wk.off em{color:#b4554b}
+.v33x .v33-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 0;font-size:.8rem}
+.v33x .v33-wk-dot{display:inline-block;width:12px;height:12px;border-radius:3px;border:1.5px solid #e3e6ea;background:#fff;margin-left:6px}
+.v33x .v33-wk-dot.part{background:#f6f0e6;border-color:#dcc8a3}.v33x .v33-wk-dot.off{background:#eef1f4;border-color:#b4554b}

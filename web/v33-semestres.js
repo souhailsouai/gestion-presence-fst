@@ -428,16 +428,50 @@
     v.innerHTML=`<p class="v33-lead"><i class="fas fa-circle-info"></i> Les calendriers sont indicatifs : une date importée reste une <b>proposition</b> tant que vous ne l'avez pas validée. Seules les dates validées sont évitées.</p>
       ${admin?`<section class="v33-card"><form id="v33-dform" class="v33-form"><label>Du<input type="date" name="a" required min="2027-01-01"></label><label>Au (facultatif)<input type="date" name="b"></label><label class="v33-wide">Libellé<input name="l" placeholder="Ex. Vacances de printemps" required maxlength="160"></label><label>Type<select name="k">${Object.entries(KIND).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></label><button class="btn btn-primary v33-btn"><i class="fas fa-plus"></i> Ajouter</button></form>
         <label class="btn v33-btn ghost v33-upload"><i class="fas fa-file-excel"></i> Importer un calendrier (.xlsx)<input type="file" id="v33-cal" accept=".xlsx,.xls" hidden></label></section>`:''}
+      ${weekGrid(d,admin)}
       ${props.length?`<h4 class="v33-h">À valider <span class="v33-count">${props.length}</span></h4><div class="v33-list">${props.map(x=>dateItem(x,admin)).join('')}</div>`:''}
       <h4 class="v33-h">Dates exclues validées</h4><div class="v33-list">${d.excluded.filter(x=>x.validated).map(x=>dateItem(x,admin)).join('')||'<div class="v33-empty small"><p>Aucune pour l\'instant.</p></div>'}</div>`;
     if(!admin)return;
     v.onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const a=f.get('a'),b=f.get('b')||a;if(b<a){toast('La fin précède le début','err');return;}
       const row={starts_on:a,ends_on:b,label:String(f.get('l')).trim(),kind:f.get('k'),source:'manuel',validated:true};const tmp=Object.assign({id:'tmp'+Date.now()},row);
       mutate('Date exclue ajoutée',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',row);});};
-    v.onclick=e=>{const va=e.target.closest('[data-val]'),de=e.target.closest('[data-del]');
+    v.onclick=e=>{const wk=e.target.closest('[data-week]');if(wk){toggleWeek(d,wk.dataset.week);return;}
+      const va=e.target.closest('[data-val]'),de=e.target.closest('[data-del]');
       if(va){const x=d.excluded.find(y=>y.id===va.dataset.val);const nv=!x.validated;mutate(nv?'Date validée':'Validation retirée',()=>{x.validated=nv;},async()=>{await q(client().from('v33_s2_excluded_dates').update({validated:nv}).eq('id',x.id).select('id'));audit('validate_excluded',{id:x.id,validated:nv});});}
       if(de&&confirm('Supprimer cette date ?')){const id=de.dataset.del;mutate('Date supprimée',()=>{d.excluded=d.excluded.filter(y=>y.id!==id);},async()=>{await q(client().from('v33_s2_excluded_dates').delete().eq('id',id).select('id'));audit('delete_excluded',{id});});}};
     v.onchange=e=>{if(e.target.id==='v33-cal')importCalendar(e.target.files[0]);};
+  }
+  /* Semaines du S2 : un clic exclut toute la semaine (lundi → samedi). */
+  function s2Weeks(d){
+    const start=d.settings.start_date||'2027-01-11';const mon=C().addDays(start,1-C().weekdayOf(start));
+    const end=d.settings.end_date||C().addDays(mon,7*17);const out=[];
+    for(let w=mon,n=1;w<=end&&n<=30;w=C().addDays(w,7),n++)out.push({n,mon:w,sat:C().addDays(w,5)});
+    return out;
+  }
+  function weekState(d,w){
+    const full=d.excluded.find(x=>x.starts_on<=w.mon&&x.ends_on>=w.sat);
+    const ex=C().excludedMap(d.excluded);let days=0;for(let i=0;i<6;i++)if(ex.has(C().addDays(w.mon,i)))days++;
+    const prop=d.excluded.some(x=>!x.validated&&x.starts_on<=w.sat&&x.ends_on>=w.mon);
+    return {full,days,prop};
+  }
+  function weekGrid(d,admin){
+    const weeks=s2Weeks(d);
+    return `<section class="v33-card"><h4 class="v33-h">Semaines du S2 <small class="v33-muted">${admin?'— touchez une semaine pour l\'exclure entièrement ou la rétablir':''}</small></h4>
+      <div class="v33-weekgrid">${weeks.map(w=>{const st=weekState(d,w);const cls=st.full&&st.full.validated?'off':st.days?'part':st.prop?'prop':'';
+        return `<button type="button" class="v33-wk ${cls}" ${admin?`data-week="${w.mon}"`:'disabled'} title="${st.full?esc(st.full.label):st.days?st.days+' jour(s) exclu(s)':'Semaine normale'}"><b>S${w.n}</b><small>${C().fmt(w.mon).slice(0,5)} – ${C().fmt(w.sat).slice(0,5)}</small><em>${st.full&&st.full.validated?'Exclue':st.days?st.days+' j exclu'+(st.days>1?'s':''):st.prop?'À valider':'TP'}</em></button>`;}).join('')}</div>
+      <p class="v33-muted v33-legend"><span class="v33-wk-dot"></span> TP normal <span class="v33-wk-dot part"></span> jours exclus <span class="v33-wk-dot off"></span> semaine exclue</p></section>`;
+  }
+  function toggleWeek(d,mon){
+    const w={mon,sat:C().addDays(mon,5)};const st=weekState(d,w);
+    if(st.full&&st.full.starts_on===w.mon&&st.full.ends_on===w.sat){
+      if(!confirm('Rétablir la semaine du '+C().fmt(w.mon)+' ? (« '+st.full.label+' »)'))return;
+      const id=st.full.id;mutate('Semaine rétablie',()=>{d.excluded=d.excluded.filter(y=>y.id!==id);},async()=>{await q(client().from('v33_s2_excluded_dates').delete().eq('id',id).select('id'));audit('delete_excluded',{id,week:mon});});return;}
+    if(st.full){toast('Cette semaine fait partie de « '+st.full.label+' » : modifiez-la dans la liste ci-dessous.','err');return;}
+    const label=prompt('Exclure la semaine du '+C().fmt(w.mon)+' au '+C().fmt(w.sat)+'.\nLibellé :','Semaine exclue');
+    if(label===null)return;const l=label.trim()||'Semaine exclue';
+    const k=/vacance|cong/i.test(l)?'vacances':/\bds\b|devoir/i.test(l)?'ds':/examen/i.test(l)?'examen':/f[ée]ri/i.test(l)?'ferie':'autre';
+    const row={starts_on:w.mon,ends_on:w.sat,label:l.slice(0,160),kind:k,source:'manuel',validated:true};const tmp=Object.assign({id:'tmp'+Date.now()},row);
+    mutate('Semaine exclue',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',Object.assign({week:true},row));});
   }
   function dateItem(x,admin){
     return `<div class="v33-item ${x.validated?'':'prop'}"><div class="v33-date"><b>${C().fmt(x.starts_on).slice(0,5)}</b><small>${x.ends_on!==x.starts_on?'→ '+C().fmt(x.ends_on).slice(0,5):C().fmt(x.starts_on).slice(6)}</small></div><div><b>${esc(x.label)}</b><small>${KIND[x.kind]||x.kind} · ${x.source==='calendrier'?'importée du calendrier':'saisie'}</small></div>
