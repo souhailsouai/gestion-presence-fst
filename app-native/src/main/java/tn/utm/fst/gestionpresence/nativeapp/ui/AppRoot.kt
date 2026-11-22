@@ -160,6 +160,8 @@ private fun fmt(date: String): String = runCatching { val d = LocalDate.parse(da
 private fun shortDate(date: String): String = fmt(date).take(5)
 private fun dayName(date: String): String = runCatching { LocalDate.parse(date.take(10)).dayOfWeek.getDisplayName(TextStyle.FULL, FR).replaceFirstChar { it.uppercase() } }.getOrDefault("")
 private fun shortName(name: String?): String = (name ?: "—").removePrefix("Dr. ").removePrefix("Dr ")
+private val MONTHS_FR = listOf("Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre")
+private fun monthName(ym: String): String = MONTHS_FR.getOrElse((ym.drop(5).take(2).toIntOrNull() ?: 1) - 1) { ym }
 private fun today(): String = LocalDate.now().toString()
 private fun currentSemester(): String = semesterOf(today())
 private fun initials(name: String): String = name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "?" }
@@ -447,14 +449,14 @@ private val TABS = listOf(
 private fun tabOf(screen: AppScreen): AppScreen = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
-    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS -> AppScreen.MORE
+    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN -> AppScreen.MORE
     else -> screen
 }
 
 private fun backOf(screen: AppScreen): AppScreen? = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
-    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS -> AppScreen.MORE
+    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN -> AppScreen.MORE
     else -> null
 }
 
@@ -515,6 +517,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
                         AppScreen.REPORTS -> ReportsScreen(state)
                         AppScreen.ADMIN -> AdminScreen(state, viewModel)
                         AppScreen.ACCOUNT -> AccountScreen(state, viewModel)
+                        AppScreen.S2_ADMIN -> S2AdminScreen(viewModel)
                         else -> Unit
                     }
                 }
@@ -788,6 +791,7 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
                 Segmented(listOf("mine" to "Mes séances", "all" to "Toutes"), scope) { scope = it }
                 Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Classe ou groupe (ex. MPI1-B)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                NewSessionForm(state, viewModel)
             }
         }
         byDate.forEach { (date, sessions) ->
@@ -802,6 +806,56 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
         }
         if (list.isEmpty()) item { EmptyState(if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun NewSessionForm(state: MainUiState, viewModel: MainViewModel) {
+    val data = state.data ?: return
+    var open by rememberSaveable { mutableStateOf(false) }
+    if (!open) {
+        OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Event, null); Spacer(Modifier.width(8.dp)); Text("Nouvelle séance") }
+        return
+    }
+    var classId by rememberSaveable { mutableStateOf(data.classes.firstOrNull()?.id.orEmpty()) }
+    var date by rememberSaveable { mutableStateOf(today()) }
+    var start by rememberSaveable { mutableStateOf("14:00") }
+    var end by rememberSaveable { mutableStateOf("17:00") }
+    FormCard("Nouvelle séance") {
+        ChipRow(data.classes.sortedBy { it.name }.map { it.id to it.name }, classId) { classId = it }
+        OutlinedTextField(date, { date = it.trim() }, label = { Text("Date (AAAA-MM-JJ)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(start, { start = it.take(5) }, label = { Text("Début") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(end, { end = it.take(5) }, label = { Text("Fin") }, singleLine = true, modifier = Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { open = false }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Fermer") }
+            Button(onClick = { viewModel.addSession(classId, date, start, end); open = false }, enabled = state.online && classId.isNotBlank(),
+                shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Créer") }
+        }
+    }
+}
+
+@Composable
+private fun NewStudentForm(state: MainUiState, viewModel: MainViewModel) {
+    val data = state.data ?: return
+    var open by rememberSaveable { mutableStateOf(false) }
+    if (!open) {
+        OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.People, null); Spacer(Modifier.width(8.dp)); Text("Ajouter un étudiant") }
+        return
+    }
+    var classId by rememberSaveable { mutableStateOf(data.classes.firstOrNull()?.id.orEmpty()) }
+    var last by rememberSaveable { mutableStateOf("") }
+    var first by rememberSaveable { mutableStateOf("") }
+    FormCard("Nouvel étudiant") {
+        ChipRow(data.classes.sortedBy { it.name }.map { it.id to it.name }, classId) { classId = it }
+        OutlinedTextField(last, { last = it }, label = { Text("Nom") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(first, { first = it }, label = { Text("Prénom") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { open = false }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Fermer") }
+            Button(onClick = { viewModel.addStudent(classId, last, first, null); last = ""; first = "" }, enabled = state.online && last.isNotBlank() && first.isNotBlank(),
+                shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Ajouter") }
+        }
     }
 }
 
@@ -936,6 +990,8 @@ private fun PlanningScreen(state: MainUiState) {
     var sem by rememberSaveable { mutableStateOf(currentSemester()) }
     var mode by rememberSaveable { mutableStateOf("class") }
     var cls by rememberSaveable(data.classes.size) { mutableStateOf(data.classNames().firstOrNull() ?: "MPI1-A") }
+    var month by rememberSaveable(sem) { mutableStateOf("all") }
+    val inMonth: (String) -> Boolean = { d -> month == "all" || d.startsWith(month) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -943,17 +999,19 @@ private fun PlanningScreen(state: MainUiState) {
                 Segmented(listOf("class" to "Par classe", "mine" to "Mes créneaux"), mode) { mode = it }
                 val names = if (sem == "S2") CLASS_ORDER else data.classNames()
                 if (mode == "class") ChipRow(names.map { it to it }, cls) { cls = it }
+                val months = (if (sem == "S2") data.plan.map { it.date } else data.sessions.filter { semesterOf(it.sessionDate) == "S1" }.map { it.sessionDate }).map { it.take(7) }.distinct().sorted()
+                if (months.size > 1) ChipRow(listOf("all" to "Tout") + months.map { it to monthName(it) }, month) { month = it }
             }
         }
         if (sem == "S2") {
             if (data.plan.isEmpty()) {
                 item { EmptyState("Le planning du S2 n’est pas encore généré.\nIl se prépare sur le site (Semestres → S2).", Icons.Default.CalendarMonth) }
             } else if (mode == "class") {
-                val list = data.plan.filter { it.className == cls }
+                val list = data.plan.filter { it.className == cls && inMonth(it.date) }
                 items(list) { p -> PlanCard(p, data, me) }
                 if (list.isEmpty()) item { EmptyState("Aucune séance S2 pour $cls.") }
             } else {
-                val mine = data.plan.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }
+                val mine = data.plan.filter { inMonth(it.date) }.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }
                 items(mine) { (p, slot) ->
                     InfoCard(accent = Uphf.Teal) {
                         Text("${dayName(p.date)} ${fmt(p.date)} · ${p.startTime}–${p.endTime}", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
@@ -964,7 +1022,7 @@ private fun PlanningScreen(state: MainUiState) {
                 if (mine.isEmpty()) item { EmptyState("Aucun créneau S2 à votre nom.") }
             }
         } else {
-            val s1 = data.sessions.filter { semesterOf(it.sessionDate) == "S1" }
+            val s1 = data.sessions.filter { semesterOf(it.sessionDate) == "S1" && inMonth(it.sessionDate) }
             if (mode == "class") {
                 val byDate = s1.filter { classOf(data.className(it.classId)) == cls }.groupBy { it.sessionDate }.toSortedMap()
                 byDate.forEach { (date, sessions) ->
@@ -1050,6 +1108,7 @@ private fun StudentsScreen(state: MainUiState, viewModel: MainViewModel) {
                 OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Rechercher un étudiant…") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 ChipRow(listOf("all" to "Toutes") + data.classNames().map { it to it }, cls) { cls = it }
                 Text("${list.size} étudiant(s)", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+                if (state.isAdmin) NewStudentForm(state, viewModel)
             }
         }
         items(list.take(300), key = { it.id }) { s ->
@@ -1243,6 +1302,7 @@ private fun Legend(color: Color, label: String, value: Int) {
 @Composable
 private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
     val entries = buildList {
+        if (state.isAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 (dates, créneaux, planning)", Icons.Default.CalendarMonth))
         add(Triple(AppScreen.STATS, "Statistiques", Icons.Default.BarChart))
         add(Triple(AppScreen.CLASSES, "Classes et groupes", Icons.Default.Groups))
         add(Triple(AppScreen.TIMETABLE, "Emploi du temps", Icons.Default.EventAvailable))
@@ -1441,7 +1501,7 @@ private fun AdminScreen(state: MainUiState, viewModel: MainViewModel) {
             OutlinedTextField(adminPin, { if (it.length <= 12) adminPin = it.filter(Char::isDigit) }, label = { Text("Nouveau PIN (6 à 12 chiffres)") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
             Button(onClick = { viewModel.adminSetPin(adminPin) }, enabled = state.online && adminPin.length >= 6, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Modifier le PIN") }
         }
-        Text("Le planning du S2, les groupes et les dates exclues se gèrent sur le site (Semestres → S2).", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = { viewModel.navigate(AppScreen.S2_ADMIN) }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Gestion du S2 : dates exclues, créneaux, planning") }
     }
 }
 
@@ -1489,6 +1549,7 @@ private fun screenTitle(screen: AppScreen): String = when (screen) {
     AppScreen.STUDENTS -> "Étudiants"
     AppScreen.STUDENT_DETAIL -> "Fiche étudiant"
     AppScreen.LOCKED -> "Verrouillé"
+    AppScreen.S2_ADMIN -> "Gestion du S2"
     AppScreen.STATS -> "Statistiques"
     AppScreen.MORE -> "Plus"
     AppScreen.CLASSES -> "Classes et groupes"

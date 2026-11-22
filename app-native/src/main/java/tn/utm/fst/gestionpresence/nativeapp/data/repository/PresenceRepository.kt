@@ -100,6 +100,12 @@ class PresenceRepository(context: Context) {
         activeProfile = null
     }
 
+    /** Exécute un appel authentifié (session rafraîchie si besoin). */
+    suspend fun <T> online(block: suspend (OnlineApiClient, AuthSession) -> T): T {
+        requireOnline()
+        return block(api, authorizedSession())
+    }
+
     fun hasSavedSession(): Boolean = sessionStore.hasSession()
     var biometricEnabled: Boolean
         get() = sessionStore.biometricEnabled
