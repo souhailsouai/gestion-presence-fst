@@ -739,7 +739,9 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
         if (todays.isNotEmpty() || todayPending.isNotEmpty()) {
             item { SectionHeader("Aujourd’hui") }
             items(todayPending, key = { "plan-" + it.slot.id }) { x -> PendingSlotCard(x, data, true, viewModel) }
-            items(todays) { s -> SessionCard(s, data, viewModel) }
+            val examToday = todays.filter { t -> data.lpc3ExamSessions().any { it.id == t.id } }
+            if (examToday.isNotEmpty()) item { ExamCard(examToday, data, viewModel) }
+            items(todays - examToday.toSet()) { s -> SessionCard(s, data, viewModel) }
         }
         if (upcoming.isNotEmpty()) {
             item { SectionHeader("Mes prochains TP (S2)") }
@@ -761,6 +763,29 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
 /* ------------------------------------------------------------------ */
 /*  Séances                                                             */
 /* ------------------------------------------------------------------ */
+
+/** Séances de l'examen LPC3 (tous les groupes le même jour) : un seul appel commun. */
+private fun RepositoryData.lpc3ExamSessions(): List<TeachingSession> =
+    sessions.filter { it.sessionDate == LPC3_EXAM && className(it.classId).startsWith("LPC3") }
+
+@Composable
+private fun ExamCard(exam: List<TeachingSession>, data: RepositoryData, viewModel: MainViewModel) {
+    val recs = exam.flatMap { data.attendanceBySession[it.id].orEmpty() }
+    val nb = exam.sumOf { data.studentsByClass[it.classId].orEmpty().size }
+    val t = remember(recs) { tally(recs) }
+    val first = exam.first()
+    InfoCard(accent = Uphf.Ochre, onClick = { viewModel.selectExamSessions(exam.map { it.id }) }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Examen LPC3 — tous les groupes", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
+                Text("${dayName(first.sessionDate)} ${fmt(first.sessionDate)} · ${first.startTime}–${first.endTime} · $nb étudiants", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+            }
+            Icon(Icons.Default.ChevronRight, null, tint = Uphf.Muted)
+        }
+        if (recs.isEmpty()) Text("Appel non saisi — une seule feuille pour toute la classe", color = Uphf.Ochre, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+        else Text("${t.present + t.late}/${t.total} présents", color = Uphf.Title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+    }
+}
 
 @Composable
 private fun SessionCard(s: TeachingSession, data: RepositoryData, viewModel: MainViewModel) {
@@ -852,7 +877,10 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
                     Text("${sessions.size} groupe(s)", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            items(sessions, key = { it.id }) { s -> SessionCard(s, data, viewModel) }
+            val examIds = data.lpc3ExamSessions().map { it.id }.toSet()
+            val (examHere, others) = sessions.partition { it.id in examIds }
+            if (examHere.isNotEmpty()) item(key = "exam-$date") { ExamCard(examHere, data, viewModel) }
+            items(others, key = { it.id }) { s -> SessionCard(s, data, viewModel) }
         }
         if (list.isEmpty()) item { EmptyState(if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
         item { Spacer(Modifier.height(24.dp)) }
@@ -919,8 +947,13 @@ private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
     val data = state.data ?: return EmptyState("Données indisponibles.")
     val selected = data.sessions.firstOrNull { it.id == state.selectedSessionId }
         ?: return EmptyState("Choisissez une séance dans « Séances » pour faire l’appel.", Icons.Default.HowToReg)
-    val students = remember(data, selected.id) { data.studentsByClass[selected.classId].orEmpty().sortedBy { it.displayName.lowercase() } }
-    val saved = remember(data, selected.id) { data.attendanceBySession[selected.id].orEmpty().associateBy { it.studentId } }
+    val exam = state.examSessions.keys.mapNotNull { id -> data.sessions.firstOrNull { it.id == id } }
+    val students = remember(data, selected.id, exam) {
+        (if (exam.isNotEmpty()) exam.flatMap { data.studentsByClass[it.classId].orEmpty() } else data.studentsByClass[selected.classId].orEmpty())
+            .sortedBy { it.displayName.lowercase() } }
+    val saved = remember(data, selected.id, exam) {
+        (if (exam.isNotEmpty()) exam.flatMap { data.attendanceBySession[it.id].orEmpty() } else data.attendanceBySession[selected.id].orEmpty())
+            .associateBy { it.studentId } }
     val drafts = students.map { state.attendanceDrafts[it.id] ?: AttendanceDraft(it.id) }
     val counts = AttendanceStatus.entries.associateWith { st -> drafts.count { it.status == st } }
     var makeupFor by remember { mutableStateOf<AttendanceRecord?>(null) }
@@ -929,7 +962,7 @@ private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
             item {
                 InfoCard(accent = Uphf.Teal) {
                     Tag(semesterOf(selected.sessionDate))
-                    Text(data.className(selected.classId), style = MaterialTheme.typography.headlineSmall, color = Uphf.Title)
+                    Text(if (exam.isNotEmpty()) "Examen LPC3 — tous les groupes (${students.size})" else data.className(selected.classId), style = MaterialTheme.typography.headlineSmall, color = Uphf.Title)
                     Text("${dayName(selected.sessionDate)} ${fmt(selected.sessionDate)} · ${selected.startTime}–${selected.endTime} · ${shortName(data.teacher(selected.teacherId))}", color = Uphf.Text)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                         AttendanceStatus.entries.forEach { st ->

@@ -60,6 +60,8 @@ data class MainUiState(
     val mfaFactorId: String? = null,
     val selectedSessionId: String? = null,
     val attendanceRevision: Long = 0,
+    /** Appel commun à plusieurs séances (examen LPC3) : séance → révision. Vide = appel normal. */
+    val examSessions: Map<String, Long> = emptyMap(),
     val attendanceDrafts: Map<String, AttendanceDraft> = emptyMap(),
     val pendingOperationId: String? = null,
     val reports: List<ReportSummary> = emptyList(),
@@ -252,6 +254,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Appel commun : une seule feuille pour tous les étudiants de plusieurs séances (examen LPC3, tous les groupes). */
+    fun selectExamSessions(sessionIds: List<String>) {
+        viewModelScope.launch {
+            setLoading(true); clearNotice()
+            try {
+                val data = _state.value.data ?: repository.load()
+                val sessions = sessionIds.mapNotNull { id -> data.sessions.firstOrNull { it.id == id } }
+                require(sessions.isNotEmpty()) { "Séance introuvable." }
+                val revisions = mutableMapOf<String, Long>()
+                val drafts = mutableMapOf<String, AttendanceDraft>()
+                for (s in sessions) {
+                    val sheet = repository.attendanceSheet(s.id)
+                    revisions[s.id] = sheet.revision
+                    val records = sheet.records.associateBy { it.studentId }
+                    data.students.filter { it.classId == s.classId }.forEach { student ->
+                        val record = records[student.id]
+                        drafts[student.id] = AttendanceDraft(studentId = student.id, status = record?.status ?: AttendanceStatus.PRESENT,
+                            comment = record?.comment.orEmpty(), grade = record?.grade)
+                    }
+                }
+                _state.value = _state.value.copy(screen = AppScreen.ATTENDANCE, loading = false, online = repository.isOnline(), data = data,
+                    selectedSessionId = sessions.first().id, examSessions = revisions, attendanceRevision = revisions[sessions.first().id] ?: 0,
+                    attendanceDrafts = drafts, pendingOperationId = null)
+            } catch (error: Throwable) {
+                handle(error, fallbackScreen = AppScreen.ATTENDANCE)
+            }
+        }
+    }
+
     fun selectAttendanceSession(sessionId: String) {
         viewModelScope.launch {
             setLoading(true)
@@ -279,6 +310,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     online = repository.isOnline(),
                     data = data,
                     selectedSessionId = sessionId,
+                    examSessions = emptyMap(),
                     attendanceRevision = sheet.revision,
                     attendanceDrafts = drafts,
                     pendingOperationId = null
@@ -308,6 +340,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveAttendance() {
+        if (_state.value.examSessions.isNotEmpty()) return saveExamAttendance()
         val current = _state.value
         val sessionId = current.selectedSessionId ?: return
         val operationId = current.pendingOperationId ?: UUID.randomUUID().toString()
@@ -356,6 +389,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 handle(error, fallbackScreen = AppScreen.ATTENDANCE, preserveOperation = true)
+            }
+        }
+    }
+
+    /** Enregistre l'appel commun : une écriture par séance (groupe), avec les étudiants de ce groupe. */
+    private fun saveExamAttendance() {
+        val current = _state.value
+        val data0 = current.data ?: return
+        _state.value = current.copy(loading = true, error = null, message = null)
+        viewModelScope.launch {
+            try {
+                val revisions = _state.value.examSessions.toMutableMap()
+                var data = data0
+                for ((sid, rev) in revisions.toMap()) {
+                    val classId = data.sessions.firstOrNull { it.id == sid }?.classId ?: continue
+                    val ids = data.students.filter { it.classId == classId }.map { it.id }.toSet()
+                    val sheet = repository.saveAttendance(sessionId = sid, expectedRevision = rev, operationId = UUID.randomUUID().toString(),
+                        records = _state.value.attendanceDrafts.values.filter { it.studentId in ids })
+                    revisions[sid] = sheet.revision
+                    if (sheet.records.isNotEmpty()) data = data.copy(attendance = data.attendance.filter { it.sessionId != sid } + sheet.records)
+                }
+                _state.value = _state.value.copy(loading = false, online = repository.isOnline(), data = data, examSessions = revisions,
+                    reports = repository.reports(data), message = "Présence de l’examen enregistrée (tous les groupes).", error = null)
+            } catch (error: Throwable) {
+                handle(error, fallbackScreen = AppScreen.ATTENDANCE)
             }
         }
     }
