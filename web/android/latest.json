@@ -1,6 +1,6 @@
 {
-  "version": "2.8.0",
-  "notes": "Application nettement plus rapide (code optimisé), transitions entre écrans plus vives, appel enregistré instantanément.",
+  "version": "2.8.1",
+  "notes": "Nouvelle icône de l'application (FST / UTM).",
   "apk": "Presence-FST.apk",
-  "size": 2912011
+  "size": 3150967
 }
