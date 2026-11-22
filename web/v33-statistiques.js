@@ -46,7 +46,7 @@
 
   /* ----- Graphiques (SVG, sans bibliothèque) ----- */
   function donut(t){
-    const parts=[['Présents',t.p-t.mk,'var(--v33-good)'],['Rattrapés',t.mk,'var(--brand-yellow)'],['Justifiés',t.j,'#8aa4c8'],['Absents',t.a,'var(--brand-red)']].filter(x=>x[1]>0);
+    const parts=[['Présents',t.p-t.mk,'var(--v33-good)'],['Rattrapés',t.mk,'#9a7333'],['Justifiés',t.j,'#8fb3c4'],['Absents',t.a,'var(--v33-bad)']].filter(x=>x[1]>0);
     const R=52,C=2*Math.PI*R;let off=0;
     const arcs=parts.map(([l,v,c])=>{const len=t.t?C*v/t.t:0;const s=`<circle r="${R}" cx="70" cy="70" fill="none" stroke="${c}" stroke-width="18" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" class="v33s-arc"><title>${l} : ${v}</title></circle>`;off+=len;return s;}).join('');
     return `<div class="v33s-donut"><svg viewBox="0 0 140 140" role="img" aria-label="Répartition des présences"><g transform="rotate(-90 70 70)">${arcs}</g>
@@ -63,7 +63,7 @@
     const area=line+` L${pts[pts.length-1][0].toFixed(1)} ${H-pb} L${pts[0][0].toFixed(1)} ${H-pb} Z`;
     const grid=[0,25,50,75,100].map(v=>`<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" class="v33s-grid"/><text x="${pl-6}" y="${y(v)+3}" text-anchor="end" class="v33s-axis">${v}</text>`).join('');
     return `<div class="v33-scroll"><svg class="v33s-trend" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Taux de présence par date">
-      <defs><linearGradient id="v33s-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--brand-navy)" stop-opacity=".28"/><stop offset="1" stop-color="var(--brand-navy)" stop-opacity="0"/></linearGradient></defs>
+      <defs><linearGradient id="v33s-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b7a9c" stop-opacity=".16"/><stop offset="1" stop-color="#0b7a9c" stop-opacity="0"/></linearGradient></defs>
       ${grid}<path d="${area}" fill="url(#v33s-grad)" class="v33s-area"/><path d="${line}" class="v33s-line" pathLength="1"/>
       ${list.map((d,i)=>`<g class="v33s-pt"><circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="5" class="${tone(d.rate)}"><title>${fmt(d.key)} : ${d.rate} % (${d.p}/${d.t}) · ${d.a} absence(s)</title></circle><text x="${pts[i][0]}" y="${H-8}" text-anchor="middle" class="v33s-axis">${short(d.key)}</text><text x="${pts[i][0]}" y="${pts[i][1]-10}" text-anchor="middle" class="v33s-val">${Math.round(d.rate)}</text></g>`).join('')}
     </svg></div>`;
