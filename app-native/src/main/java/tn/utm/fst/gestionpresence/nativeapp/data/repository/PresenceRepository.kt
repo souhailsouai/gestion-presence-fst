@@ -106,6 +106,38 @@ class PresenceRepository(context: Context) {
         return block(api, authorizedSession())
     }
 
+    /** S1 : changer l'enseignant d'un groupe (séance pas encore commencée). */
+    suspend fun assignS1Teacher(sessionId: String, groupNo: Int, code: String, teacherId: String, room: String) {
+        requireOnline()
+        val r = api.callRpc(authorizedSession(), "v515_assign_teacher", buildJsonObject {
+            put("p_session_id", sessionId); put("p_group_no", groupNo); put("p_manipulation_code", code); put("p_teacher_id", teacherId); put("p_room", room)
+        })
+        checkOk(r, "Affectation impossible.")
+    }
+
+    /** Permutation de deux enseignants entre deux jours (cette semaine ou toutes les semaines futures). */
+    suspend fun swapTeachers(a: String, dayA: Int, b: String, dayB: Int, effective: String, scope: String): Int {
+        requireOnline()
+        require(a != b) { "Les enseignants doivent être différents." }
+        require(dayA != dayB) { "Les jours doivent être différents." }
+        LocalDate.parse(effective)
+        val session = authorizedSession()
+        val r = api.callRpc(session, "v16_swap_teachers", buildJsonObject {
+            put("p_teacher_a", a); put("p_day_a", dayA); put("p_teacher_b", b); put("p_day_b", dayB)
+            put("p_effective_date", effective); put("p_scope", scope); put("p_context", "real")
+        })
+        checkOk(r, "Permutation refusée.")
+        val monday = LocalDate.parse(effective).let { it.minusDays((it.dayOfWeek.value - 1).toLong()) }
+        runCatching { api.callRpc(session, "v16_verify_teacher_week", buildJsonObject { put("p_week_start", monday.toString()); put("p_context", "real") }) }
+        return ((r as? JsonObject)?.get("changed_assignments") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0
+    }
+
+    private fun checkOk(r: kotlinx.serialization.json.JsonElement, fallback: String) {
+        val o = r as? JsonObject ?: return
+        val ok = (o["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        if (ok == "false") throw ApiException("VALIDATION_ERROR", (o["message"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: fallback)
+    }
+
     fun hasSavedSession(): Boolean = sessionStore.hasSession()
     var biometricEnabled: Boolean
         get() = sessionStore.biometricEnabled
@@ -154,7 +186,9 @@ class PresenceRepository(context: Context) {
             val plan = async { api.s2Plan(session) }
             val names = async { api.teacherNames(session) }
             val titles = async { api.manipulationTitles(session) }
-            Triple(classes.await(), students.await(), sessions.await()) to listOf(attendance.await(), directory.await(), plan.await(), names.await(), titles.await())
+            val s1 = async { api.s1Plan(session) }
+            val manips = async { api.sessionManipulations(session) }
+            Triple(classes.await(), students.await(), sessions.await()) to listOf(attendance.await(), directory.await(), plan.await(), names.await(), titles.await(), s1.await(), manips.await())
         }
         val (classes, students, sessions) = lists
         @Suppress("UNCHECKED_CAST") val attendance = extras[0] as List<AttendanceRecord>
@@ -162,6 +196,8 @@ class PresenceRepository(context: Context) {
         @Suppress("UNCHECKED_CAST") val plan = extras[2] as List<PlanSession>
         @Suppress("UNCHECKED_CAST") val names = directory.associate { it.teacherId to it.teacherName } + (extras[3] as Map<String, String>)
         @Suppress("UNCHECKED_CAST") val titles = extras[4] as Map<String, String>
+        @Suppress("UNCHECKED_CAST") val s1 = extras[5] as Pair<List<PlanSession>, Map<Int, List<String>>>
+        @Suppress("UNCHECKED_CAST") val sessionManips = extras[6] as Map<String, String>
         return RepositoryData(
             contract = contract,
             classes = classes,
@@ -172,7 +208,10 @@ class PresenceRepository(context: Context) {
             stats = stats(classes, students, sessions, attendance),
             plan = plan,
             teacherNames = names,
-            manipulationTitles = titles
+            manipulationTitles = titles,
+            s1Plan = s1.first,
+            s1Pool = s1.second,
+            sessionManipulations = sessionManips
         )
     }
 
@@ -396,7 +435,10 @@ data class RepositoryData(
     val stats: DashboardStats,
     val plan: List<PlanSession> = emptyList(),
     val teacherNames: Map<String, String> = emptyMap(),
-    val manipulationTitles: Map<String, String> = emptyMap()
+    val manipulationTitles: Map<String, String> = emptyMap(),
+    val s1Plan: List<PlanSession> = emptyList(),
+    val s1Pool: Map<Int, List<String>> = emptyMap(),
+    val sessionManipulations: Map<String, String> = emptyMap()
 ) {
     // Index calculés une seule fois : l'interface ne parcourt plus les 1000+ présences à chaque affichage.
     val classById: Map<String, AcademicClass> by lazy { classes.associateBy { it.id } }
@@ -416,7 +458,8 @@ data class RepositoryData(
             students = students.filter { it.classId in ids },
             sessions = keptSessions,
             attendance = attendance.filter { it.sessionId in sessionIds },
-            plan = if (module == "PHY") plan else emptyList()
+            plan = if (module == "PHY") plan else emptyList(),
+            s1Plan = if (module == "PHY") s1Plan else emptyList()
         )
     }
 

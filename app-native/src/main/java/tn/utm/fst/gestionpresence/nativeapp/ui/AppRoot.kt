@@ -450,14 +450,14 @@ private val TABS = listOf(
 private fun tabOf(screen: AppScreen): AppScreen = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
-    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN -> AppScreen.MORE
+    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT -> AppScreen.MORE
     else -> screen
 }
 
 private fun backOf(screen: AppScreen): AppScreen? = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
-    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN -> AppScreen.MORE
+    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT -> AppScreen.MORE
     else -> null
 }
 
@@ -519,6 +519,8 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
                         AppScreen.ADMIN -> AdminScreen(state, viewModel)
                         AppScreen.ACCOUNT -> AccountScreen(state, viewModel)
                         AppScreen.S2_ADMIN -> S2AdminScreen(state, viewModel)
+                        AppScreen.SWAP -> SwapScreen(state, viewModel)
+                        AppScreen.EXPORT -> ExportScreen(state)
                         else -> Unit
                     }
                 }
@@ -1024,7 +1026,10 @@ private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
             }
         } else {
             val s1 = data.sessions.filter { semesterOf(it.sessionDate) == "S1" && inMonth(it.sessionDate) }
-            if (mode == "class") {
+            val s1Cycle = data.s1Plan.filter { it.className == cls && inMonth(it.date) }
+            if (mode == "class" && s1Cycle.isNotEmpty()) {
+                items(s1Cycle) { p -> S1PlanCard(p, data, me, if (state.isAdmin) viewModel else null) }
+            } else if (mode == "class") {
                 val byDate = s1.filter { classOf(data.className(it.classId)) == cls }.groupBy { it.sessionDate }.toSortedMap()
                 byDate.forEach { (date, sessions) ->
                     item {
@@ -1109,6 +1114,52 @@ private fun PlanCard(p: PlanSession, data: RepositoryData, me: String?, admin: M
                     admin.s2Action("Séance déplacée et verrouillée.") { admin.s2.moveSession(p.id, p.date, date) } }) { Text("Déplacer") } },
                 dismissButton = { TextButton(onClick = { moving = false }) { Text("Annuler") } }, containerColor = Color.White)
         }
+    }
+}
+
+@Composable
+private fun S1PlanCard(p: PlanSession, data: RepositoryData, me: String?, admin: MainViewModel?) {
+    var edit by remember { mutableStateOf<tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSlot?>(null) }
+    val started = runCatching { java.time.LocalDateTime.parse("${p.date}T${p.startTime}") <= java.time.LocalDateTime.now() }.getOrDefault(true)
+    InfoCard(accent = if (started) Uphf.Muted else Uphf.Teal) {
+        Text("${dayName(p.date)} ${fmt(p.date)}", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
+        Text("${p.startTime}–${p.endTime} · passage ${p.occurrence}${if (started) " · passée" else ""}", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+        p.slots.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pair.forEach { slot ->
+                    val mine = slot.teacherId != null && slot.teacherId == me
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (mine) Uphf.OchreSoft else Uphf.TealSoft)
+                        .then(if (admin != null && !started) Modifier.clickable { edit = slot } else Modifier).padding(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("G${slot.groupNo}", fontWeight = FontWeight.Bold, color = Uphf.Title); Spacer(Modifier.width(6.dp))
+                            Text(slot.manipulation, fontWeight = FontWeight.ExtraBold, color = Uphf.Teal)
+                            slot.room?.let { Text(" · $it", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall) }
+                        }
+                        Text(shortName(data.teacher(slot.teacherId)), style = MaterialTheme.typography.bodySmall, color = Uphf.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+    val slot = edit
+    if (admin != null && slot != null) {
+        val weekday = LocalDate.parse(p.date).dayOfWeek.value
+        val pool = data.s1Pool[weekday].orEmpty().ifEmpty { data.teacherNames.keys.toList() }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { edit = null },
+            title = { Text("${p.className} · ${fmt(p.date)} · G${slot.groupNo} (${slot.manipulation})") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Enseignants disponibles le ${dayName(p.date).lowercase()} :", color = Uphf.Muted)
+                    pool.sortedBy { data.teacherNames[it] ?: it }.forEach { id ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable {
+                            edit = null; admin.assignS1Teacher(p.id, slot.groupNo, slot.manipulation, id, slot.room ?: "")
+                        }.padding(10.dp)) { Text(data.teacherNames[id] ?: id, fontWeight = if (id == slot.teacherId) FontWeight.Bold else FontWeight.Normal, color = Uphf.Title) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { edit = null }) { Text("Fermer") } }, containerColor = Color.White)
     }
 }
 
@@ -1265,6 +1316,91 @@ private fun ChangeGroupCard(student: Student, data: RepositoryData, viewModel: M
     }
 }
 
+@Composable
+private fun SwapScreen(state: MainUiState, viewModel: MainViewModel) {
+    val data = state.data ?: return EmptyState("Données indisponibles.")
+    val teachers = data.teacherNames.entries.sortedBy { it.value }
+    val days = listOf(1 to "Lundi", 4 to "Jeudi", 5 to "Vendredi")
+    var a by rememberSaveable { mutableStateOf("") }; var b by rememberSaveable { mutableStateOf("") }
+    var dayA by rememberSaveable { mutableStateOf(1) }; var dayB by rememberSaveable { mutableStateOf(4) }
+    var scope by rememberSaveable { mutableStateOf("week") }
+    var date by rememberSaveable { mutableStateOf(today()) }
+    var ask by remember { mutableStateOf(false) }
+    val blockers = buildList {
+        if (a.isBlank() || b.isBlank()) add("Choisissez les deux enseignants.")
+        if (a.isNotBlank() && a == b) add("Les enseignants doivent être différents.")
+        if (dayA == dayB) add("Les jours doivent être différents.")
+        if (runCatching { LocalDate.parse(date) }.isFailure) add("Date d’effet invalide (AAAA-MM-JJ).")
+    }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { SectionHeader("Permuter deux enseignants", "Règle : 4 enseignants par jour, 2 jours par semaine et par enseignant.") }
+        item {
+            FormCard("Enseignant A") {
+                TeacherPicker(teachers, a) { a = it }
+                ChipRow(days.map { it.first.toString() to it.second }, dayA.toString()) { dayA = it.toInt() }
+            }
+        }
+        item {
+            FormCard("Enseignant B") {
+                TeacherPicker(teachers, b) { b = it }
+                ChipRow(days.map { it.first.toString() to it.second }, dayB.toString()) { dayB = it.toInt() }
+            }
+        }
+        item {
+            FormCard("Portée") {
+                Segmented(listOf("week" to "Cette semaine", "future" to "Semaines futures"), scope) { scope = it }
+                OutlinedTextField(date, { date = it.trim() }, label = { Text("Date d’effet (AAAA-MM-JJ)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                blockers.forEach { Text(it, color = Uphf.Bad, style = MaterialTheme.typography.bodySmall) }
+                Button(onClick = { ask = true }, enabled = blockers.isEmpty() && state.online, shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(containerColor = Uphf.Ochre), modifier = Modifier.fillMaxWidth()) { Text("Permuter") }
+            }
+        }
+    }
+    if (ask) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { ask = false },
+        title = { Text("Confirmer la permutation") },
+        text = { Text("${data.teacherNames[a]} (${days.first { it.first == dayA }.second}) ⇄ ${data.teacherNames[b]} (${days.first { it.first == dayB }.second}), ${if (scope == "week") "semaine du ${fmt(date)}" else "à partir du ${fmt(date)}"}. Le serveur vérifie la règle avant d’appliquer.") },
+        confirmButton = { TextButton(onClick = { ask = false; viewModel.swapTeachers(a, dayA, b, dayB, date, scope) }) { Text("Permuter") } },
+        dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Color.White)
+}
+
+@Composable
+private fun TeacherPicker(teachers: List<Map.Entry<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Text(teachers.firstOrNull { it.key == selected }?.value ?: "Choisir l’enseignant", color = if (selected.isBlank()) Uphf.Muted else Uphf.Title)
+        }
+        androidx.compose.material3.DropdownMenu(open, { open = false }) {
+            teachers.forEach { (id, n) -> androidx.compose.material3.DropdownMenuItem(text = { Text(n) }, onClick = { onSelect(id); open = false }) }
+        }
+    }
+}
+
+@Composable
+private fun ExportScreen(state: MainUiState) {
+    val data = state.data ?: return EmptyState("Données indisponibles.")
+    val context = LocalContext.current
+    var msg by remember { mutableStateOf<String?>(null) }
+    val families = data.classNames()
+    fun export(list: List<String>, label: String) {
+        val file = runCatching { tn.utm.fst.gestionpresence.nativeapp.feature.export.TrackingXlsx.build(context, data, list, label) }.getOrElse { msg = "Échec de l’export : ${it.message}"; return }
+        if (file == null) msg = "Aucune donnée à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.export.TrackingXlsx.share(context, file)
+    }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { SectionHeader("Export Excel du suivi des TP", "Une feuille par classe : statut et note de chaque manipulation, présences, absences et pourcentages.") }
+        item {
+            Button(onClick = { export(families, if (families.any { it.startsWith("LPC") }) "LPC3" else "MPI1_PC1") }, shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) { Text("Toutes les classes (un fichier)") }
+        }
+        items(families) { f ->
+            OutlinedButton(onClick = { export(listOf(f), f) }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Classe $f") }
+        }
+        msg?.let { item { Text(it, color = Uphf.Bad) } }
+        item { Text("Le PDF du planning S2 se trouve dans Plus → Gestion du S2 → Générer & PDF.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Statistiques                                                        */
 /* ------------------------------------------------------------------ */
@@ -1380,6 +1516,8 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
     val entries = buildList {
         if (state.isAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 (dates, créneaux, planning)", Icons.Default.CalendarMonth))
         add(Triple(AppScreen.STATS, "Statistiques", Icons.Default.BarChart))
+        add(Triple(AppScreen.EXPORT, "Export Excel du suivi des TP", Icons.Default.Assessment))
+        if (state.isAdmin) add(Triple(AppScreen.SWAP, "Permuter des enseignants", Icons.Default.Groups))
         add(Triple(AppScreen.CLASSES, "Classes et groupes", Icons.Default.Groups))
         add(Triple(AppScreen.TIMETABLE, "Emploi du temps", Icons.Default.EventAvailable))
         add(Triple(AppScreen.TEACHERS, "Enseignants", Icons.Default.School))
@@ -1626,6 +1764,8 @@ private fun screenTitle(screen: AppScreen): String = when (screen) {
     AppScreen.STUDENT_DETAIL -> "Fiche étudiant"
     AppScreen.LOCKED -> "Verrouillé"
     AppScreen.S2_ADMIN -> "Gestion du S2"
+    AppScreen.SWAP -> "Permutation"
+    AppScreen.EXPORT -> "Exports"
     AppScreen.STATS -> "Statistiques"
     AppScreen.MORE -> "Plus"
     AppScreen.CLASSES -> "Classes et groupes"

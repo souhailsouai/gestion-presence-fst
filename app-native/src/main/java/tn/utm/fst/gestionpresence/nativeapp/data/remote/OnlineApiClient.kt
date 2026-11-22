@@ -274,6 +274,35 @@ class OnlineApiClient(
             }
     }.getOrDefault(emptyList())
 
+    /** Planning S1 (cycle V5.15) : séances, affectations, enseignants disponibles par jour. */
+    suspend fun s1Plan(session: AuthSession): Pair<List<PlanSession>, Map<Int, List<String>>> = runCatching {
+        val rooms = mapOf("M1" to "C", "M2" to "B", "M3" to "D", "M4" to "D", "M5" to "A", "M6" to "A")
+        val sessions = getPaged(session, "v515_sessions", "id,session_date,start_time,end_time,class_name,is_teaching_session,class_occurrence", emptyMap(), "session_date").map { it.jsonObject }
+            .filter { it.boolean("is_teaching_session") != false && it.int("class_occurrence") != null }
+        val assignments = getPaged(session, "v515_assignments", "session_id,group_no,manipulation_code,teacher_id,room", emptyMap(), "session_id").map { it.jsonObject }
+        val pool = getPaged(session, "v515_teacher_day_pool", "weekday,teacher_id,active", emptyMap(), "weekday").map { it.jsonObject }
+            .filter { it.boolean("active") != false }.groupBy({ it.int("weekday") ?: 0 }, { it.requiredString("teacher_id") })
+        sessions.map { row ->
+            val occ = row.int("class_occurrence") ?: 1
+            PlanSession(
+                id = row.requiredString("id"), className = row.requiredString("class_name"), date = row.requiredString("session_date"),
+                startTime = row.requiredString("start_time").take(5), endTime = row.requiredString("end_time").take(5), occurrence = occ, locked = false,
+                slots = (1..6).map { g ->
+                    val code = "M" + (((g - 1) + (occ - 1)) % 6 + 1)
+                    val a = assignments.firstOrNull { it.string("session_id") == row.requiredString("id") && it.int("group_no") == g }
+                    PlanSlot("", false, g, a?.string("manipulation_code") ?: code, a?.string("teacher_id"), a?.string("room") ?: rooms[code])
+                }
+            )
+        } to pool
+    }.getOrDefault(emptyList<PlanSession>() to emptyMap())
+
+    /** Manipulation de chaque séance S1 (session_plans), pour l'export de suivi. */
+    suspend fun sessionManipulations(session: AuthSession): Map<String, String> = runCatching {
+        getPaged(session, "session_plans", "session_id,manipulation,status", mapOf("deleted_at" to "is.null", "session_id" to "not.is.null"), "session_id")
+            .map { it.jsonObject }.filter { it.string("manipulation") != null && it.string("status")?.lowercase() != "cancelled" }
+            .associate { it.requiredString("session_id") to it.requiredString("manipulation") }
+    }.getOrDefault(emptyMap())
+
     /** Noms des enseignants (id → nom complet), si la lecture est autorisée. */
     suspend fun teacherNames(session: AuthSession): Map<String, String> = runCatching {
         getPaged(session, "profiles", "id,full_name", emptyMap(), "full_name").associate { element ->
