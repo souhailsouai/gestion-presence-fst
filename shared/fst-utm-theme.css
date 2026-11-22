@@ -771,3 +771,31 @@ h1,h2,h3,h4,#fst-page-title,.v33x .v33-hero h3,.v33x .v33-h,.v33s-card h3{font-f
 .v33x .v33-months{margin:8px 0 4px;flex-wrap:wrap}
 .v33x .v33-autonote{margin:10px 0 0;font-size:.85rem;line-height:1.45}
 .v33x .v33-autonote i{color:var(--u-teal,#0b7a9c);margin-right:4px}
+
+/* V38 — corrections de mise en page relevées à l'audit */
+/* 1. Encadrés d'information : fond doux et texte lisible (l'encadré « Planification officielle » n'avait aucun style). */
+#fst-main .alert-info{background:var(--u-teal-soft,#e8f3f7);color:var(--u-title,#1c3d5e);border:1px solid #cfe3ea;border-left:4px solid var(--u-teal,#0b7a9c);border-radius:10px;padding:14px 16px;font-size:.93rem;line-height:1.5;gap:12px;align-items:flex-start}
+#fst-main .alert-info strong{color:var(--u-title,#1c3d5e)}
+#fst-main .alert-info>i{color:var(--u-teal,#0b7a9c);margin-top:3px}
+/* 2. Tableaux du tableau de bord : défilement horizontal au lieu de colonnes coupées. */
+#fst-main .v22-panel{min-width:0}
+#fst-main .v22-panel .table-responsive{overflow-x:auto;-webkit-overflow-scrolling:touch}
+#fst-main .v22-dashboard-grid>*{min-width:0}
+/* 3. Filtres des rapports : colonnes régulières, aucun menu écrasé. */
+#fst-main #v22-report-toolbar{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))!important}
+#fst-main #rapports .btn{white-space:nowrap}
+/* 4. Liste des étudiants : bouton de suppression discret (même action, confirmation inchangée). */
+#fst-main #etudiants .btn-danger.btn-sm{background:#fff!important;color:#b4554b!important;border:1px solid #e7c3bd!important;box-shadow:none!important;font-size:0!important;padding:6px 12px!important}
+#fst-main #etudiants .btn-danger.btn-sm i{font-size:.8rem}
+#fst-main #etudiants .btn-danger.btn-sm::after{content:"Supprimer";font-size:.8rem;font-weight:600;margin-left:4px}
+#fst-main #etudiants .btn-danger.btn-sm:hover{background:#f8ecea!important}
+/* 5. Séances : message quand aucune séance n'est encore ouverte. */
+#fst-main #sessions-list:empty::before{content:"Aucune séance ouverte pour l’instant : elles apparaissent dès que l’appel est fait depuis « Présence ».";display:block;color:#6b7682;font-size:.92rem;padding:10px 0}
+#fst-main #seances>h3{color:var(--u-title,#1c3d5e);font-size:1.1rem}
+/* 6. Mobile : titre de page sur une seule ligne, boutons de rapport sans retour à la ligne. */
+@media (max-width:767px){
+  #fst-page-title{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #fst-main #rapports .btn{font-size:.9rem;padding-left:14px;padding-right:14px}
+  #fst-main .alert-info{font-size:.88rem}
+}
+@media (max-width:430px){#fst-main #sync-status,#fst-topbar #sync-status{display:none!important}}
