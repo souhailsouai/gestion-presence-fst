@@ -13,8 +13,8 @@ android {
         applicationId = "tn.utm.fst.gestionpresence"
         minSdk = 26
         targetSdk = 35
-        versionCode = 209
-        versionName = "2.7.0"
+        versionCode = 210
+        versionName = "2.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"https://dbslzmvzbxczpqyektpx.supabase.co\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_wKwmPnXS_Q7REGU57hTIyw_eqxhIXLT\"")
@@ -24,7 +24,10 @@ android {
         // Version rapide à installer directement (non débogable, optimisée par ART), signée avec la clé locale.
         create("fast") {
             initWith(getByName("release"))
-            isMinifyEnabled = false
+            // R8 : code optimisé (Compose nettement plus rapide qu'en version non optimisée).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             isDebuggable = false
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")

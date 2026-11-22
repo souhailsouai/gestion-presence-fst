@@ -215,7 +215,7 @@ fun AppRoot(viewModel: MainViewModel = viewModel()) {
                     AppScreen.MFA_ENROLL, AppScreen.MFA_CHALLENGE -> 1
                     else -> 2
                 }
-                AnimatedContent(targetState = kind, transitionSpec = { fadeIn(tween(350)) togetherWith fadeOut(tween(200)) }, label = "root") { k ->
+                AnimatedContent(targetState = kind, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(100)) }, label = "root") { k ->
                     when (k) {
                         0 -> LoginScreen(state, viewModel)
                         1 -> MfaScreen(state, viewModel)
@@ -501,7 +501,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
             Notice(state)
             AnimatedContent(
                 targetState = state.screen,
-                transitionSpec = { (fadeIn(tween(260)) + slideInVertically(tween(320)) { it / 18 }) togetherWith fadeOut(tween(140)) },
+                transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(80)) },
                 label = "screen"
             ) { screen ->
                 Box(Modifier.fillMaxSize()) {
@@ -625,7 +625,7 @@ private fun Tag(text: String, color: Color = Uphf.Teal) {
 
 @Composable
 private fun AnimatedBar(fraction: Float, color: Color, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 10.dp) {
-    val animated by animateFloatAsState(targetValue = fraction.coerceIn(0f, 1f), animationSpec = tween(900), label = "bar")
+    val animated by animateFloatAsState(targetValue = fraction.coerceIn(0f, 1f), animationSpec = tween(400), label = "bar")
     Box(modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(50)).background(Color(0xFFEDF1F5))) {
         Box(Modifier.fillMaxWidth(animated).fillMaxHeight().clip(RoundedCornerShape(50)).background(color))
     }
