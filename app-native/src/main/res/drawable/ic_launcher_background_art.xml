@@ -1,1 +1,6 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#0B7A9C" android:pathData="M0,0 H108 V108 H0 Z"/><path android:fillColor="#2F93B0" android:pathData="M0,70 C18,62 36,78 54,70 C72,62 90,78 108,70 V108 H0 Z"/><path android:fillColor="#C9A66B" android:pathData="M0,80 C18,72 36,88 54,80 C72,72 90,88 108,80 V108 H0 Z"/><path android:fillColor="#1C3D5E" android:pathData="M0,90 C18,83 36,97 54,90 C72,83 90,97 108,90 V108 H0 Z"/></vector>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+<path android:pathData="M0,0H108V108H0Z"><aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="0" android:startY="0" android:endX="108" android:endY="108"><item android:offset="0" android:color="#13A6C9"/><item android:offset="1" android:color="#123B5C"/></gradient></aapt:attr></path>
+<path android:fillColor="#1AFFFFFF" android:pathData="M0,74 C20,64 38,84 58,74 C78,64 92,80 108,72 V108 H0 Z"/>
+<path android:fillColor="#14FFFFFF" android:pathData="M0,86 C22,78 40,94 62,86 C82,78 96,92 108,86 V108 H0 Z"/>
+<path android:fillColor="#0FFFFFFF" android:pathData="M0,0 H108 V30 C80,40 40,14 0,28 Z"/>
+</vector>
