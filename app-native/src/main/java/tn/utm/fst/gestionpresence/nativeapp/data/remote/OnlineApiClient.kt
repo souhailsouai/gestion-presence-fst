@@ -203,7 +203,7 @@ class OnlineApiClient(
         }.sortedWith(compareByDescending<TeachingSession> { it.sessionDate }.thenBy { it.startTime })
 
     suspend fun attendance(session: AuthSession): List<AttendanceRecord> =
-        getPaged(session, "attendance", "*", mapOf("deleted_at" to "is.null"), "id").map { element -> attendanceRecord(element.jsonObject) }
+        getPaged(session, "attendance", "id,session_id,student_id,status,comment,grade,revision,updated_at,makeup_date,makeup_note", mapOf("deleted_at" to "is.null"), "id").map { element -> attendanceRecord(element.jsonObject) }
 
     /** Planning du semestre 2 (tables v33_s2_*), lecture seule. */
     suspend fun s2Plan(session: AuthSession): List<PlanSession> = runCatching {

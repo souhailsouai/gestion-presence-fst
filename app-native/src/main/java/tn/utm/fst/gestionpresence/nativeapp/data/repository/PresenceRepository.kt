@@ -378,4 +378,32 @@ data class RepositoryData(
     val plan: List<PlanSession> = emptyList(),
     val teacherNames: Map<String, String> = emptyMap(),
     val manipulationTitles: Map<String, String> = emptyMap()
-)
+) {
+    // Index calculés une seule fois : l'interface ne parcourt plus les 1000+ présences à chaque affichage.
+    val classById: Map<String, AcademicClass> by lazy { classes.associateBy { it.id } }
+    val sessionById: Map<String, TeachingSession> by lazy { sessions.associateBy { it.id } }
+    val attendanceBySession: Map<String, List<AttendanceRecord>> by lazy { attendance.groupBy { it.sessionId } }
+    val attendanceByStudent: Map<String, List<AttendanceRecord>> by lazy { attendance.groupBy { it.studentId } }
+    val studentsByClass: Map<String, List<Student>> by lazy { students.groupBy { it.classId } }
+
+    /** Filière : "PHY" = TP Physique (MPI1, PC1) ; "LPC" = LPC3 (Ondes et Vibrations). */
+    fun forModule(module: String): RepositoryData {
+        val keep = classes.filter { moduleOf(it) == module }
+        val ids = keep.map { it.id }.toSet()
+        val keptSessions = sessions.filter { it.classId in ids }
+        val sessionIds = keptSessions.map { it.id }.toSet()
+        return copy(
+            classes = keep,
+            students = students.filter { it.classId in ids },
+            sessions = keptSessions,
+            attendance = attendance.filter { it.sessionId in sessionIds },
+            plan = if (module == "PHY") plan else emptyList()
+        )
+    }
+
+    fun hasModule(module: String): Boolean = classes.any { moduleOf(it) == module }
+
+    companion object {
+        fun moduleOf(c: AcademicClass): String = if (c.track.equals("LPC", true) || c.name.startsWith("LPC")) "LPC" else "PHY"
+    }
+}

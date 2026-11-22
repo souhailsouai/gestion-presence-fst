@@ -48,8 +48,13 @@ fun AnimatedWaves(
     modifier: Modifier = Modifier,
     height: Dp = 56.dp,
     layers: List<WaveLayer>,
-    durationMillis: Int = 9000
+    durationMillis: Int = 9000,
+    animated: Boolean = true
 ) {
+    if (!animated) {
+        Canvas(modifier = modifier.fillMaxWidth().height(height)) { layers.forEach { drawWave(it, 0.6f) } }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "waves")
     val phase by transition.animateFloat(
         initialValue = 0f,
@@ -64,7 +69,16 @@ fun AnimatedWaves(
 
 /** Fine ligne ondulée animée (séparateur). */
 @Composable
-fun WaveLine(color: Color, modifier: Modifier = Modifier, height: Dp = 10.dp) {
+fun WaveLine(color: Color, modifier: Modifier = Modifier, height: Dp = 10.dp, animated: Boolean = true) {
+    if (!animated) {
+        Canvas(modifier = modifier.height(height)) {
+            val path = Path(); val mid = size.height / 2; var x = 0f
+            path.moveTo(0f, mid)
+            while (x <= size.width) { path.lineTo(x, mid + (size.height * 0.32f) * sin((2 * PI * (x / 60f)).toFloat())); x += 3f }
+            drawPath(path, color, style = Stroke(width = 3.dp.toPx()))
+        }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "waveline")
     val phase by transition.animateFloat(
         initialValue = 0f,
