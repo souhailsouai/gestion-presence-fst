@@ -53,6 +53,8 @@ jobs:
           done
 
       - name: Build Pages payload
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
         run: python scripts/build_pages_from_41881.py
 
       - name: Verify LPC3 management is in payload
@@ -71,6 +73,8 @@ jobs:
           set -euo pipefail
           publish_dir="$(mktemp -d)"
           cp -a web/. "$publish_dir/"
+          find "$publish_dir" -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find "$publish_dir" -type f -name '*.pyc' -delete
           touch "$publish_dir/.nojekyll"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
