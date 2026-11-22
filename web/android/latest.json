@@ -1,6 +1,6 @@
 {
-  "version": "2.8.1",
-  "notes": "Nouvelle icône de l'application (FST / UTM).",
+  "version": "2.9.0",
+  "notes": "Nouveau : comptes enseignants, rapport de présence en PDF, modification, suppression et import d'étudiants, sauvegardes JSON et CSV, avis officiels sur l'accueil.",
   "apk": "Presence-FST.apk",
-  "size": 3150967
+  "size": 3183839
 }
