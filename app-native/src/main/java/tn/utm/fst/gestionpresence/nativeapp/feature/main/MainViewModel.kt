@@ -34,7 +34,11 @@ enum class AppScreen {
     ATTENDANCE,
     REPORTS,
     ADMIN,
-    ACCOUNT
+    ACCOUNT,
+    PLANNING,
+    STATS,
+    MORE,
+    STUDENT_DETAIL
 }
 
 data class MainUiState(
@@ -52,7 +56,8 @@ data class MainUiState(
     val pendingOperationId: String? = null,
     val reports: List<ReportSummary> = emptyList(),
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val selectedStudentId: String? = null
 ) {
     val authenticated: Boolean get() = profile != null
     val isAdmin: Boolean get() = profile?.isAdmin == true
@@ -281,6 +286,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 handle(error, fallbackScreen = AppScreen.ATTENDANCE, preserveOperation = true)
+            }
+        }
+    }
+
+    fun openStudent(studentId: String) {
+        _state.value = _state.value.copy(screen = AppScreen.STUDENT_DETAIL, selectedStudentId = studentId, message = null, error = null)
+    }
+
+    fun markAllPresent() {
+        val drafts = _state.value.attendanceDrafts.mapValues { (_, draft) -> draft.copy(status = AttendanceStatus.PRESENT) }
+        _state.value = _state.value.copy(attendanceDrafts = drafts, error = null)
+    }
+
+    /** Rattrapage d'une absence enregistrée (date au format AAAA-MM-JJ, ou null pour annuler). */
+    fun setMakeup(attendanceId: String, date: String?) {
+        viewModelScope.launch {
+            clearNotice()
+            try {
+                repository.setMakeup(attendanceId, date, if (date != null) "Rattrapé (application Android)" else null)
+                val data = repository.load()
+                _state.value = _state.value.copy(
+                    online = repository.isOnline(),
+                    data = data,
+                    reports = repository.reports(data),
+                    message = if (date != null) "Rattrapage enregistré." else "Rattrapage annulé.",
+                    error = null
+                )
+            } catch (error: Throwable) {
+                handle(error)
             }
         }
     }

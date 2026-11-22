@@ -72,7 +72,9 @@ data class AttendanceRecord(
     val comment: String,
     val grade: Double?,
     val revision: Long,
-    val updatedAt: String?
+    val updatedAt: String?,
+    val makeupDate: String? = null,
+    val makeupNote: String? = null
 )
 
 data class AttendanceDraft(
@@ -146,6 +148,24 @@ data class ReportSummary(
     val late: Int,
     val justified: Int,
     val averageGrade: Double?
+)
+
+data class PlanSlot(
+    val groupNo: Int,
+    val manipulation: String,
+    val teacherId: String?,
+    val room: String?
+)
+
+data class PlanSession(
+    val id: String,
+    val className: String,
+    val date: String,
+    val startTime: String,
+    val endTime: String,
+    val occurrence: Int,
+    val locked: Boolean,
+    val slots: List<PlanSlot>
 )
 
 class ApiException(

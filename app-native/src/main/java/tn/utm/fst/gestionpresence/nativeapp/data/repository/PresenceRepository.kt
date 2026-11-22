@@ -16,6 +16,7 @@ import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceSheet
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AuthSession
 import tn.utm.fst.gestionpresence.nativeapp.core.model.DashboardStats
 import tn.utm.fst.gestionpresence.nativeapp.core.model.MfaEnrollment
+import tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSession
 import tn.utm.fst.gestionpresence.nativeapp.core.model.MfaFactor
 import tn.utm.fst.gestionpresence.nativeapp.core.model.ReportSummary
 import tn.utm.fst.gestionpresence.nativeapp.core.model.Student
@@ -121,6 +122,9 @@ class PresenceRepository(context: Context) {
         val sessions = api.sessions(session)
         val attendance = api.attendance(session)
         val directory = api.teacherDirectory(session)
+        val plan = api.s2Plan(session)
+        val names = directory.associate { it.teacherId to it.teacherName } + api.teacherNames(session)
+        val titles = api.manipulationTitles(session)
         return RepositoryData(
             contract = contract,
             classes = classes,
@@ -128,7 +132,10 @@ class PresenceRepository(context: Context) {
             sessions = sessions,
             attendance = attendance,
             directory = directory,
-            stats = stats(classes, students, sessions, attendance)
+            stats = stats(classes, students, sessions, attendance),
+            plan = plan,
+            teacherNames = names,
+            manipulationTitles = titles
         )
     }
 
@@ -228,6 +235,12 @@ class PresenceRepository(context: Context) {
             records = records,
             justification = justification
         )
+    }
+
+    suspend fun setMakeup(attendanceId: String, date: String?, note: String?) {
+        requireOnline()
+        date?.let { LocalDate.parse(it) }
+        api.setMakeup(authorizedSession(), attendanceId, date, note)
     }
 
     suspend fun adminCreateTeacher(username: String, fullName: String, password: String): JsonObject {
@@ -330,5 +343,8 @@ data class RepositoryData(
     val sessions: List<TeachingSession>,
     val attendance: List<AttendanceRecord>,
     val directory: List<TeacherDirectoryEntry>,
-    val stats: DashboardStats
+    val stats: DashboardStats,
+    val plan: List<PlanSession> = emptyList(),
+    val teacherNames: Map<String, String> = emptyMap(),
+    val manipulationTitles: Map<String, String> = emptyMap()
 )

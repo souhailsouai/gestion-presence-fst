@@ -10,6 +10,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -43,6 +44,8 @@ import tn.utm.fst.gestionpresence.nativeapp.core.model.ApiException
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AppContract
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceDraft
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceRecord
+import tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSession
+import tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSlot
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceSheet
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AttendanceStatus
 import tn.utm.fst.gestionpresence.nativeapp.core.model.AuthSession
@@ -146,7 +149,7 @@ class OnlineApiClient(
     }
 
     suspend fun classes(session: AuthSession): List<AcademicClass> =
-        getArray(session, "classes", "*").map { element ->
+        getPaged(session, "classes", "*", mapOf("deleted_at" to "is.null"), "id").map { element ->
             val row = element.jsonObject
             AcademicClass(
                 id = row.requiredString("id"),
@@ -165,7 +168,7 @@ class OnlineApiClient(
         }.sortedBy { it.name }
 
     suspend fun students(session: AuthSession): List<Student> =
-        getArray(session, "students", "*").map { element ->
+        getPaged(session, "students", "*", mapOf("deleted_at" to "is.null"), "id").map { element ->
             val row = element.jsonObject
             Student(
                 id = row.requiredString("id"),
@@ -179,7 +182,7 @@ class OnlineApiClient(
         }.sortedWith(compareBy<Student> { it.lastName }.thenBy { it.firstName })
 
     suspend fun sessions(session: AuthSession): List<TeachingSession> =
-        getArray(session, "sessions", "*").map { element ->
+        getPaged(session, "sessions", "*", mapOf("deleted_at" to "is.null"), "id").map { element ->
             val row = element.jsonObject
             TeachingSession(
                 id = row.requiredString("id"),
@@ -194,7 +197,63 @@ class OnlineApiClient(
         }.sortedWith(compareByDescending<TeachingSession> { it.sessionDate }.thenBy { it.startTime })
 
     suspend fun attendance(session: AuthSession): List<AttendanceRecord> =
-        getArray(session, "attendance", "*").map { element -> attendanceRecord(element.jsonObject) }
+        getPaged(session, "attendance", "*", mapOf("deleted_at" to "is.null"), "id").map { element -> attendanceRecord(element.jsonObject) }
+
+    /** Planning du semestre 2 (tables v33_s2_*), lecture seule. */
+    suspend fun s2Plan(session: AuthSession): List<PlanSession> = runCatching {
+        getPaged(session, "v33_s2_sessions", "id,class_name,session_date,start_time,end_time,occurrence,locked,v33_s2_slots(group_no,manipulation_code,teacher_id,room)", emptyMap(), "session_date")
+            .map { element ->
+                val row = element.jsonObject
+                PlanSession(
+                    id = row.requiredString("id"),
+                    className = row.requiredString("class_name"),
+                    date = row.requiredString("session_date"),
+                    startTime = row.requiredString("start_time").take(5),
+                    endTime = row.requiredString("end_time").take(5),
+                    occurrence = row.int("occurrence") ?: 1,
+                    locked = row.boolean("locked") ?: false,
+                    slots = (row["v33_s2_slots"] as? JsonArray).orEmpty().map { slot ->
+                        val o = slot.jsonObject
+                        PlanSlot(o.int("group_no") ?: 0, o.string("manipulation_code") ?: "", o.string("teacher_id"), o.string("room"))
+                    }.sortedBy { it.groupNo }
+                )
+            }
+    }.getOrDefault(emptyList())
+
+    /** Noms des enseignants (id → nom complet), si la lecture est autorisée. */
+    suspend fun teacherNames(session: AuthSession): Map<String, String> = runCatching {
+        getPaged(session, "profiles", "id,full_name", emptyMap(), "full_name").associate { element ->
+            val row = element.jsonObject
+            row.requiredString("id") to (row.string("full_name") ?: "—")
+        }
+    }.getOrDefault(emptyMap())
+
+    /** Titres des manipulations du S2 (M1 → nom). */
+    suspend fun manipulationTitles(session: AuthSession): Map<String, String> = runCatching {
+        getPaged(session, "v33_s2_manipulations", "code,title", emptyMap(), "code").mapNotNull { element ->
+            val row = element.jsonObject
+            row.string("title")?.let { row.requiredString("code") to it }
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    /** Rattrapage : date posée → présent ; date retirée → absent. */
+    suspend fun setMakeup(session: AuthSession, attendanceId: String, date: String?, note: String?) {
+        val response = http.patch("$baseUrl/rest/v1/attendance") {
+            authenticatedHeaders(session)
+            parameter("id", "eq.$attendanceId")
+            header("Prefer", "return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                if (date == null) {
+                    put("status", "absent"); put("makeup_date", JsonNull); put("makeup_note", JsonNull)
+                } else {
+                    put("status", "present"); put("makeup_date", date)
+                    if (note.isNullOrBlank()) put("makeup_note", JsonNull) else put("makeup_note", note.take(300))
+                }
+            })
+        }
+        response.requireSuccess()
+    }
 
     suspend fun teacherDirectory(session: AuthSession): List<TeacherDirectoryEntry> {
         val result = rpc(session, "teacher_directory_v2", buildJsonObject { })
@@ -370,6 +429,33 @@ class OnlineApiClient(
         return response.requireJson().jsonArray
     }
 
+    private suspend fun getPaged(
+        session: AuthSession,
+        table: String,
+        select: String,
+        filters: Map<String, String>,
+        order: String
+    ): List<JsonElement> {
+        val out = mutableListOf<JsonElement>()
+        var from = 0
+        val page = 1000
+        while (true) {
+            val response = http.get("$baseUrl/rest/v1/$table") {
+                authenticatedHeaders(session)
+                parameter("select", select)
+                filters.forEach { (key, value) -> parameter(key, value) }
+                parameter("order", order)
+                header("Range-Unit", "items")
+                header("Range", "$from-${from + page - 1}")
+            }
+            val batch = response.requireJson().jsonArray
+            out.addAll(batch)
+            if (batch.size < page) break
+            from += page
+        }
+        return out
+    }
+
     private suspend fun upsert(session: AuthSession, table: String, row: JsonObject) {
         val response = http.post("$baseUrl/rest/v1/$table") {
             authenticatedHeaders(session)
@@ -453,7 +539,9 @@ class OnlineApiClient(
             comment = row.string("comment") ?: "",
             grade = row.double("grade"),
             revision = row.long("revision") ?: 1L,
-            updatedAt = row.string("updated_at")
+            updatedAt = row.string("updated_at"),
+            makeupDate = row.string("makeup_date"),
+            makeupNote = row.string("makeup_note")
         )
 
     private fun jwtClaim(jwt: String, key: String): String? = runCatching {
