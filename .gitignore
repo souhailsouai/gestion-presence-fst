@@ -2,3 +2,21 @@
 supabase/ops/*roster*
 *.xlsx
 *.csv
+
+# Fichiers de compilation
+local.properties
+.gradle/
+.kotlin/
+build/
+app-native/build/
+__pycache__/
+*.pyc
+
+# Fichiers de compilation
+local.properties
+.gradle/
+.kotlin/
+build/
+app-native/build/
+__pycache__/
+*.pyc
