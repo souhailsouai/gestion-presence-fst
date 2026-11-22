@@ -46,7 +46,7 @@
 
   /* ----- Graphiques (SVG, sans bibliothèque) ----- */
   function donut(t){
-    const parts=[['Présents',t.p-t.mk,'var(--v33-good)'],['Rattrapés',t.mk,'var(--brand-yellow)'],['Justifiés',t.j,'#8aa4c8'],['Absents',t.a,'var(--brand-red)']].filter(x=>x[1]>0);
+    const parts=[['Présents',t.p-t.mk,'var(--v33-good)'],['Rattrapés',t.mk,'#c9a48c'],['Justifiés',t.j,'#8aa4c8'],['Absents',t.a,'var(--v33-bad)']].filter(x=>x[1]>0);
     const R=52,C=2*Math.PI*R;let off=0;
     const arcs=parts.map(([l,v,c])=>{const len=t.t?C*v/t.t:0;const s=`<circle r="${R}" cx="70" cy="70" fill="none" stroke="${c}" stroke-width="18" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" class="v33s-arc"><title>${l} : ${v}</title></circle>`;off+=len;return s;}).join('');
     return `<div class="v33s-donut"><svg viewBox="0 0 140 140" role="img" aria-label="Répartition des présences"><g transform="rotate(-90 70 70)">${arcs}</g>
