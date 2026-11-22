@@ -1,5 +1,5 @@
 /* V32 — Avis officiels modifiables par l'administrateur.
-   Les avis sont lus dans la table public.app_notices. Si la table n'existe pas
+   Les avis sont lus dans la table existante public.v21_notices (RLS : écriture admin). Si la table n'existe pas
    encore ou est vide, les avis d'origine restent affichés tels quels. */
 (function(root){
   'use strict';
@@ -8,7 +8,7 @@
   const isAdmin=()=>{const t=teacher();return !!(t&&t.isAdmin&&t.activeMode==='admin');};
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const format=body=>esc(body).split('\n').map(l=>l.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')).join('<br>');
-  let notices=null,loadedFor=null,loading=false;
+  let notices=null,loadedFor=null,loading=false,cycleId=null;
 
   async function load(force){
     const c=client(),t=teacher();
@@ -16,8 +16,9 @@
     if(!force&&loadedFor===t.id+':'+t.activeMode)return;
     loading=true;
     try{
-      const {data,error}=await c.from('app_notices').select('id,title,body,position,published,updated_at').order('position').order('updated_at');
-      notices=error?null:(data||[]);
+      const {data,error}=await c.from('v21_notices').select('id,cycle_id,title,body,sort_order,active,updated_at').order('sort_order').order('updated_at');
+      notices=error?null:(data||[]).map(n=>({...n,published:n.active!==false}));
+      if(notices&&notices.length)cycleId=notices[0].cycle_id;
       loadedFor=t.id+':'+t.activeMode;
     }catch(e){notices=null;}
     finally{loading=false;}
@@ -76,11 +77,11 @@
         b.disabled=true;
         try{
           const c=client();
-          for(const id of removed){const {error}=await c.from('app_notices').delete().eq('id',id);if(error)throw error;}
-          const rows=draft.map((d,i)=>({...(d.id?{id:d.id}:{}),title:d.title.trim(),body:d.body,published:d.published!==false,position:i+1}));
+          for(const id of removed){const {error}=await c.from('v21_notices').delete().eq('id',id);if(error)throw error;}
+          const rows=draft.map((d,i)=>({...(d.id?{id:d.id}:{}),cycle_id:d.cycle_id||cycleId,title:d.title.trim(),body:d.body,active:d.published!==false,sort_order:(i+1)*10}));
           const existing=rows.filter(r=>r.id),fresh=rows.filter(r=>!r.id);
-          if(existing.length){const {error}=await c.from('app_notices').upsert(existing);if(error)throw error;}
-          if(fresh.length){const {error}=await c.from('app_notices').insert(fresh);if(error)throw error;}
+          if(existing.length){const {error}=await c.from('v21_notices').upsert(existing);if(error)throw error;}
+          if(fresh.length){const {error}=await c.from('v21_notices').insert(fresh);if(error)throw error;}
           wrap.remove();root.showAlert?.('Avis enregistrés. Tous les enseignants voient la nouvelle version.','success');
           await load(true);
         }catch(e){b.disabled=false;root.showAlert?.('Enregistrement impossible : '+(e.message||e),'danger');}
