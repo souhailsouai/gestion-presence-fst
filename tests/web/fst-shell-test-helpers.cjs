@@ -7,6 +7,6 @@ function navEntries(html) {
     id, text: body.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
   }));
 }
-const NAV_IDS = ['dashboard','presence','classes','emploi','seances','planning-v16','enseignants','etudiants','rapports','presence-lpc3','administration'];
-const NAV_LABELS = ['Tableau de bord','Pr\u00e9sence','Classes & Groupes','Emploi du temps','S\u00e9ances','Planning des s\u00e9ances','Enseignants','\u00c9tudiants','Rapports','LPC3','Administration'];
+const NAV_IDS = ['dashboard','presence','semestres','classes','emploi','seances','planning-v16','enseignants','etudiants','rapports','statistiques','presence-lpc3','administration'];
+const NAV_LABELS = ['Tableau de bord','Pr\u00e9sence','Semestres S1 / S2','Classes & Groupes','Emploi du temps','S\u00e9ances','Planning des s\u00e9ances','Enseignants','\u00c9tudiants','Rapports','Statistiques','LPC3','Administration'];
 module.exports = {navEntries,NAV_IDS,NAV_LABELS};
