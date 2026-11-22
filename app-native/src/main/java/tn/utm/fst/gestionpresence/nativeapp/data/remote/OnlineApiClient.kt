@@ -205,6 +205,54 @@ class OnlineApiClient(
     suspend fun attendance(session: AuthSession): List<AttendanceRecord> =
         getPaged(session, "attendance", "id,session_id,student_id,status,comment,grade,revision,updated_at,makeup_date,makeup_note", mapOf("deleted_at" to "is.null"), "id").map { element -> attendanceRecord(element.jsonObject) }
 
+    // ---- Accès génériques (gestion du S2) ----
+    suspend fun rows(session: AuthSession, table: String, select: String = "*", filters: Map<String, String> = emptyMap(), order: String): List<JsonObject> =
+        getPaged(session, table, select, filters, order).map { it.jsonObject }
+
+    suspend fun upsertRows(session: AuthSession, table: String, rows: JsonArray, onConflict: String) {
+        val response = http.post("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            parameter("on_conflict", onConflict)
+            header("Prefer", "resolution=merge-duplicates,return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(rows)
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun insertRows(session: AuthSession, table: String, rows: JsonArray) {
+        val response = http.post("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            header("Prefer", "return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(rows)
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun patchRows(session: AuthSession, table: String, filters: Map<String, String>, body: JsonObject) {
+        require(filters.isNotEmpty())
+        val response = http.patch("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            filters.forEach { (k, v) -> parameter(k, v) }
+            header("Prefer", "return=minimal")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun deleteWhere(session: AuthSession, table: String, filters: Map<String, String>) {
+        require(filters.isNotEmpty())
+        val response = http.delete("$baseUrl/rest/v1/$table") {
+            authenticatedHeaders(session)
+            filters.forEach { (k, v) -> parameter(k, v) }
+        }
+        response.requireSuccess()
+    }
+
+    suspend fun callRpc(session: AuthSession, function: String, body: JsonObject): JsonElement = rpc(session, function, body)
+
     /** Planning du semestre 2 (tables v33_s2_*), lecture seule. */
     suspend fun s2Plan(session: AuthSession): List<PlanSession> = runCatching {
         getPaged(session, "v33_s2_sessions", "id,class_name,session_date,start_time,end_time,occurrence,locked,v33_s2_slots(group_no,manipulation_code,teacher_id,room)", emptyMap(), "session_date")

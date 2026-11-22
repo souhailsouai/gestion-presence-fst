@@ -39,7 +39,8 @@ enum class AppScreen {
     STATS,
     MORE,
     STUDENT_DETAIL,
-    LOCKED
+    LOCKED,
+    S2_ADMIN
 }
 
 data class MainUiState(
@@ -68,6 +69,7 @@ data class MainUiState(
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PresenceRepository(application)
+    val s2 = tn.utm.fst.gestionpresence.nativeapp.feature.s2.S2Admin(repository)
     private val _state = MutableStateFlow(MainUiState(online = repository.isOnline()))
     val state: StateFlow<MainUiState> = _state.asStateFlow()
 
@@ -87,6 +89,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun usePassword() {
         _state.value = MainUiState(screen = AppScreen.LOGIN, loading = false, online = repository.isOnline(), biometricEnabled = repository.biometricEnabled)
     }
+
+    /** Recharge les données après une modification du S2 (planning recalculé côté serveur). */
+    fun reloadData(message: String? = null) = mutate(message ?: "") { }
 
     fun lock() {
         repository.lock()
@@ -477,7 +482,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     online = repository.isOnline(),
                     data = data,
                     reports = repository.reports(data),
-                    message = successMessage,
+                    message = successMessage.ifBlank { null },
                     error = null
                 )
             } catch (error: Throwable) {
