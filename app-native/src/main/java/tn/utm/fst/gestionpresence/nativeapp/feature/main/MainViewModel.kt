@@ -38,7 +38,8 @@ enum class AppScreen {
     PLANNING,
     STATS,
     MORE,
-    STUDENT_DETAIL
+    STUDENT_DETAIL,
+    LOCKED
 }
 
 data class MainUiState(
@@ -57,7 +58,9 @@ data class MainUiState(
     val reports: List<ReportSummary> = emptyList(),
     val message: String? = null,
     val error: String? = null,
-    val selectedStudentId: String? = null
+    val selectedStudentId: String? = null,
+    val biometricEnabled: Boolean = false,
+    val offerBiometric: Boolean = false
 ) {
     val authenticated: Boolean get() = profile != null
     val isAdmin: Boolean get() = profile?.isAdmin == true
@@ -69,7 +72,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<MainUiState> = _state.asStateFlow()
 
     init {
-        restore()
+        if (repository.biometricEnabled && repository.hasSavedSession()) {
+            // Écran de déverrouillage immédiat : aucune requête réseau avant l'empreinte.
+            _state.value = MainUiState(screen = AppScreen.LOCKED, loading = false, online = repository.isOnline(), biometricEnabled = true)
+        } else {
+            restore()
+        }
+    }
+
+    /** Appelé après une authentification biométrique réussie. */
+    fun unlocked() = restore()
+
+    /** Abandon de l'empreinte : retour au formulaire (la session enregistrée est conservée). */
+    fun usePassword() {
+        _state.value = MainUiState(screen = AppScreen.LOGIN, loading = false, online = repository.isOnline(), biometricEnabled = repository.biometricEnabled)
+    }
+
+    fun lock() {
+        repository.lock()
+        _state.value = MainUiState(screen = AppScreen.LOCKED, loading = false, online = repository.isOnline(), biometricEnabled = true)
+    }
+
+    fun setBiometric(enabled: Boolean) {
+        repository.biometricEnabled = enabled
+        _state.value = _state.value.copy(
+            biometricEnabled = enabled,
+            offerBiometric = false,
+            message = if (enabled) "Connexion par empreinte activée." else "Connexion par empreinte désactivée.",
+            error = null
+        )
+    }
+
+    fun dismissBiometricOffer() {
+        repository.biometricOffered = true
+        _state.value = _state.value.copy(offerBiometric = false)
     }
 
     fun restore() {
@@ -391,11 +427,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 mfaFactorId = enrollment.factorId
             )
         } else {
-            loadApplication(AppScreen.HOME)
+            loadApplication(AppScreen.HOME, bundle.factors)
         }
     }
 
-    private suspend fun loadApplication(screen: AppScreen) {
+    private suspend fun loadApplication(screen: AppScreen, factors: List<MfaFactor>? = null) {
         val data = repository.load()
         val profile = repository.profile() ?: throw ApiException("UNAUTHENTICATED", "Profil absent.")
         _state.value = _state.value.copy(
@@ -404,11 +440,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             online = repository.isOnline(),
             profile = profile,
             data = data,
-            factors = runCatching { repository.mfaFactors() }.getOrDefault(emptyList()),
+            factors = factors ?: _state.value.factors,
             mfaEnrollment = null,
             mfaFactorId = null,
             reports = repository.reports(data),
-            error = null
+            error = null,
+            biometricEnabled = repository.biometricEnabled,
+            offerBiometric = !repository.biometricEnabled && !repository.biometricOffered
         )
     }
 

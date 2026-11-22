@@ -1,5 +1,13 @@
 package tn.utm.fst.gestionpresence.nativeapp.ui
 
+import tn.utm.fst.gestionpresence.nativeapp.ui.components.showBiometricPrompt
+import tn.utm.fst.gestionpresence.nativeapp.ui.components.biometricAvailable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -197,6 +205,7 @@ fun AppRoot(viewModel: MainViewModel = viewModel()) {
         Surface(modifier = Modifier.fillMaxSize(), color = Uphf.Background) {
             Box(modifier = Modifier.fillMaxSize()) {
                 val kind = when (state.screen) {
+                    AppScreen.LOCKED -> 3
                     AppScreen.LOGIN -> 0
                     AppScreen.MFA_ENROLL, AppScreen.MFA_CHALLENGE -> 1
                     else -> 2
@@ -205,6 +214,7 @@ fun AppRoot(viewModel: MainViewModel = viewModel()) {
                     when (k) {
                         0 -> LoginScreen(state, viewModel)
                         1 -> MfaScreen(state, viewModel)
+                        3 -> LockScreen(state, viewModel)
                         else -> MainShell(state, viewModel)
                     }
                 }
@@ -316,6 +326,64 @@ private fun LoginScreen(state: MainUiState, viewModel: MainViewModel) {
 }
 
 @Composable
+private fun LockScreen(state: MainUiState, viewModel: MainViewModel) {
+    val context = LocalContext.current
+    var failure by remember { mutableStateOf<String?>(null) }
+    val ask = {
+        showBiometricPrompt(context, "Présence FST", "Déverrouillez pour ouvrir l’application",
+            onSuccess = { failure = null; viewModel.unlocked() },
+            onFailure = { failure = it })
+    }
+    LaunchedEffect(Unit) { ask() }
+    Box(Modifier.fillMaxSize().background(Color.White)) {
+        AnimatedWaves(
+            modifier = Modifier.align(Alignment.BottomCenter), height = 170.dp,
+            layers = listOf(
+                WaveLayer(Uphf.Ochre.copy(alpha = 0.30f), 0.10f, 520f, 1.0f, 0.42f),
+                WaveLayer(Uphf.Teal.copy(alpha = 0.55f), 0.12f, 680f, -1.3f, 0.55f),
+                WaveLayer(Uphf.Title, 0.09f, 820f, 0.8f, 0.72f)
+            )
+        )
+        Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            LogoTile(R.drawable.fst_logo, 128.dp)
+            Spacer(Modifier.height(26.dp))
+            Box(
+                Modifier.size(96.dp).clip(CircleShape).background(Uphf.TealSoft).clickable { ask() },
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Fingerprint, contentDescription = "Déverrouiller", tint = Uphf.Teal, modifier = Modifier.size(56.dp)) }
+            Spacer(Modifier.height(16.dp))
+            Text("Touchez pour déverrouiller", style = MaterialTheme.typography.titleLarge, color = Uphf.Title)
+            Text("Empreinte, visage ou code du téléphone", color = Uphf.Muted)
+            failure?.let { Text(it, color = Uphf.Bad, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 10.dp)) }
+            Notice(state, padded = false)
+            Spacer(Modifier.height(18.dp))
+            TextButton(onClick = viewModel::usePassword) { Text("Utiliser l’identifiant et le mot de passe", color = Uphf.Teal) }
+            Spacer(Modifier.height(140.dp))
+        }
+    }
+}
+
+@Composable
+private fun BiometricOffer(viewModel: MainViewModel) {
+    val context = LocalContext.current
+    if (!biometricAvailable(context)) { LaunchedEffect(Unit) { viewModel.dismissBiometricOffer() }; return }
+    AlertDialog(
+        onDismissRequest = viewModel::dismissBiometricOffer,
+        icon = { Icon(Icons.Default.Fingerprint, null, tint = Uphf.Teal, modifier = Modifier.size(40.dp)) },
+        title = { Text("Connexion par empreinte", color = Uphf.Title) },
+        text = { Text("À la prochaine ouverture, votre empreinte (ou votre visage, ou le code du téléphone) suffira : plus besoin de saisir le mot de passe.", color = Uphf.Text) },
+        confirmButton = {
+            Button(onClick = {
+                showBiometricPrompt(context, "Activer l’empreinte", "Confirmez avec votre empreinte",
+                    onSuccess = { viewModel.setBiometric(true) }, onFailure = { if (it != null) viewModel.dismissBiometricOffer() })
+            }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal)) { Text("Activer") }
+        },
+        dismissButton = { TextButton(onClick = viewModel::dismissBiometricOffer) { Text("Plus tard") } },
+        containerColor = Color.White
+    )
+}
+
+@Composable
 private fun LogoTile(res: Int, width: androidx.compose.ui.unit.Dp) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(3.dp), shape = RoundedCornerShape(14.dp)) {
         Image(painterResource(res), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.padding(8.dp).width(width).height(76.dp))
@@ -415,6 +483,7 @@ private fun MainShell(state: MainUiState, viewModel: MainViewModel) {
             }
         }
     ) { padding ->
+        if (state.offerBiometric) BiometricOffer(viewModel)
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (!state.online) OfflineCard()
             Notice(state)
@@ -1182,12 +1251,43 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
                 }
             }
         }
+        item { BiometricSetting(state, viewModel) }
+        if (state.biometricEnabled) item {
+            Button(onClick = viewModel::lock, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Icon(Icons.Default.Lock, null); Spacer(Modifier.width(8.dp)); Text("Verrouiller")
+            }
+        }
         item {
             OutlinedButton(onClick = viewModel::logout, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Icon(Icons.AutoMirrored.Filled.Logout, null); Spacer(Modifier.width(8.dp)); Text("Se déconnecter")
             }
         }
         item { Text("Version ${BuildConfig.VERSION_NAME} · Faculté des Sciences de Tunis", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+    }
+}
+
+@Composable
+private fun BiometricSetting(state: MainUiState, viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val available = remember { biometricAvailable(context) }
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(Uphf.TealSoft), contentAlignment = Alignment.Center) { Icon(Icons.Default.Fingerprint, null, tint = Uphf.Teal) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Connexion par empreinte", fontWeight = FontWeight.SemiBold, color = Uphf.Title)
+                Text(if (available) "Ouvrir l’application sans mot de passe" else "Aucune empreinte ni code configuré sur ce téléphone", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+            }
+            Switch(
+                checked = state.biometricEnabled,
+                enabled = available,
+                onCheckedChange = { on ->
+                    if (on) showBiometricPrompt(context, "Activer l’empreinte", "Confirmez avec votre empreinte", onSuccess = { viewModel.setBiometric(true) }, onFailure = {})
+                    else viewModel.setBiometric(false)
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Uphf.Teal)
+            )
+        }
     }
 }
 
@@ -1371,6 +1471,7 @@ private fun screenTitle(screen: AppScreen): String = when (screen) {
     AppScreen.PLANNING -> "Planning"
     AppScreen.STUDENTS -> "Étudiants"
     AppScreen.STUDENT_DETAIL -> "Fiche étudiant"
+    AppScreen.LOCKED -> "Verrouillé"
     AppScreen.STATS -> "Statistiques"
     AppScreen.MORE -> "Plus"
     AppScreen.CLASSES -> "Classes et groupes"

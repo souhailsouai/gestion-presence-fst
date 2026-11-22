@@ -113,7 +113,11 @@ data class AppContract(
     val minimumWindowsVersion: String?,
     val minimumAndroidVersion: String?,
     val enforceBusinessMfa: Boolean
-)
+) {
+    companion object {
+        val DEFAULT = AppContract(2, "2026/2027", false, "", null, null, null, false)
+    }
+}
 
 data class MfaFactor(
     val id: String,

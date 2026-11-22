@@ -1,5 +1,7 @@
 package tn.utm.fst.gestionpresence.nativeapp.data.repository
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -65,13 +67,18 @@ class PresenceRepository(context: Context) {
         var session = sessionStore.load() ?: return null
         if (session.isExpired) session = api.refresh(session.refreshToken)
         return runCatching {
-            val profile = api.profile(session)
+            val current = session
+            val (profile, factors) = coroutineScope {
+                val p = async { api.profile(current) }
+                val f = async { runCatching { api.mfaFactors(current) }.getOrDefault(emptyList()) }
+                p.await() to f.await()
+            }
             if (profile.accountState != "active") throw ApiException("FORBIDDEN", "Ce compte est désactivé.")
             if (session.role != profile.role) session = session.copy(role = profile.role)
             activeSession = session
             activeProfile = profile
             sessionStore.save(session)
-            LoginBundle(session, profile, api.mfaFactors(session))
+            LoginBundle(session, profile, factors)
         }.getOrElse {
             sessionStore.clear()
             activeSession = null
@@ -84,8 +91,22 @@ class PresenceRepository(context: Context) {
         activeSession?.let { runCatching { api.logout(it) } }
         activeSession = null
         activeProfile = null
-        sessionStore.clear()
+        sessionStore.clearAll()
     }
+
+    /** Verrouille l'application sans fermer la session serveur (réouverture par empreinte). */
+    fun lock() {
+        activeSession = null
+        activeProfile = null
+    }
+
+    fun hasSavedSession(): Boolean = sessionStore.hasSession()
+    var biometricEnabled: Boolean
+        get() = sessionStore.biometricEnabled
+        set(value) { sessionStore.biometricEnabled = value; sessionStore.biometricOffered = true }
+    var biometricOffered: Boolean
+        get() = sessionStore.biometricOffered
+        set(value) { sessionStore.biometricOffered = value }
 
     suspend fun enrollMfa(): MfaEnrollment {
         requireOnline()
@@ -113,18 +134,28 @@ class PresenceRepository(context: Context) {
     suspend fun load(): RepositoryData {
         requireOnline()
         val session = authorizedSession()
-        val contract = api.appContract(session)
+        val contract = runCatching { api.appContract(session) }.getOrElse { if (it is ApiException && it.code == "UNAUTHENTICATED") throw it else AppContract.DEFAULT }
         if (contract.maintenanceEnabled) {
             throw ApiException("SERVER_UNAVAILABLE", contract.maintenanceMessage.ifBlank { "Application en maintenance." })
         }
-        val classes = api.classes(session)
-        val students = api.students(session)
-        val sessions = api.sessions(session)
-        val attendance = api.attendance(session)
-        val directory = api.teacherDirectory(session)
-        val plan = api.s2Plan(session)
-        val names = directory.associate { it.teacherId to it.teacherName } + api.teacherNames(session)
-        val titles = api.manipulationTitles(session)
+        // Toutes les lectures partent en parallèle : l'ouverture ne dépend plus que de la plus lente.
+        val (lists, extras) = coroutineScope {
+            val classes = async { api.classes(session) }
+            val students = async { api.students(session) }
+            val sessions = async { api.sessions(session) }
+            val attendance = async { api.attendance(session) }
+            val directory = async { api.teacherDirectory(session) }
+            val plan = async { api.s2Plan(session) }
+            val names = async { api.teacherNames(session) }
+            val titles = async { api.manipulationTitles(session) }
+            Triple(classes.await(), students.await(), sessions.await()) to listOf(attendance.await(), directory.await(), plan.await(), names.await(), titles.await())
+        }
+        val (classes, students, sessions) = lists
+        @Suppress("UNCHECKED_CAST") val attendance = extras[0] as List<AttendanceRecord>
+        @Suppress("UNCHECKED_CAST") val directory = extras[1] as List<TeacherDirectoryEntry>
+        @Suppress("UNCHECKED_CAST") val plan = extras[2] as List<PlanSession>
+        @Suppress("UNCHECKED_CAST") val names = directory.associate { it.teacherId to it.teacherName } + (extras[3] as Map<String, String>)
+        @Suppress("UNCHECKED_CAST") val titles = extras[4] as Map<String, String>
         return RepositoryData(
             contract = contract,
             classes = classes,
