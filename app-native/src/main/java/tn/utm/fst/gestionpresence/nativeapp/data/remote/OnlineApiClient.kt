@@ -255,7 +255,7 @@ class OnlineApiClient(
 
     /** Planning du semestre 2 (tables v33_s2_*), lecture seule. */
     suspend fun s2Plan(session: AuthSession): List<PlanSession> = runCatching {
-        getPaged(session, "v33_s2_sessions", "id,class_name,session_date,start_time,end_time,occurrence,locked,v33_s2_slots(group_no,manipulation_code,teacher_id,room)", emptyMap(), "session_date")
+        getPaged(session, "v33_s2_sessions", "id,class_name,session_date,start_time,end_time,occurrence,locked,v33_s2_slots(id,locked,group_no,manipulation_code,teacher_id,room)", emptyMap(), "session_date")
             .map { element ->
                 val row = element.jsonObject
                 PlanSession(
@@ -268,7 +268,7 @@ class OnlineApiClient(
                     locked = row.boolean("locked") ?: false,
                     slots = (row["v33_s2_slots"] as? JsonArray).orEmpty().map { slot ->
                         val o = slot.jsonObject
-                        PlanSlot(o.int("group_no") ?: 0, o.string("manipulation_code") ?: "", o.string("teacher_id"), o.string("room"))
+                        PlanSlot(o.string("id") ?: "", o.boolean("locked") ?: false, o.int("group_no") ?: 0, o.string("manipulation_code") ?: "", o.string("teacher_id"), o.string("room"))
                     }.sortedBy { it.groupNo }
                 )
             }

@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
@@ -506,7 +507,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
                         AppScreen.HOME -> HomeScreen(state, viewModel)
                         AppScreen.SESSIONS -> SessionsScreen(state, viewModel)
                         AppScreen.ATTENDANCE -> AttendanceScreen(state, viewModel)
-                        AppScreen.PLANNING -> PlanningScreen(state)
+                        AppScreen.PLANNING -> PlanningScreen(state, viewModel)
                         AppScreen.STUDENTS -> StudentsScreen(state, viewModel)
                         AppScreen.STUDENT_DETAIL -> StudentDetailScreen(state, viewModel)
                         AppScreen.STATS -> StatsScreen(state)
@@ -517,7 +518,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
                         AppScreen.REPORTS -> ReportsScreen(state)
                         AppScreen.ADMIN -> AdminScreen(state, viewModel)
                         AppScreen.ACCOUNT -> AccountScreen(state, viewModel)
-                        AppScreen.S2_ADMIN -> S2AdminScreen(viewModel)
+                        AppScreen.S2_ADMIN -> S2AdminScreen(state, viewModel)
                         else -> Unit
                     }
                 }
@@ -984,7 +985,7 @@ private fun MakeupDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 private val CLASS_ORDER = listOf("MPI1-A", "MPI1-B", "MPI1-C", "MPI1-D", "MPI1-E", "PC1-A")
 
 @Composable
-private fun PlanningScreen(state: MainUiState) {
+private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
     val data = state.data ?: return EmptyState("Données indisponibles.")
     val me = state.profile?.id
     var sem by rememberSaveable { mutableStateOf(currentSemester()) }
@@ -1008,7 +1009,7 @@ private fun PlanningScreen(state: MainUiState) {
                 item { EmptyState("Le planning du S2 n’est pas encore généré.\nIl se prépare sur le site (Semestres → S2).", Icons.Default.CalendarMonth) }
             } else if (mode == "class") {
                 val list = data.plan.filter { it.className == cls && inMonth(it.date) }
-                items(list) { p -> PlanCard(p, data, me) }
+                items(list) { p -> PlanCard(p, data, me, if (state.isAdmin) viewModel else null) }
                 if (list.isEmpty()) item { EmptyState("Aucune séance S2 pour $cls.") }
             } else {
                 val mine = data.plan.filter { inMonth(it.date) }.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }
@@ -1060,25 +1061,33 @@ private fun PlanningScreen(state: MainUiState) {
 }
 
 @Composable
-private fun PlanCard(p: PlanSession, data: RepositoryData, me: String?) {
+private fun PlanCard(p: PlanSession, data: RepositoryData, me: String?, admin: MainViewModel?) {
+    var editSlot by remember { mutableStateOf<tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSlot?>(null) }
+    var moving by remember { mutableStateOf(false) }
     InfoCard(accent = if (p.locked) Uphf.Ochre else Uphf.Teal) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("${dayName(p.date)} ${fmt(p.date)}", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
-                Text("${p.startTime}–${p.endTime} · passage ${p.occurrence}", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+                Text("${p.startTime}–${p.endTime} · passage ${p.occurrence}${if (p.locked) " · verrouillée" else ""}", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
             }
-            if (p.locked) Icon(Icons.Default.Lock, null, tint = Uphf.Ochre, modifier = Modifier.size(18.dp))
+            if (admin != null) {
+                IconButton(onClick = { moving = true }) { Icon(Icons.Default.CalendarMonth, "Déplacer", tint = Uphf.Teal) }
+                IconButton(onClick = { admin.s2Action(if (p.locked) "Séance déverrouillée." else "Séance verrouillée.") { admin.s2.setSessionLocked(p.id, !p.locked) } }) {
+                    Icon(if (p.locked) Icons.Default.Lock else Icons.Default.LockOpen, if (p.locked) "Déverrouiller" else "Verrouiller", tint = if (p.locked) Uphf.Ochre else Uphf.Muted)
+                }
+            } else if (p.locked) Icon(Icons.Default.Lock, null, tint = Uphf.Ochre, modifier = Modifier.size(18.dp))
         }
         p.slots.chunked(2).forEach { pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 pair.forEach { slot ->
                     val mine = slot.teacherId != null && slot.teacherId == me
-                    Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (mine) Uphf.OchreSoft else Uphf.TealSoft).padding(8.dp)) {
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (mine) Uphf.OchreSoft else Uphf.TealSoft)
+                        .then(if (admin != null) Modifier.clickable { editSlot = slot } else Modifier).padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("G${slot.groupNo}", fontWeight = FontWeight.Bold, color = Uphf.Title)
                             Spacer(Modifier.width(6.dp))
                             Text(slot.manipulation, fontWeight = FontWeight.ExtraBold, color = Uphf.Teal)
-                            slot.room?.let { Text(" · $it", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall) }
+                            slot.room?.takeIf { it.isNotBlank() }?.let { Text(" · $it", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall) }
                         }
                         Text(shortName(data.teacher(slot.teacherId)), style = MaterialTheme.typography.bodySmall, color = Uphf.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -1087,6 +1096,48 @@ private fun PlanCard(p: PlanSession, data: RepositoryData, me: String?) {
             }
         }
     }
+    if (admin != null) {
+        editSlot?.let { slot -> SlotDialog(p, slot, data, onDismiss = { editSlot = null }) { code, teacher, room ->
+            editSlot = null; admin.s2Action("Case modifiée (séance verrouillée).") { admin.s2.editSlot(p.id, slot.id, code, teacher, room) } } }
+        if (moving) {
+            var date by remember { mutableStateOf(p.date) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { moving = false },
+                title = { Text("Déplacer ${p.className} du ${fmt(p.date)}") },
+                text = { Column { OutlinedTextField(date, { date = it.trim() }, label = { Text("Nouvelle date (AAAA-MM-JJ)") }, singleLine = true); Text("La séance sera verrouillée.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall) } },
+                confirmButton = { TextButton(enabled = runCatching { LocalDate.parse(date); date >= S2_START }.getOrDefault(false), onClick = { moving = false
+                    admin.s2Action("Séance déplacée et verrouillée.") { admin.s2.moveSession(p.id, p.date, date) } }) { Text("Déplacer") } },
+                dismissButton = { TextButton(onClick = { moving = false }) { Text("Annuler") } }, containerColor = Color.White)
+        }
+    }
+}
+
+@Composable
+private fun SlotDialog(p: PlanSession, slot: tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSlot, data: RepositoryData, onDismiss: () -> Unit, onSave: (String, String?, String?) -> Unit) {
+    var code by remember { mutableStateOf(slot.manipulation) }
+    var teacher by remember { mutableStateOf(slot.teacherId) }
+    var room by remember { mutableStateOf(slot.room.orEmpty()) }
+    var open by remember { mutableStateOf(false) }
+    val codes = (data.manipulationTitles.keys + p.slots.map { it.manipulation }).distinct().sorted()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${p.className} · ${fmt(p.date)} · G${slot.groupNo}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChipRow(codes.map { it to it }, code) { code = it }
+                Box {
+                    OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) { Text(teacher?.let { data.teacherNames[it] } ?: "Choisir l’enseignant") }
+                    androidx.compose.material3.DropdownMenu(open, { open = false }) {
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("— Aucun —") }, onClick = { teacher = null; open = false })
+                        data.teacherNames.entries.sortedBy { it.value }.forEach { (id, n) -> androidx.compose.material3.DropdownMenuItem(text = { Text(n) }, onClick = { teacher = id; open = false }) }
+                    }
+                }
+                OutlinedTextField(room, { room = it.take(40) }, label = { Text("Salle") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text("La case sera verrouillée : les recalculs ne la changeront plus.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(code, teacher, room.ifBlank { null }) }) { Text("Enregistrer") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }, containerColor = Color.White)
 }
 
 /* ------------------------------------------------------------------ */
@@ -1158,6 +1209,7 @@ private fun StudentDetailScreen(state: MainUiState, viewModel: MainViewModel) {
                 Kpi("${t.makeup}", "rattrapages", Uphf.Ochre, Icons.Default.Replay, Modifier.weight(1f))
             }
         }
+        if (state.isAdmin) item { ChangeGroupCard(student, data, viewModel) }
         item { SectionHeader("Historique") }
         items(history) { rec ->
             val s = sessionsById[rec.sessionId]
@@ -1187,6 +1239,30 @@ private fun StudentDetailScreen(state: MainUiState, viewModel: MainViewModel) {
         item { Spacer(Modifier.height(24.dp)) }
     }
     makeupFor?.let { rec -> MakeupDialog(onDismiss = { makeupFor = null }) { date -> makeupFor = null; viewModel.setMakeup(rec.id, date) } }
+}
+
+@Composable
+private fun ChangeGroupCard(student: Student, data: RepositoryData, viewModel: MainViewModel) {
+    var open by rememberSaveable(student.id) { mutableStateOf(false) }
+    if (!open) {
+        OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Groups, null); Spacer(Modifier.width(8.dp)); Text("Changer de groupe") }
+        return
+    }
+    val prefix = classOf(data.className(student.classId))
+    val targets = data.classes.filter { classOf(it.name) == prefix && it.id != student.classId }.sortedBy { it.name }
+    var target by rememberSaveable { mutableStateOf(targets.firstOrNull()?.id.orEmpty()) }
+    var from by rememberSaveable { mutableStateOf(today()) }
+    FormCard("Changer de groupe") {
+        Text("Actuellement : ${data.className(student.classId)}", color = Uphf.Muted)
+        ChipRow(targets.map { it.id to it.name }, target) { target = it }
+        OutlinedTextField(from, { from = it.trim() }, label = { Text("À partir du (AAAA-MM-JJ)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Text("Les présences déjà enregistrées restent dans l’ancien groupe.", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { open = false }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Fermer") }
+            Button(onClick = { viewModel.assignStudent(student.id, target, from); open = false }, enabled = target.isNotBlank() && runCatching { LocalDate.parse(from); true }.getOrDefault(false),
+                shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Changer") }
+        }
+    }
 }
 
 /* ------------------------------------------------------------------ */

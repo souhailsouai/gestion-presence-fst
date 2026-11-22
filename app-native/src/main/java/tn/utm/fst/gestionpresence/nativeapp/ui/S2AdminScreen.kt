@@ -83,7 +83,7 @@ import java.time.LocalDate
 private fun f(d: String) = S2Admin.fmt(d)
 
 @Composable
-fun S2AdminScreen(viewModel: MainViewModel) {
+fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainUiState, viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
     var snap by remember { mutableStateOf<S2Snapshot?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -108,7 +108,7 @@ fun S2AdminScreen(viewModel: MainViewModel) {
     val s = snap
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            AdminTabs(listOf("dates" to "Dates exclues", "creneaux" to "Créneaux", "postes" to "Enseignants", "planning" to "Générer"), tab) { tab = it }
+            AdminTabs(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "planning" to "Générer & PDF"), tab) { tab = it }
         }
         notice?.let { (err, msg) ->
             item {
@@ -129,10 +129,11 @@ fun S2AdminScreen(viewModel: MainViewModel) {
             )
         }
         when (tab) {
-            "dates" -> datesTab(s, ::run, viewModel)
+            "dates" -> { item { ImportCalendarButton(::run, viewModel) }; datesTab(s, ::run, viewModel) }
+            "groupes" -> groupsTab(s, ::run, viewModel)
             "creneaux" -> item { SlotsEditor(s) { rows -> run("Créneaux enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveSlots(rows); null } } }
             "postes" -> item { StationsEditor(s) { rows -> run("Enseignants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
-            else -> item { GenerateTab(s, ::run, viewModel) }
+            else -> { item { PdfPanel(state, s) }; item { GenerateTab(s, ::run, viewModel) } }
         }
         item { Spacer(Modifier.height(30.dp)) }
     }
@@ -419,5 +420,195 @@ private fun GenerateTab(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
             dismissButton = { TextButton(onClick = { restore = null }) { Text("Annuler") } },
             containerColor = Color.White
         )
+    }
+}
+
+
+/* ---------------- Import du calendrier Excel ---------------- */
+
+@Composable
+private fun ImportCalendarButton(run: (String?, Boolean, suspend () -> String?) -> Unit, viewModel: MainViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var found by remember { mutableStateOf<Pair<String, List<Excluded>>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        error = null
+        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "calendrier.xlsx"
+        val rows = runCatching { context.contentResolver.openInputStream(uri)!!.use { tn.utm.fst.gestionpresence.nativeapp.feature.s2.CalendarImport.parse(it) } }
+            .getOrElse { error = "Fichier illisible : choisissez un fichier Excel .xlsx."; return@rememberLauncherForActivityResult }
+        if (rows.isEmpty()) error = "Aucune date du S2 reconnue dans « $name »." else found = name to rows
+    }
+    OutlinedButton(onClick = { picker.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream")) },
+        shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Importer un calendrier Excel (.xlsx)") }
+    error?.let { Text(it, color = Uphf.Bad) }
+    found?.let { (name, rows) ->
+        AlertDialog(
+            onDismissRequest = { found = null },
+            title = { Text("${rows.size} proposition(s) trouvée(s)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Elles seront ajoutées « à valider » : rien ne change dans le planning tant que vous ne les validez pas.", color = Uphf.Text)
+                    rows.take(8).forEach { r -> Text("• ${f(r.startsOn)}${if (r.endsOn != r.startsOn) " → " + f(r.endsOn) else ""} : ${r.label.take(60)}", style = MaterialTheme.typography.bodySmall) }
+                    if (rows.size > 8) Text("… et ${rows.size - 8} autre(s)", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+                }
+            },
+            confirmButton = { TextButton(onClick = { found = null; run("${rows.size} proposition(s) importée(s) — à valider.", false) { viewModel.s2.importProposals(rows, name); null } }) { Text("Importer") } },
+            dismissButton = { TextButton(onClick = { found = null }) { Text("Annuler") } },
+            containerColor = Color.White
+        )
+    }
+}
+
+/* ---------------- Groupes du S2 ---------------- */
+
+private val S2_CLASSES = listOf("MPI1-A", "MPI1-B", "MPI1-C", "MPI1-D", "MPI1-E", "PC1-A")
+
+private fun androidx.compose.foundation.lazy.LazyListScope.groupsTab(
+    s: S2Snapshot,
+    run: (String?, Boolean, suspend () -> String?) -> Unit,
+    viewModel: MainViewModel
+) {
+    if (s.members.isEmpty()) {
+        item {
+            Panel("Groupes S2 pas encore préparés", "La préparation reprend les groupes du S1, met de côté les étudiants absents à toutes les séances du S1 (réintégrables) et équilibre les groupes sur les présents.") {
+                var ask by remember { mutableStateOf(false) }
+                Button(onClick = { ask = true }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) { Text("Préparer les groupes S2") }
+                if (ask) AlertDialog(onDismissRequest = { ask = false }, title = { Text("Préparer les groupes S2 ?") },
+                    text = { Text("Les groupes seront créés à partir du S1 puis équilibrés. Vous pourrez ensuite tout ajuster.") },
+                    confirmButton = { TextButton(onClick = { ask = false; run(null, false) { "${viewModel.s2.initGroups(s.settings.groupCount)} étudiant(s) répartis." } }) { Text("Préparer") } },
+                    dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Color.White)
+            }
+        }
+        return
+    }
+    item { GroupsPanel(s, run, viewModel) }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun GroupsPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> String?) -> Unit, viewModel: MainViewModel) {
+    var cls by rememberSaveable { mutableStateOf(S2_CLASSES.first()) }
+    var edit by remember { mutableStateOf<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Member?>(null) }
+    var preview by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Move>?>(null) }
+    var applyAsk by remember { mutableStateOf(false) }
+    val G = s.settings.groupCount
+    val ms = s.members.filter { it.className == cls }
+    val act = ms.filter { it.status == "actif" }; val exc = ms.filter { it.status == "exclu" }
+    val sizes = (1..G).map { g -> act.count { it.groupNo == g } }
+    val gap = (sizes.maxOrNull() ?: 0) - (sizes.minOrNull() ?: 0)
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        AdminTabs(S2_CLASSES.map { it to "$it · ${s.members.count { m -> m.className == it && m.status == "actif" }}" }, cls) { cls = it }
+        Panel(if (gap <= 1) "Groupes équilibrés" else "Écart de $gap étudiants", "${act.size} présent(s) répartis · ${exc.size} mis de côté") {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                sizes.forEachIndexed { i, n ->
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(Uphf.TealSoft).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("G${i + 1}", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted); Text("$n", fontWeight = FontWeight.ExtraBold, color = Uphf.Title)
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { preview = tn.utm.fst.gestionpresence.nativeapp.feature.s2.balanceMoves(ms, G) }, enabled = gap > 1, shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("Équilibrer") }
+                OutlinedButton(onClick = { run(null, false) { val n = viewModel.s2.addNewMembers(s.members.map { it.studentId }.toSet()); if (n == 0) "Aucun nouvel étudiant." else "$n étudiant(s) ajouté(s)." } },
+                    shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Nouveaux") }
+            }
+        }
+        (1..G).forEach { g ->
+            val list = act.filter { it.groupNo == g }.sortedBy { it.name }
+            Panel("G$g · ${list.size} étudiant(s)") {
+                list.forEach { m ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { edit = m }.padding(vertical = 8.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(m.name, color = Uphf.Title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (m.locked) Text("verrouillé", style = MaterialTheme.typography.bodySmall, color = Uphf.Ochre)
+                    }
+                }
+                if (list.isEmpty()) Text("—", color = Uphf.Muted)
+            }
+        }
+        if (exc.isNotEmpty()) Panel("Mis de côté pour le S2 (${exc.size})") {
+            exc.forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Text(m.name, color = Uphf.Title, fontWeight = FontWeight.SemiBold); Text("G${m.groupNo} au S1 · ${m.reason.orEmpty()}", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted) }
+                    TextButton(onClick = { run("${m.name} réintégré(e).", false) { viewModel.s2.updateMember(m.studentId, kotlinx.serialization.json.buildJsonObject { put("status", kotlinx.serialization.json.JsonPrimitive("actif")); put("reason", kotlinx.serialization.json.JsonNull) }, "reintegrate_student"); null } }) { Text("Réintégrer") }
+                }
+            }
+        }
+        if (LocalDate.now().toString() > "2026-12-11") {
+            OutlinedButton(onClick = { applyAsk = true }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Appliquer aux listes de présence") }
+        } else Text("Application aux listes de présence possible après le 11/12/2026.", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+    }
+    preview?.let { moves ->
+        AlertDialog(onDismissRequest = { preview = null }, title = { Text("${moves.size} déplacement(s) dans $cls") },
+            text = { Column { Text("Présents seulement ; les étudiants verrouillés ne bougent pas.", color = Uphf.Text); moves.forEach { Text("• ${it.name} : G${it.from} → G${it.to}", style = MaterialTheme.typography.bodySmall) } } },
+            confirmButton = { TextButton(onClick = { preview = null; run("$cls équilibrée (${moves.size} déplacement(s)).", false) { viewModel.s2.applyBalance(cls, moves); null } }) { Text("Appliquer") } },
+            dismissButton = { TextButton(onClick = { preview = null }) { Text("Annuler") } }, containerColor = Color.White)
+    }
+    edit?.let { m -> MemberDialog(m, G, sizes, onDismiss = { edit = null }) { patch, label -> edit = null; run(label, false) { viewModel.s2.updateMember(m.studentId, patch, "edit_student"); null } } }
+    if (applyAsk) AlertDialog(onDismissRequest = { applyAsk = false }, title = { Text("Appliquer les groupes S2 ?") },
+        text = { Text("Les étudiants changeront de groupe dans les listes de présence. Les présences du S1 restent attachées à leurs séances.") },
+        confirmButton = { TextButton(onClick = { applyAsk = false; run(null, true) { "${viewModel.s2.applyGroupsToLists(s.members)} étudiant(s) déplacé(s) dans les listes." } }) { Text("Appliquer") } },
+        dismissButton = { TextButton(onClick = { applyAsk = false }) { Text("Annuler") } }, containerColor = Color.White)
+}
+
+@Composable
+private fun MemberDialog(m: tn.utm.fst.gestionpresence.nativeapp.feature.s2.Member, G: Int, sizes: List<Int>, onDismiss: () -> Unit, onSave: (kotlinx.serialization.json.JsonObject, String) -> Unit) {
+    var g by remember { mutableStateOf(m.groupNo) }
+    var locked by remember { mutableStateOf(m.locked) }
+    var aside by remember { mutableStateOf(false) }
+    var reason by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(m.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Groupe", fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items((1..G).toList()) { x -> FilterChip(g == x, { g = x }, label = { Text("G$x (${sizes.getOrElse(x - 1) { 0 }})") },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White)) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) { Text("Verrouiller dans ce groupe", modifier = Modifier.weight(1f)); Switch(locked, { locked = it }) }
+                Row(verticalAlignment = Alignment.CenterVertically) { Text("Mettre de côté pour le S2", modifier = Modifier.weight(1f)); Switch(aside, { aside = it }) }
+                if (aside) OutlinedTextField(reason, { reason = it.take(200) }, label = { Text("Motif") }, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val patch = kotlinx.serialization.json.buildJsonObject {
+                    put("group_no", kotlinx.serialization.json.JsonPrimitive(g)); put("locked", kotlinx.serialization.json.JsonPrimitive(locked || g != m.groupNo))
+                    if (aside) { put("status", kotlinx.serialization.json.JsonPrimitive("exclu")); put("reason", kotlinx.serialization.json.JsonPrimitive(reason.ifBlank { "Mis de côté manuellement" })) }
+                }
+                onSave(patch, if (aside) "Étudiant mis de côté." else if (g != m.groupNo) "Déplacé en G$g." else "Enregistré.")
+            }) { Text("Enregistrer") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+        containerColor = Color.White
+    )
+}
+
+/* ---------------- Export PDF ---------------- */
+
+@Composable
+private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainUiState, s: S2Snapshot) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val plan = state.data?.plan.orEmpty()
+    var cls by rememberSaveable { mutableStateOf(S2_CLASSES.first()) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    fun export(classes: List<String>) {
+        val excluded = buildMap {
+            s.excluded.filter { it.validated }.forEach { x -> var d = LocalDate.parse(x.startsOn); while (!d.isAfter(LocalDate.parse(x.endsOn))) { putIfAbsent(d.toString(), x.label); d = d.plusDays(1) } }
+        }
+        val times = s.slots.associate { it.className to Triple(it.weekday, it.start, it.end) }
+        val names = s.teachers.associate { it.id to it.name }
+        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, classes, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount)
+        if (file == null) msg = "Aucune séance à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
+    }
+    Panel("Exporter le planning en PDF", "Même modèle que le site : une page A4 paysage par classe.") {
+        AdminTabs(S2_CLASSES.map { it to it }, cls) { cls = it }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { export(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("PDF $cls") }
+            OutlinedButton(onClick = { export(S2_CLASSES) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Toutes les classes") }
+        }
+        msg?.let { Text(it, color = Uphf.Bad) }
     }
 }

@@ -155,6 +155,8 @@ data class ReportSummary(
 )
 
 data class PlanSlot(
+    val id: String = "",
+    val locked: Boolean = false,
     val groupNo: Int,
     val manipulation: String,
     val teacherId: String?,
