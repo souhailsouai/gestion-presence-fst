@@ -71,7 +71,11 @@ class PresenceRepository(context: Context) {
             val (profile, factors) = coroutineScope {
                 val p = async { api.profile(current) }
                 val f = async { runCatching { api.mfaFactors(current) }.getOrDefault(emptyList()) }
-                p.await() to f.await()
+                // Les données de l'application se chargent en même temps que le profil.
+                val d = async { runCatching { loadWith(current) }.getOrNull() }
+                val result = p.await() to f.await()
+                d.await()?.let { prefetched = System.currentTimeMillis() to it }
+                result
             }
             if (profile.accountState != "active") throw ApiException("FORBIDDEN", "Ce compte est désactivé.")
             if (session.role != profile.role) session = session.copy(role = profile.role)
@@ -169,15 +173,22 @@ class PresenceRepository(context: Context) {
         api.unenrollMfa(authorizedSession(), factorId)
     }
 
+    /** Données préchargées pendant la connexion (utilisées une seule fois, si récentes). */
+    private var prefetched: Pair<Long, RepositoryData>? = null
+
     suspend fun load(): RepositoryData {
         requireOnline()
-        val session = authorizedSession()
-        val contract = runCatching { api.appContract(session) }.getOrElse { if (it is ApiException && it.code == "UNAUTHENTICATED") throw it else AppContract.DEFAULT }
-        if (contract.maintenanceEnabled) {
-            throw ApiException("SERVER_UNAVAILABLE", contract.maintenanceMessage.ifBlank { "Application en maintenance." })
+        prefetched?.let { (at, data) ->
+            prefetched = null
+            if (System.currentTimeMillis() - at < 20_000) return data
         }
+        return loadWith(authorizedSession())
+    }
+
+    private suspend fun loadWith(session: AuthSession): RepositoryData {
         // Toutes les lectures partent en parallèle : l'ouverture ne dépend plus que de la plus lente.
         val (lists, extras) = coroutineScope {
+            val contractJob = async { runCatching { api.appContract(session) }.getOrElse { if (it is ApiException && it.code == "UNAUTHENTICATED") throw it else AppContract.DEFAULT } }
             val classes = async { api.classes(session) }
             val students = async { api.students(session) }
             val sessions = async { api.sessions(session) }
@@ -188,7 +199,11 @@ class PresenceRepository(context: Context) {
             val titles = async { api.manipulationTitles(session) }
             val s1 = async { api.s1Plan(session) }
             val manips = async { api.sessionManipulations(session) }
-            Triple(classes.await(), students.await(), sessions.await()) to listOf(attendance.await(), directory.await(), plan.await(), names.await(), titles.await(), s1.await(), manips.await())
+            Triple(classes.await(), students.await(), sessions.await()) to listOf(attendance.await(), directory.await(), plan.await(), names.await(), titles.await(), s1.await(), manips.await(), contractJob.await())
+        }
+        val contract = extras[7] as AppContract
+        if (contract.maintenanceEnabled) {
+            throw ApiException("SERVER_UNAVAILABLE", contract.maintenanceMessage.ifBlank { "Application en maintenance." })
         }
         val (classes, students, sessions) = lists
         @Suppress("UNCHECKED_CAST") val attendance = extras[0] as List<AttendanceRecord>

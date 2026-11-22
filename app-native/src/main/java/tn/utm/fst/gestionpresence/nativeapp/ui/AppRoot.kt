@@ -693,12 +693,11 @@ private fun EmptyState(message: String, icon: ImageVector = Icons.Default.School
 private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
     val data = state.data ?: return EmptyState("Aucune donnée disponible.")
     val me = state.profile?.id
-    val mine = data.sessions.filter { it.teacherId == me }.ifEmpty { if (state.isAdmin) data.sessions else emptyList() }
-    val todays = mine.filter { it.sessionDate == today() }
-    val mineIds = mine.map { it.id }.toSet()
-    val records = mineIds.flatMap { id -> data.attendanceBySession[id].orEmpty() }.filter { semesterOf(data.sessionById[it.sessionId]?.sessionDate ?: today()) == currentSemester() }
-    val t = tally(records)
-    val upcoming = data.plan.filter { it.date >= today() }.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }.take(3)
+    val mine = remember(data, me) { data.sessions.filter { it.teacherId == me }.ifEmpty { if (state.isAdmin) data.sessions else emptyList() }.sortedByDescending { it.sessionDate } }
+    val todays = remember(mine) { mine.filter { it.sessionDate == today() } }
+    val mineIds = remember(mine) { mine.map { it.id }.toSet() }
+    val t = remember(data, mineIds) { tally(mineIds.flatMap { id -> data.attendanceBySession[id].orEmpty() }.filter { semesterOf(data.sessionById[it.sessionId]?.sessionDate ?: today()) == currentSemester() }) }
+    val upcoming = remember(data, me) { data.plan.filter { it.date >= today() }.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }.take(3) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line)) {
@@ -755,7 +754,7 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
 @Composable
 private fun SessionCard(s: TeachingSession, data: RepositoryData, viewModel: MainViewModel) {
     val recs = data.attendanceBySession[s.id].orEmpty()
-    val t = tally(recs)
+    val t = remember(recs) { tally(recs) }
     val name = data.className(s.classId)
     InfoCard(accent = if (recs.isEmpty()) Uphf.Ochre else Uphf.Teal, onClick = { viewModel.selectAttendanceSession(s.id) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -784,12 +783,12 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
     var scope by rememberSaveable { mutableStateOf(if (state.isAdmin) "all" else "mine") }
     var sem by rememberSaveable { mutableStateOf(currentSemester()) }
     var query by rememberSaveable { mutableStateOf("") }
-    val list = data.sessions
+    val list = remember(data, scope, sem, query, me) { data.sessions
         .filter { scope == "all" || it.teacherId == me }
         .filter { semesterOf(it.sessionDate) == sem }
         .filter { query.isBlank() || data.className(it.classId).contains(query.trim(), ignoreCase = true) }
-        .sortedWith(compareByDescending<TeachingSession> { it.sessionDate }.thenBy { data.className(it.classId) })
-    val byDate = list.groupBy { it.sessionDate }
+        .sortedWith(compareByDescending<TeachingSession> { it.sessionDate }.thenBy { data.className(it.classId) }) }
+    val byDate = remember(list) { list.groupBy { it.sessionDate } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -807,7 +806,7 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
                     Text("${sessions.size} groupe(s)", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            items(sessions) { s -> SessionCard(s, data, viewModel) }
+            items(sessions, key = { it.id }) { s -> SessionCard(s, data, viewModel) }
         }
         if (list.isEmpty()) item { EmptyState(if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
         item { Spacer(Modifier.height(24.dp)) }
@@ -1013,7 +1012,7 @@ private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
                 item { EmptyState("Le planning du S2 n’est pas encore généré.\nIl se prépare sur le site (Semestres → S2).", Icons.Default.CalendarMonth) }
             } else if (mode == "class") {
                 val list = data.plan.filter { it.className == cls && inMonth(it.date) }
-                items(list) { p -> PlanCard(p, data, me, if (state.isAdmin) viewModel else null) }
+                items(list, key = { it.id }) { p -> PlanCard(p, data, me, if (state.isAdmin) viewModel else null) }
                 if (list.isEmpty()) item { EmptyState("Aucune séance S2 pour $cls.") }
             } else {
                 val mine = data.plan.filter { inMonth(it.date) }.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }
@@ -1203,9 +1202,11 @@ private fun StudentsScreen(state: MainUiState, viewModel: MainViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     var cls by rememberSaveable { mutableStateOf("all") }
     val byStudent = data.attendanceByStudent
-    val list = data.students
+    val list = remember(data, cls, query) { data.students
         .filter { cls == "all" || classOf(data.className(it.classId)) == cls }
         .filter { s -> query.isBlank() || query.trim().split(' ').all { w -> s.displayName.contains(w, ignoreCase = true) } }
+        .sortedBy { it.displayName.lowercase() } }
+    val tallies = remember(data) { data.attendanceByStudent.mapValues { tally(it.value) } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1216,7 +1217,7 @@ private fun StudentsScreen(state: MainUiState, viewModel: MainViewModel) {
             }
         }
         items(list.take(300), key = { it.id }) { s ->
-            val t = tally(byStudent[s.id].orEmpty())
+            val t = tallies[s.id] ?: tally(emptyList())
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth().clickable { viewModel.openStudent(s.id) }) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(CircleShape).background(Uphf.TealSoft), contentAlignment = Alignment.Center) { Text(initials(s.displayName), color = Uphf.Teal, fontWeight = FontWeight.Bold) }
@@ -1492,12 +1493,12 @@ private fun StatsScreen(state: MainUiState) {
     var sem by rememberSaveable { mutableStateOf(currentSemester()) }
     var cls by rememberSaveable { mutableStateOf("all") }
     val sessionsById = data.sessionById
-    val rows = data.attendance.mapNotNull { rec -> sessionsById[rec.sessionId]?.let { s -> Triple(rec, s, data.className(s.classId)) } }
-        .filter { semesterOf(it.second.sessionDate) == sem }
-    val filtered = rows.filter { cls == "all" || classOf(it.third) == cls }
-    val t = tally(filtered.map { it.first })
-    val bars = if (cls == "all") filtered.groupBy { classOf(it.third) } else filtered.groupBy { it.third }
-    val alwaysAbsent = filtered.groupBy { it.first.studentId }.filter { (_, l) -> l.size >= 2 && l.all { it.first.status == AttendanceStatus.ABSENT } }
+    val rows = remember(data, sem) { data.attendance.mapNotNull { rec -> sessionsById[rec.sessionId]?.let { s -> Triple(rec, s, data.className(s.classId)) } }
+        .filter { semesterOf(it.second.sessionDate) == sem } }
+    val filtered = remember(rows, cls) { rows.filter { cls == "all" || classOf(it.third) == cls } }
+    val t = remember(filtered) { tally(filtered.map { it.first }) }
+    val bars = remember(filtered, cls) { if (cls == "all") filtered.groupBy { classOf(it.third) } else filtered.groupBy { it.third } }
+    val alwaysAbsent = remember(filtered) { filtered.groupBy { it.first.studentId }.filter { (_, l) -> l.size >= 2 && l.all { it.first.status == AttendanceStatus.ABSENT } } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

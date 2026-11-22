@@ -300,7 +300,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     operationId = operationId,
                     records = _state.value.attendanceDrafts.values.toList()
                 )
-                val updatedData = repository.load()
+                // Mise à jour locale avec la feuille renvoyée par le serveur : pas de rechargement complet.
+                val current = _state.value.data
+                val updatedData = if (current != null && sheet.records.isNotEmpty())
+                    current.copy(attendance = current.attendance.filter { it.sessionId != sessionId } + sheet.records)
+                else repository.load()
                 _state.value = _state.value.copy(
                     loading = false,
                     online = repository.isOnline(),
