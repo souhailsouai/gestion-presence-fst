@@ -153,6 +153,8 @@ import tn.utm.fst.gestionpresence.nativeapp.ui.theme.UphfTheme
 /* ------------------------------------------------------------------ */
 
 private const val S2_START = "2027-01-11"
+/** LPC3 : dernière séance de TP le 26/11/2026, examen le 10/12/2026, pas de LPC3 au S2. */
+private const val LPC3_EXAM = "2026-12-10"
 private val FR = Locale.FRENCH
 
 private fun classOf(groupName: String): String = groupName.replace(Regex("-G\\d+$"), "")
@@ -197,6 +199,8 @@ private fun statusShort(status: AttendanceStatus): String = when (status) {
 
 private fun RepositoryData.className(classId: String): String = classById[classId]?.name ?: "Classe"
 private fun RepositoryData.classNames(): List<String> = classes.map { classOf(it.name) }.distinct().sortedWith(compareBy({ !it.startsWith("MPI") }, { it }))
+/** Vrai si la vue ne contient que la filière LPC3 (aucun S2 pour elle). */
+private fun RepositoryData.onlyLpc3(): Boolean = classes.isNotEmpty() && classes.all { it.name.startsWith("LPC3") }
 private fun RepositoryData.teacher(id: String?): String = id?.let { teacherNames[it] } ?: "—"
 
 /* ------------------------------------------------------------------ */
@@ -827,7 +831,7 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Segmented(listOf("mine" to "Mes séances", "all" to "Toutes"), scope) { scope = it }
-                Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
+                if (!data.onlyLpc3()) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Classe ou groupe (ex. MPI1-B)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 NewSessionForm(state, viewModel)
             }
@@ -1093,6 +1097,13 @@ private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
                     }
                 }
                 if (byDate.isEmpty()) item { EmptyState("Aucune séance S1 pour $cls.") }
+                if (cls.startsWith("LPC3") && inMonth(LPC3_EXAM)) item {
+                    InfoCard(accent = Uphf.Ochre) {
+                        Text("${dayName(LPC3_EXAM)} ${fmt(LPC3_EXAM)}", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
+                        Text("Examen de TP LPC3 (Ondes et Vibrations)", color = Uphf.Ochre, fontWeight = FontWeight.SemiBold)
+                        Text("Dernière séance de TP : jeudi 26/11/2026. Pas de LPC3 au semestre 2.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             } else {
                 val mine = s1.filter { it.teacherId == me }.sortedByDescending { it.sessionDate }
                 items(mine) { s ->
@@ -1554,7 +1565,7 @@ private fun StatsScreen(state: MainUiState) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
+                if (!data.onlyLpc3()) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 ChipRow(listOf("all" to "Toutes") + data.classNames().map { it to it }, cls) { cls = it }
                 ChipRow(listOf("" to "Tous les intervenants") + data.teacherNames.entries.sortedBy { it.value }.map { it.key to shortName(it.value) }, teacher) { teacher = it }
                 ChipRow(listOf("" to "Toutes les manipulations") + (1..6).map { "M$it" to "M$it" }, manip) { manip = it }

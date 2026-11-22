@@ -10,9 +10,10 @@ const SCHEDULE=[
   ['2026-10-05','LPC3-G1'],['2026-10-08','LPC3-G2'],['2026-10-12','LPC3-G3'],
   ['2026-10-19','LPC3-G1'],['2026-10-22','LPC3-G4'],['2026-10-26','LPC3-G3'],['2026-10-29','LPC3-G2'],
   ['2026-11-02','LPC3-G1'],['2026-11-05','LPC3-G4'],['2026-11-09','LPC3-G3'],['2026-11-12','LPC3-G2'],
-  ['2026-11-16','LPC3-G1'],['2026-11-19','LPC3-G4'],['2026-11-23','LPC3-G3'],['2026-11-26','LPC3-G2'],
-  ['2026-11-30','LPC3-G1'],['2026-12-03','LPC3-G4'],['2026-12-07','LPC3-G3'],['2026-12-10','LPC3-G2']
+  ['2026-11-16','LPC3-G1'],['2026-11-19','LPC3-G4'],['2026-11-23','LPC3-G3'],['2026-11-26','LPC3-G2']
 ];
+// Dernière séance de TP le 26/11/2026 ; examen le 10/12/2026 ; pas de LPC3 au S2.
+const EXAM_DATE='2026-12-10';
 const state={classes:[],students:[],sessions:[],attendance:[],selectedSessionId:''};
 let readEpoch=0;
 let inFlight=null;
@@ -204,7 +205,8 @@ function renderPlanning(){
   box.innerHTML='<div class="table-responsive"><table class="table"><thead><tr><th>Groupe</th><th>Jour</th><th>Dates</th></tr></thead><tbody>'+
     ['G1','G2','G3','G4'].map(function(g){
       return '<tr><td><strong>'+g+'</strong></td><td>'+(g==='G1'||g==='G3'?'Lundi':'Jeudi')+'</td><td>'+byGroup[g].join(' · ')+'</td></tr>';
-    }).join('')+'</tbody></table></div>';
+    }).join('')+'</tbody></table></div>'+
+    '<div class="alert alert-info" style="margin-top:8px"><strong>Examen de TP : jeudi '+fmtDate(EXAM_DATE)+'</strong><br>Dernière séance de TP le jeudi 26/11/2026. Pas de LPC3 au semestre 2.</div>';
 }
 
 function renderStudents(){
@@ -429,6 +431,6 @@ function init(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,isOwner:isOwner,syncAccess:syncAccess,refresh:refresh,invalidate:invalidate,isolateGenericUi:isolateGenericUi,addStudent:addLpc3Student,moveStudent:moveLpc3Student,state:state};
-if(typeof module==='object'&&module.exports)module.exports={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE};
+root.V30LPC3={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,EXAM_DATE:EXAM_DATE,isOwner:isOwner,syncAccess:syncAccess,refresh:refresh,invalidate:invalidate,isolateGenericUi:isolateGenericUi,addStudent:addLpc3Student,moveStudent:moveLpc3Student,state:state};
+if(typeof module==='object'&&module.exports)module.exports={OWNER_ID:OWNER_ID,MODULE:MODULE,SCHEDULE:SCHEDULE,EXAM_DATE:EXAM_DATE};
 })(typeof window!=='undefined'?window:globalThis);
