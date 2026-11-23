@@ -10,6 +10,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.scaleIn
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -219,7 +222,7 @@ fun AppRoot(viewModel: MainViewModel = viewModel()) {
                     AppScreen.MFA_ENROLL, AppScreen.MFA_CHALLENGE -> 1
                     else -> 2
                 }
-                AnimatedContent(targetState = kind, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(100)) }, label = "root") { k ->
+                AnimatedContent(targetState = kind, transitionSpec = { (fadeIn(tween(240)) + scaleIn(tween(280), initialScale = 0.98f)) togetherWith fadeOut(tween(120)) }, label = "root") { k ->
                     when (k) {
                         0 -> LoginScreen(state, viewModel)
                         1 -> MfaScreen(state, viewModel)
@@ -475,6 +478,8 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
     val scoped = remember(full, module) { full?.forModule(module) }
     val state = remember(fullState, scoped) { fullState.copy(data = scoped) }
     val current = tabOf(state.screen)
+    // Geste « retour » d'Android : revient à l'écran précédent de l'application au lieu de la fermer.
+    BackHandler(enabled = state.screen != AppScreen.HOME) { viewModel.navigate(backOf(state.screen) ?: AppScreen.HOME) }
     Scaffold(
         containerColor = Uphf.Background,
         topBar = { TopBar(state, viewModel, module.takeIf { bothModules }) { module = it } },
@@ -505,7 +510,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
             Notice(state)
             AnimatedContent(
                 targetState = state.screen,
-                transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(80)) },
+                transitionSpec = { Motion.screens(this) },
                 label = "screen"
             ) { screen ->
                 Box(Modifier.fillMaxSize()) {
@@ -601,7 +606,7 @@ private fun ChipRow(options: List<Pair<String, String>>, selected: String, onSel
 private fun InfoCard(modifier: Modifier = Modifier, accent: Color? = null, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val base = modifier.fillMaxWidth()
     Card(
-        modifier = if (onClick != null) base.clickable(onClick = onClick) else base,
+        modifier = if (onClick != null) base.bounceClick(onClick = onClick) else base,
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(10.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line)
@@ -738,10 +743,10 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
         val todayPending = data.pendingS1(me, false).filter { it.plan.date == today() }
         if (todays.isNotEmpty() || todayPending.isNotEmpty()) {
             item { SectionHeader("Aujourd’hui") }
-            items(todayPending, key = { "plan-" + it.slot.id }) { x -> PendingSlotCard(x, data, true, viewModel) }
+            items(todayPending, key = { "plan-" + it.slot.id }) { x -> Box(Modifier.animateItem()) { PendingSlotCard(x, data, true, viewModel) } }
             val examToday = todays.filter { t -> data.lpc3ExamSessions().any { it.id == t.id } }
             if (examToday.isNotEmpty()) item { ExamCard(examToday, data, viewModel) }
-            items(todays - examToday.toSet()) { s -> SessionCard(s, data, viewModel) }
+            items(todays - examToday.toSet(), key = { it.id }) { s -> Box(Modifier.animateItem()) { SessionCard(s, data, viewModel) } }
         }
         if (upcoming.isNotEmpty()) {
             item { SectionHeader("Mes prochains TP (S2)") }
@@ -865,10 +870,11 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
             val pending = data.pendingS1(me, scope == "all", if (state.isAdmin) "" else today()).filter { query.isBlank() || it.groupName.contains(query.trim(), ignoreCase = true) }
             if (pending.isNotEmpty()) {
                 item { SectionHeader("Séances du planning à ouvrir", "Touchez « Faire l’appel » le jour de la séance pour saisir présences et notes.") }
-                items(pending, key = { "plan-" + it.slot.id }) { x -> PendingSlotCard(x, data, state.isAdmin || x.plan.date <= today(), viewModel) }
+                items(pending, key = { "plan-" + it.slot.id }) { x -> Box(Modifier.animateItem()) { PendingSlotCard(x, data, state.isAdmin || x.plan.date <= today(), viewModel) } }
                 item { SectionHeader("Séances ouvertes") }
             }
         }
+        val examIds = data.lpc3ExamSessions().map { it.id }.toSet()
         byDate.forEach { (date, sessions) ->
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
@@ -877,10 +883,9 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
                     Text("${sessions.size} groupe(s)", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            val examIds = data.lpc3ExamSessions().map { it.id }.toSet()
             val (examHere, others) = sessions.partition { it.id in examIds }
             if (examHere.isNotEmpty()) item(key = "exam-$date") { ExamCard(examHere, data, viewModel) }
-            items(others, key = { it.id }) { s -> SessionCard(s, data, viewModel) }
+            items(others, key = { it.id }) { s -> Box(Modifier.animateItem()) { SessionCard(s, data, viewModel) } }
         }
         if (list.isEmpty()) item { EmptyState(if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
         item { Spacer(Modifier.height(24.dp)) }
@@ -981,7 +986,7 @@ private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
             }
             items(students, key = { it.id }) { student ->
                 val draft = state.attendanceDrafts[student.id] ?: AttendanceDraft(student.id)
-                AttendanceRow(student, draft, saved[student.id], viewModel) { makeupFor = it }
+                Box(Modifier.animateItem()) { AttendanceRow(student, draft, saved[student.id], viewModel) { makeupFor = it } }
             }
             if (students.isEmpty()) item { EmptyState("Aucun étudiant dans ce groupe.") }
         }
@@ -1001,7 +1006,7 @@ private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
 @Composable
 private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: AttendanceRecord?, viewModel: MainViewModel, onMakeup: (AttendanceRecord) -> Unit) {
     var expanded by rememberSaveable(student.id) { mutableStateOf(false) }
-    val color = statusColor(draft.status)
+    val color by animateColorAsState(statusColor(draft.status), tween(220), label = "statut")
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.5.dp, color.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Nom complet, en grand, sur toute la largeur (jamais tronqué).
@@ -1019,13 +1024,16 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AttendanceStatus.entries.forEach { st ->
                     val on = draft.status == st
+                    val bg by animateColorAsState(if (on) statusColor(st) else Color.White, tween(200), label = "fond")
+                    val edge by animateColorAsState(if (on) statusColor(st) else Uphf.Line, tween(200), label = "bord")
+                    val ink by animateColorAsState(if (on) Color.White else Uphf.Text, tween(200), label = "texte")
                     Box(
                         Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(10.dp))
-                            .background(if (on) statusColor(st) else Color.White)
-                            .border(1.5.dp, if (on) statusColor(st) else Uphf.Line, RoundedCornerShape(10.dp))
-                            .clickable { viewModel.updateAttendanceStatus(student.id, st) },
+                            .background(bg)
+                            .border(1.5.dp, edge, RoundedCornerShape(10.dp))
+                            .bounceClick { viewModel.updateAttendanceStatus(student.id, st) },
                         contentAlignment = Alignment.Center
-                    ) { Text(st.label, color = if (on) Color.White else Uphf.Text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
+                    ) { Text(st.label, color = ink, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
                 }
             }
             if (saved != null && saved.status == AttendanceStatus.ABSENT && saved.makeupDate == null) {
@@ -1305,7 +1313,7 @@ private fun StudentsScreen(state: MainUiState, viewModel: MainViewModel) {
         }
         items(list.take(300), key = { it.id }) { s ->
             val t = tallies[s.id] ?: tally(emptyList())
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth().clickable { viewModel.openStudent(s.id) }) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth().animateItem().bounceClick { viewModel.openStudent(s.id) }) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(CircleShape).background(Uphf.TealSoft), contentAlignment = Alignment.Center) { Text(initials(s.displayName), color = Uphf.Teal, fontWeight = FontWeight.Bold) }
                     Spacer(Modifier.width(10.dp))
@@ -1692,7 +1700,7 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
             }
         }
         items(entries) { (screen, label, icon) ->
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth().clickable { viewModel.navigate(screen) }) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth().bounceClick { viewModel.navigate(screen) }) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(CircleShape).background(Uphf.TealSoft), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Uphf.Teal) }
                     Spacer(Modifier.width(12.dp))
