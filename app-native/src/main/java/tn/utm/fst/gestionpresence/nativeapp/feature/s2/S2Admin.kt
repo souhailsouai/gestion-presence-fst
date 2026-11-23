@@ -82,7 +82,7 @@ class S2Admin(private val repository: PresenceRepository) {
             val students = async { api.rows(session, "students", "id,last_name,first_name", mapOf("deleted_at" to "is.null"), "id") }
             val st = settings.await()
             S2Snapshot(
-                settings = S2Settings(st?.s("start_date") ?: S2_MIN, st?.s("end_date"), st?.i("group_count") ?: 6, st?.i("manip_count") ?: 6),
+                settings = S2Settings(st?.s("start_date") ?: S2_MIN, st?.s("end_date"), st?.i("group_count") ?: 5, st?.i("manip_count") ?: 5),
                 slots = slots.await().map { ClassSlot(it.s("class_name")!!, it.i("weekday") ?: 1, it.s("start_time")!!.take(5), it.s("end_time")!!.take(5), it.s("pair_key") ?: "", it.i("pair_order") ?: 1, it.s("mode") ?: "alternance", it.b("active") ?: true) }
                     .sortedWith(compareBy({ it.weekday }, { it.pairOrder }, { it.className })),
                 excluded = excluded.await().map { Excluded(it.s("id")!!, it.s("starts_on")!!, it.s("ends_on")!!, it.s("label") ?: "", it.s("kind") ?: "autre", it.s("source") ?: "manuel", it.b("validated") ?: false) },
