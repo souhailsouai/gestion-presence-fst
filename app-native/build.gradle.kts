@@ -1,8 +1,14 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+val releaseProps = Properties().apply {
+    val f = file(System.getenv("PRESENCE_KEYSTORE_PROPS") ?: "../keystore.properties")
+    if (f.exists()) f.inputStream().use { this.load(it) }
 }
 
 android {
@@ -13,13 +19,23 @@ android {
         applicationId = "tn.utm.fst.gestionpresence"
         minSdk = 26
         targetSdk = 35
-        versionCode = 219
-        versionName = "2.12.1"
+        versionCode = 220
+        versionName = "2.13.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"https://dbslzmvzbxczpqyektpx.supabase.co\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_wKwmPnXS_Q7REGU57hTIyw_eqxhIXLT\"")
     }
 
+    // Clé de publication : lue depuis un fichier local jamais versionné (chemin dans PRESENCE_KEYSTORE_PROPS
+    // ou ../keystore.properties). Sans ce fichier (CI), la version « fast » reste signée avec la clé de débogage.
+    signingConfigs {
+        if (releaseProps.getProperty("storeFile") != null) create("publication") {
+            storeFile = file(releaseProps.getProperty("storeFile"))
+            storePassword = releaseProps.getProperty("storePassword")
+            keyAlias = releaseProps.getProperty("keyAlias")
+            keyPassword = releaseProps.getProperty("keyPassword")
+        }
+    }
     buildTypes {
         // Version rapide à installer directement (non débogable, optimisée par ART), signée avec la clé locale.
         create("fast") {
@@ -29,7 +45,7 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             isDebuggable = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("publication") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
     }
