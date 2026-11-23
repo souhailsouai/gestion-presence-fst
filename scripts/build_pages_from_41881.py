@@ -19,6 +19,25 @@ html = html.replace(
     1,
 )
 
+# --- Mode réel uniquement : le mode test / démo est retiré (bascule et boutons).
+# Chaque remplacement doit trouver exactement son texte dans la source verrouillée.
+def _replace_once(text, old, new, label):
+    assert text.count(old) == 1, f'{label}: {text.count(old)} occurrence(s) dans la source'
+    return text.replace(old, new, 1)
+
+html = _replace_once(html,
+    "const {data,error}=await rpc('v18_get_runtime_mode');\n    if(error||!data?.ok)throw error||new Error(data?.message||'Mode indisponible');",
+    "const data={ok:true,mode:'real',changed_at:null,can_manage:false};",
+    'mode réel (refresh)')
+html = _replace_once(html,
+    "if(!adminMode()){box?.remove();return;}\n    if(!box){box=document.createElement('section');box.id='v18-runtime-controls'",
+    "box?.remove();return;\n    if(!box){box=document.createElement('section');box.id='v18-runtime-controls'",
+    'boutons mode V18')
+html = _replace_once(html,
+    "if(!adminMode()){old?.remove();return false;}",
+    "old?.remove();return false;",
+    'boutons mode V17')
+
 # Change display text only, not V30/V31 module names, data attributes or APIs.
 # Apply to the whole source: inline renderers recreate the student/planning
 # headings after navigation, so editing only static heading elements is not enough.
