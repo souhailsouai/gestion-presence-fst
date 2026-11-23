@@ -1,6 +1,6 @@
 {
-  "version": "2.13.0",
-  "notes": "Nouvelle signature de sécurité : cette fois seulement, désinstallez l'ancienne application « Présence FST », puis installez celle-ci (vos données restent sur le serveur). Les administrateurs confirment la connexion avec le code de leur application d'authentification.",
+  "version": "2.13.1",
+  "notes": "Mise à jour pour Android 16 (exigence Google). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois, puis installez celle-ci (vos données restent sur le serveur).",
   "apk": "Presence-FST.apk",
   "size": 3200291
 }

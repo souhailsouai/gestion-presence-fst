@@ -13,14 +13,14 @@ val releaseProps = Properties().apply {
 
 android {
     namespace = "tn.utm.fst.gestionpresence.nativeapp"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "tn.utm.fst.gestionpresence"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 220
-        versionName = "2.13.0"
+        targetSdk = 36
+        versionCode = 221
+        versionName = "2.13.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"https://dbslzmvzbxczpqyektpx.supabase.co\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_wKwmPnXS_Q7REGU57hTIyw_eqxhIXLT\"")

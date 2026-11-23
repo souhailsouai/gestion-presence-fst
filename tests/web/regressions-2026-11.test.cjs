@@ -3,6 +3,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+const path=require('node:path');
 const C=require('../../web/v33-s2-core.js');
 
 const read=p=>fs.readFileSync(p,'utf8');
@@ -57,4 +58,10 @@ test('Sécurité : la clé de publication Android ne peut pas être versionnée'
   assert.match(gi,/^keystore\.properties$/m);
   assert.match(gi,/^\*\.jks$/m);
   assert.doesNotMatch(read('app-native/build.gradle.kts'),/storePassword\s*=\s*"/);
+});
+
+test('application Android : vise l\'API 36 (exigence Google Play depuis le 31/08/2026)', () => {
+  const g = fs.readFileSync(path.join(__dirname, '..', '..', 'app-native', 'build.gradle.kts'), 'utf8');
+  assert.match(g, /targetSdk = 3[6-9]/);
+  assert.match(g, /compileSdk = 3[6-9]/);
 });
