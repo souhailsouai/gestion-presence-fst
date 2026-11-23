@@ -1,6 +1,6 @@
 {
   "version": "2.13.1",
-  "notes": "Mise à jour pour Android 16 (exigence Google). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois, puis installez celle-ci (vos données restent sur le serveur).",
+  "notes": "Application plus fluide : transitions animées entre les écrans, cartes et boutons qui réagissent au toucher, geste « retour » qui revient à l'écran précédent. Compatible Android 16. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois (vos données restent sur le serveur).",
   "apk": "Presence-FST.apk",
-  "size": 3200291
+  "size": 3216675
 }
