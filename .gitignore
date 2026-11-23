@@ -20,3 +20,8 @@ build/
 app-native/build/
 __pycache__/
 *.pyc
+
+# Clé de publication Android (secrète)
+keystore.properties
+*.jks
+*.keystore

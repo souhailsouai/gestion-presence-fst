@@ -1,6 +1,6 @@
 {
-  "version": "2.12.1",
-  "notes": "S2 : 5 groupes équilibrés, 5 manipulations (M1 à M5), 5 enseignants par jour.",
+  "version": "2.13.0",
+  "notes": "Nouvelle signature de sécurité : cette fois seulement, désinstallez l'ancienne application « Présence FST », puis installez celle-ci (vos données restent sur le serveur). Les administrateurs confirment la connexion avec le code de leur application d'authentification.",
   "apk": "Presence-FST.apk",
   "size": 3200291
 }
