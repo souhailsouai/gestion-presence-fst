@@ -59,7 +59,7 @@
   async function fetchAll(){
     const c=client();if(!c)throw new Error('Connexion indisponible');
     const [settings,manips,slots,stations,members,excluded,sessions,sslots,versions,profiles,students,audit]=await Promise.all([
-      q(c.from('v33_s2_settings').select('*')),q(c.from('v33_s2_manipulations').select('*').order('code')),
+      q(c.from('v33_s2_settings').select('*')),q(c.from('v33_s2_manipulations').select('*').eq('active',true).order('code')),
       q(c.from('v33_s2_class_slots').select('*').order('weekday').order('pair_order')),q(c.from('v33_s2_stations').select('*')),
       q(c.from('v33_s2_group_members').select('*')),q(c.from('v33_s2_excluded_dates').select('*').order('starts_on')),
       q(c.from('v33_s2_sessions').select('*').order('session_date')),q(c.from('v33_s2_slots').select('*')),
@@ -70,7 +70,7 @@
     ]);
     const bySession=new Map();for(const g of sslots){if(!bySession.has(g.session_id))bySession.set(g.session_id,[]);bySession.get(g.session_id).push(g);}
     for(const s of sessions){s.start_time=String(s.start_time).slice(0,5);s.end_time=String(s.end_time).slice(0,5);s.slots=(bySession.get(s.id)||[]).sort((a,b)=>a.group_no-b.group_no);}
-    const st=settings[0]||{start_date:'2027-01-11',group_count:6,manip_count:6,academic_year:'2026/2027'};
+    const st=settings[0]||{start_date:'2027-01-11',group_count:5,manip_count:5,academic_year:'2026/2027'};
     const names=new Map(profiles.map(p=>[p.id,p.full_name||'—']));
     const studentRows=students.map(s=>{const cls=s.classes?.name||'';const m=/^(.*)-G(\d+)$/.exec(cls);return {id:s.id,name:norm((s.last_name||'')+' '+(s.first_name||'')),class_id:s.class_id,class_name:m?m[1]:cls,group_no:m?Number(m[2]):null};}).filter(s=>CLASSES.includes(s.class_name));
     return {settings:st,manips,slots,stations,members,excluded,sessions,versions,profiles,names,students:studentRows,studentById:new Map(studentRows.map(s=>[s.id,s])),audit};
@@ -169,7 +169,7 @@
         ${state.planView==='enseignant'?chips(teachers.map(t=>[t,short(tname(t)),null]),state.planTeacher,'pt','Enseignant'):''}
         <div id="v33-issues" hidden class="v33-card">${errors.concat(warns).concat(infos).map(i=>`<p class="v33-issue ${i.level}">${esc(i.text)}</p>`).join('')||'<p class="v33-issue info">Chaque date respecte le début du S2 et les dates exclues validées, sans enseignant en double.</p>'}</div>
         <div id="v33-plan"></div>`:
-        `<div class="v33-empty"><i class="fas fa-calendar-plus"></i><h4>Aucune séance S2 pour l'instant</h4><p>${admin?'1. Renseignez les <b>enseignants</b> (M1 à M6 pour chaque jour). 2. Vérifiez les <b>dates exclues</b>. 3. Cliquez sur « Générer le planning ».':'Le planning sera visible ici dès qu\'il aura été généré.'}</p></div>`}`;
+        `<div class="v33-empty"><i class="fas fa-calendar-plus"></i><h4>Aucune séance S2 pour l'instant</h4><p>${admin?'1. Renseignez les <b>enseignants</b> (une par manipulation, pour chaque jour). 2. Vérifiez les <b>dates exclues</b>. 3. Cliquez sur « Générer le planning ».':'Le planning sera visible ici dès qu\'il aura été généré.'}</p></div>`}`;
     v.onclick=e=>{
       const pv=e.target.closest('[data-pv]'),pc=e.target.closest('[data-pc]'),pt=e.target.closest('[data-pt]');
       if(pv){state.planView=pv.dataset.pv;return renderView();}

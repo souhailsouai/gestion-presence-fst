@@ -1,6 +1,6 @@
 {
-  "version": "2.12.0",
-  "notes": "Examen LPC3 du 10/12 : un seul appel pour tous les groupes ensemble.",
+  "version": "2.12.1",
+  "notes": "S2 : 5 groupes équilibrés, 5 manipulations (M1 à M5), 5 enseignants par jour.",
   "apk": "Presence-FST.apk",
   "size": 3200291
 }

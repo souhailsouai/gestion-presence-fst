@@ -53,7 +53,7 @@
      kept : séances conservées (verrouillées, ou antérieures à fromDate) ; elles comptent
      dans la rotation et occupent leur date. */
   function generatePlan(input){
-    const settings=Object.assign({group_count:6,manip_count:6,start_date:S2_MIN_DATE,end_date:null},input.settings||{});
+    const settings=Object.assign({group_count:5,manip_count:5,start_date:S2_MIN_DATE,end_date:null},input.settings||{});
     const start=settings.start_date<S2_MIN_DATE?S2_MIN_DATE:settings.start_date;
     const from=input.fromDate&&input.fromDate>start?input.fromDate:start;
     const end=settings.end_date||addDays(start,7*30);
@@ -96,7 +96,7 @@
 
   /* Contrôles du planning complet (séances conservées + générées). */
   function checkPlan(input){
-    const settings=Object.assign({group_count:6,manip_count:6},input.settings||{});
+    const settings=Object.assign({group_count:5,manip_count:5},input.settings||{});
     const ex=excludedMap(input.excluded);
     const issues=[];
     const byClass=new Map();
