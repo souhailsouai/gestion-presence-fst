@@ -21,6 +21,7 @@ puis une ligne dans ce journal.
 | 22/11/2026 | Examen LPC3 : 4 séances le 10/12 (10h00–11h30), appel commun dans l'application | 4 séances | — (ajout) |
 | 23/11/2026 | S2 : 5 groupes équilibrés, 5 manipulations (M6 désactivée), planning brouillon recalculé | 228 membres, 30 séances | `backup_20261122_enseignants_s1.s2_members_v42`, `s2_settings_v42`, version S2 automatique |
 | 23/11/2026 | Sécurité : double authentification obligatoire pour l'administrateur (migration V39) | 1 profil | — |
+| 23/11/2026 | Planning du site (V21) : date du rattrapage MPI1-D fixée au 10/12 ; V21 identique au planning réel | 1 séance | — |
 
 ## Tables protégées sans règle d'accès (voulu)
 
