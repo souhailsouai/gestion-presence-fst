@@ -77,6 +77,7 @@ import tn.utm.fst.gestionpresence.nativeapp.feature.s2.S2Admin
 import tn.utm.fst.gestionpresence.nativeapp.feature.s2.S2Snapshot
 import tn.utm.fst.gestionpresence.nativeapp.feature.s2.S2_MIN
 import tn.utm.fst.gestionpresence.nativeapp.feature.s2.Station
+import tn.utm.fst.gestionpresence.nativeapp.feature.s2.Manip
 import tn.utm.fst.gestionpresence.nativeapp.ui.theme.Uphf
 import java.time.LocalDate
 
@@ -108,7 +109,7 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
     val s = snap
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            AdminTabs(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "planning" to "Générer & PDF"), tab) { tab = it }
+            AdminTabs(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "manips" to "Manipulations", "planning" to "Générer & PDF", "historique" to "Historique"), tab) { tab = it }
         }
         notice?.let { (err, msg) ->
             item {
@@ -132,7 +133,9 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             "dates" -> { item { ImportCalendarButton(::run, viewModel) }; datesTab(s, ::run, viewModel) }
             "groupes" -> groupsTab(s, ::run, viewModel)
             "creneaux" -> item { SlotsEditor(s) { rows -> run("Créneaux enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveSlots(rows); null } } }
-            "postes" -> item { StationsEditor(s) { rows -> run("Enseignants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
+            "postes" -> item { StationsEditor(s, { day -> viewModel.s2.stationsFromS1(day) }) { rows -> run("Enseignants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
+            "manips" -> item { ManipsEditor(s) { rows -> run("Manipulations enregistrées : les PDF et les cahiers reprennent les nouveaux intitulés.", false) { viewModel.s2.saveManips(rows); null } } }
+            "historique" -> item { HistoryPanel(viewModel) }
             else -> {
                 item {
                     SharePanel(s) { key, mode ->
@@ -335,7 +338,9 @@ private fun SlotsEditor(s: S2Snapshot, onSave: (List<ClassSlot>) -> Unit) {
 /* ---------------- Enseignants par jour et manipulation ---------------- */
 
 @Composable
-private fun StationsEditor(s: S2Snapshot, onSave: (List<Station>) -> Unit) {
+private fun StationsEditor(s: S2Snapshot, fromS1: suspend (Int) -> List<Station>, onSave: (List<Station>) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var info by remember { mutableStateOf<String?>(null) }
     val days = s.slots.filter { it.active }.map { it.weekday }.distinct().sorted().ifEmpty { listOf(1, 4, 5) }
     var day by rememberSaveable { mutableStateOf(days.first()) }
     val edits = remember(s) { mutableStateListOf<Station>().apply { addAll(s.stations) } }
@@ -365,8 +370,65 @@ private fun StationsEditor(s: S2Snapshot, onSave: (List<Station>) -> Unit) {
         }
         val dup = edits.filter { it.weekday == day && it.teacherId != null }.groupBy { it.teacherId }.filter { it.value.size > 1 }
         if (dup.isNotEmpty()) Text("Attention : un enseignant est affecté à plusieurs manipulations le ${DAY_LABEL[day]}.", color = Uphf.Bad)
+        info?.let { Text(it, color = Uphf.Teal, style = MaterialTheme.typography.bodySmall) }
+        OutlinedButton(onClick = {
+            scope.launch {
+                info = runCatching { fromS1(day) }.fold({ sug ->
+                    sug.forEach { x -> val cur = edits.firstOrNull { it.weekday == x.weekday && it.code == x.code }; upsert(edits, (cur ?: x).copy(teacherId = x.teacherId)) }
+                    if (sug.isEmpty()) "Rien à reprendre pour ce jour." else "Enseignants du S1 repris pour le ${DAY_LABEL[day]?.lowercase()} : vérifiez puis enregistrez."
+                }, { "Reprise impossible : ${it.message}" })
+            }
+        }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Reprendre ceux du S1") }
         Button(onClick = { onSave(edits.toList()) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Enregistrer les enseignants")
+        }
+    }
+}
+
+/** Onglet « Manipulations » : intitulé (repris dans les PDF et les cahiers), salle par défaut, active. */
+@Composable
+private fun ManipsEditor(s: S2Snapshot, onSave: (List<Manip>) -> Unit) {
+    val edits = remember(s) { mutableStateListOf<Manip>().apply { addAll(s.manips) } }
+    Panel("Manipulations du S2", "Donnez un nom à chaque manipulation : il apparaît dans le planning PDF et le cahier de présence.") {
+        edits.forEachIndexed { i, m ->
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Uphf.TealSoft.copy(alpha = 0.5f)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(m.code, fontWeight = FontWeight.ExtraBold, color = Uphf.Teal, modifier = Modifier.width(40.dp))
+                    OutlinedTextField(m.title.orEmpty(), { edits[i] = m.copy(title = it.take(120)) }, label = { Text("Intitulé") }, placeholder = { Text("ex. Prisme") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(m.room.orEmpty(), { edits[i] = m.copy(room = it.take(40)) }, label = { Text("Salle par défaut") }, singleLine = true, modifier = Modifier.weight(1f))
+                    FilterChip(m.active, { edits[i] = m.copy(active = !m.active) }, label = { Text(if (m.active) "Active" else "Inactive") },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                }
+            }
+        }
+        Button(onClick = { onSave(edits.toList()) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Enregistrer les manipulations")
+        }
+    }
+}
+
+private val ACTION = mapOf("replace_plan" to "Planning généré / recalculé", "save_version" to "Version enregistrée", "restore_version" to "Version restaurée", "init_groups" to "Groupes préparés",
+    "balance" to "Groupes équilibrés", "move_student" to "Étudiant déplacé", "edit_student" to "Étudiant modifié", "reintegrate_student" to "Étudiant réintégré", "stations" to "Enseignants enregistrés",
+    "manips" to "Manipulations enregistrées", "settings" to "Paramètres modifiés", "class_slots" to "Créneaux modifiés", "add_excluded" to "Date exclue ajoutée", "validate_excluded" to "Date validée",
+    "delete_excluded" to "Date supprimée", "import_calendar" to "Calendrier importé")
+
+/** Onglet « Historique » : les 30 dernières actions sur le S2 (site et application). */
+@Composable
+private fun HistoryPanel(viewModel: MainViewModel) {
+    var list by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
+    LaunchedEffect(Unit) { list = runCatching { viewModel.s2.history() }.getOrDefault(emptyList()) }
+    Panel("Historique", "Les 30 dernières modifications du S2.") {
+        val l = list
+        if (l == null) CircularProgressIndicator(color = Uphf.Teal)
+        else if (l.isEmpty()) Text("Rien pour le moment.", color = Uphf.Muted)
+        else l.forEach { (a, at) ->
+            val dt = runCatching { java.time.OffsetDateTime.parse(at).atZoneSameInstant(java.time.ZoneId.systemDefault()) }.getOrNull()
+            Row(Modifier.fillMaxWidth()) {
+                Text(ACTION[a] ?: a, color = Uphf.Title, modifier = Modifier.weight(1f))
+                Text(dt?.let { "%02d/%02d %02d:%02d".format(it.dayOfMonth, it.monthValue, it.hour, it.minute) } ?: "", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
@@ -393,10 +455,18 @@ private fun GenerateTab(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
                 Icon(Icons.Default.AutoFixHigh, null); Spacer(Modifier.width(8.dp)); Text(if (s.sessionCount == 0) "Générer le planning" else "Recalculer à partir de cette date")
             }
         }
-        Panel("Fin du semestre 2") {
-            OutlinedTextField(end, { end = it.trim() }, label = { Text("Dernier jour (AAAA-MM-JJ)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(onClick = { run("Fin du S2 enregistrée.", false) { viewModel.s2.saveSettings(end.ifBlank { null }); null } },
-                enabled = end.isBlank() || runCatching { LocalDate.parse(end); true }.getOrDefault(false), shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Enregistrer") }
+        Panel("Paramètres du semestre 2", "Comme l’onglet « Paramètres » du site. Pensez à recalculer le planning après un changement.") {
+            var start by rememberSaveable { mutableStateOf(s.settings.startDate) }
+            var groups by rememberSaveable { mutableStateOf(s.settings.groupCount.toString()) }
+            var mcount by rememberSaveable { mutableStateOf(s.settings.manipCount.toString()) }
+            OutlinedTextField(start, { start = it.trim() }, label = { Text("Début du S2 (AAAA-MM-JJ, au plus tôt 2027-01-11)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(end, { end = it.trim() }, label = { Text("Dernier jour (AAAA-MM-JJ, facultatif)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(groups, { groups = it.filter(Char::isDigit).take(2) }, label = { Text("Groupes") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(mcount, { mcount = it.filter(Char::isDigit).take(1) }, label = { Text("Manipulations") }, singleLine = true, modifier = Modifier.weight(1f))
+            }
+            OutlinedButton(onClick = { run("Paramètres du S2 enregistrés.", false) { viewModel.s2.saveSettingsFull(start, end.ifBlank { null }, groups.toIntOrNull() ?: 0, mcount.toIntOrNull() ?: 0); null } },
+                shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Enregistrer les paramètres") }
         }
         Panel("Versions", "Revenir à un planning enregistré.") {
             OutlinedButton(onClick = { run("Version enregistrée.", false) { viewModel.s2.saveVersion("Version du ${f(LocalDate.now().toString())} (application)"); null } },

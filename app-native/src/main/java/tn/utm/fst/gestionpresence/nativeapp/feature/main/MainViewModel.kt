@@ -46,7 +46,8 @@ enum class AppScreen {
     ACCOUNTS,
     REPORT_PDF,
     S1_CONFIG,
-    HELP
+    HELP,
+    NOTICES
 }
 
 data class MainUiState(
@@ -447,6 +448,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun endMembership(studentId: String, effectiveTo: String) = mutate("Étudiant rendu inactif à partir du ${effectiveTo.let { it.substring(8, 10) + "/" + it.substring(5, 7) + "/" + it.substring(0, 4) }}.") {
+        repository.endMembership(studentId, effectiveTo)
+    }
+
     fun assignStudent(studentId: String, classId: String, effectiveFrom: String) = mutate("Groupe modifié à partir du ${effectiveFrom.split('-').reversed().joinToString("/")}.") {
         repository.assignStudent(studentId, classId, effectiveFrom)
     }
@@ -502,6 +507,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun adminCreateTeacher(username: String, fullName: String, password: String) = mutate("Compte enseignant créé.") {
         require(username.isNotBlank() && fullName.isNotBlank() && password.length >= 6) { "Données du compte invalides." }
         repository.adminCreateTeacher(username, fullName, password)
+    }
+
+    /** Mêmes règles que le site : 6 chiffres (enseignant) ou 6 à 12 (administrateur), confirmation identique, nouveau ≠ actuel. */
+    fun changeOwnPin(current: String, new: String, confirm: String) = mutate("PIN modifié.") {
+        val rule = if (_state.value.isAdmin) Regex("^\\d{6,12}$") else Regex("^\\d{6}$")
+        val label = if (_state.value.isAdmin) "6 à 12 chiffres" else "exactement 6 chiffres"
+        require(current.matches(rule)) { "Le PIN actuel doit contenir $label." }
+        require(new.matches(rule)) { "Le nouveau PIN doit contenir $label." }
+        require(new != current) { "Le nouveau PIN doit être différent du PIN actuel." }
+        require(new == confirm) { "La confirmation du PIN ne correspond pas." }
+        repository.changeOwnPin(current, new)
     }
 
     fun adminSetPin(pin: String) = mutate("PIN administrateur modifié.") {

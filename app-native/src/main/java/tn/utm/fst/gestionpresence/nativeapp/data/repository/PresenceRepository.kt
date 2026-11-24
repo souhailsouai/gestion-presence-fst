@@ -294,6 +294,19 @@ class PresenceRepository(context: Context) {
         }
     }
 
+    /** « Rendre inactif » (site) : l'étudiant quitte son groupe à partir d'une date ; ses présences passées sont conservées. */
+    suspend fun endMembership(studentId: String, effectiveTo: String) {
+        requireOnline()
+        LocalDate.parse(effectiveTo)
+        val res = api.callRpc(authorizedSession(), "v16_end_student_membership", buildJsonObject {
+            put("p_student_id", studentId); put("p_effective_to", effectiveTo)
+        })
+        (res as? JsonObject)?.let { o ->
+            val ok = (o["ok"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            if (ok == "false") throw ApiException("VALIDATION_ERROR", (o["message"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "Fin d’appartenance refusée.")
+        }
+    }
+
     suspend fun addSession(classId: String, date: String, startTime: String, endTime: String) {
         requireOnline()
         validateTimes(startTime, endTime)
@@ -374,6 +387,20 @@ class PresenceRepository(context: Context) {
             put("password", password)
             put("justification", justification)
         })
+    }
+
+    suspend fun changeOwnPin(current: String, new: String) {
+        requireOnline()
+        try { api.changeOwnPin(authorizedSession(), current, new) }
+        catch (e: ApiException) {
+            throw IllegalStateException(when (e.code) {
+                "INVALID_CURRENT_PIN" -> "PIN actuel incorrect."
+                "SAME_PIN" -> "Le nouveau PIN doit être différent du PIN actuel."
+                "PIN_NOT_CONFIGURED" -> "Aucun PIN n’est configuré pour ce compte. Contactez l’administrateur."
+                "UNAUTHENTICATED" -> "Session expirée. Reconnectez-vous puis réessayez."
+                else -> e.message ?: "Changement de PIN impossible."
+            })
+        }
     }
 
     suspend fun adminSetPin(pin: String): JsonObject {

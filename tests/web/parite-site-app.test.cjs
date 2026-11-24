@@ -1,0 +1,29 @@
+'use strict';
+// Parité site ↔ application : chaque fonction du site doit exister dans l'application Android.
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
+const ROOT=path.join(__dirname,'..','..');
+function readAll(dir,ext,out=[]){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(e.isDirectory())readAll(p,ext,out);else if(p.endsWith(ext))out.push(fs.readFileSync(p,'utf8'));}return out;}
+const site=fs.readdirSync(path.join(ROOT,'web')).filter(f=>f.endsWith('.js')).map(f=>fs.readFileSync(path.join(ROOT,'web',f),'utf8')).join('\n')+fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
+const app=readAll(path.join(ROOT,'app-native','src','main','java'),'.kt').join('\n');
+const FEATURES=[
+  ['Bilan S1 (absences en couleur)','Bilan S1 (absences en couleur)'],
+  ['Cahier','Tous les cahiers'],
+  ['Comme au S1','Comme au S1'],
+  ['Reprendre ceux du S1','Reprendre ceux du S1'],
+  ['Modifier les avis','Avis officiels (modifier)'],
+  ['Manipulations enregistrées','Enregistrer les manipulations'],
+  ['Équilibrer','Équilibrer'],
+  ['Réintégrer','Réintégrer'],
+  ['Restaurer','Restaurer'],
+  ['Rattrapé','Rattrapé'],
+  ['v16_end_student_membership','v16_end_student_membership'],
+  ['change-pin','change-pin'],
+  ['generateStatisticsPdf','StatsPdf'],
+  ['v37_s2_auto_replan','v37_s2_auto_replan'],
+];
+for(const [s,a] of FEATURES){
+  test(`parité : « ${s} » existe sur le site et dans l'application`,()=>{
+    assert.ok(site.includes(s),`site : ${s}`);
+    assert.ok(app.includes(a),`application : ${a}`);
+  });
+}

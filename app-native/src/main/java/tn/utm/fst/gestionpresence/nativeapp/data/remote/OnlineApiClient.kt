@@ -512,6 +512,16 @@ class OnlineApiClient(
         return response.requireObject()
     }
 
+    /** « Changer mon PIN » (même fonction serveur que le site : change-pin). */
+    suspend fun changeOwnPin(session: AuthSession, current: String, new: String): JsonObject {
+        val response = http.post("$baseUrl/functions/v1/change-pin") {
+            authenticatedHeaders(session)
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("current_pin", current); put("new_pin", new) })
+        }
+        return response.requireObject()
+    }
+
     fun assuranceLevel(session: AuthSession): String = jwtClaim(session.accessToken, "aal") ?: "aal1"
 
     private suspend fun getArray(session: AuthSession, table: String, select: String): JsonArray {

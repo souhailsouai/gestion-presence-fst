@@ -20,6 +20,8 @@ import java.util.UUID
 
 data class TeacherAccount(val id: String, val fullName: String, val username: String, val email: String, val role: String, val state: String)
 data class Notice(val title: String, val body: String)
+/** Avis officiel complet (édition administrateur, comme « Modifier les avis » du site). */
+data class NoticeRow(val id: String?, val cycleId: String?, val title: String, val body: String, val startsOn: String?, val endsOn: String?, val active: Boolean, val sortOrder: Int)
 data class ImportRow(val lastName: String, val firstName: String, val email: String?, val classLabel: String)
 
 private fun JsonObject.s(k: String): String? = (this[k] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
@@ -119,6 +121,31 @@ class AdminTools(private val repository: PresenceRepository) {
                 .map { Notice(it.s("title") ?: "Avis", it.s("body").orEmpty()) }
         }.getOrDefault(emptyList())
     }
+
+    suspend fun allNotices(): List<NoticeRow> = repository.online { api, session ->
+        api.rows(session, "v21_notices", "id,cycle_id,title,body,starts_on,ends_on,active,sort_order", order = "sort_order").map {
+            NoticeRow(it.s("id"), it.s("cycle_id"), it.s("title").orEmpty(), it.s("body").orEmpty(), it.s("starts_on"), it.s("ends_on"), it.s("active") != "false", it.s("sort_order")?.toIntOrNull() ?: 0)
+        }
+    }
+
+    /** Enregistre un avis (création si id vide). Les dates vides = sans limite. */
+    suspend fun saveNotice(n: NoticeRow, fallbackCycleId: String?) = repository.online { api, session ->
+        require(n.title.isNotBlank()) { "L’avis doit avoir un titre." }
+        require(n.startsOn == null || n.endsOn == null || n.endsOn >= n.startsOn) { "La date de fin précède la date de début." }
+        val body = buildJsonObject {
+            put("title", JsonPrimitive(n.title.trim())); put("body", JsonPrimitive(n.body))
+            put("starts_on", n.startsOn?.let { JsonPrimitive(it) } ?: JsonNull); put("ends_on", n.endsOn?.let { JsonPrimitive(it) } ?: JsonNull)
+            put("active", JsonPrimitive(n.active)); put("sort_order", JsonPrimitive(n.sortOrder))
+            put("updated_at", JsonPrimitive(java.time.OffsetDateTime.now().toString()))
+        }
+        if (n.id != null) api.patchRows(session, "v21_notices", mapOf("id" to "eq.${n.id}"), body)
+        else {
+            val cycle = n.cycleId ?: fallbackCycleId ?: throw IllegalStateException("Cycle des avis introuvable.")
+            api.insertRows(session, "v21_notices", JsonArray(listOf(JsonObject(body + ("cycle_id" to JsonPrimitive(cycle))))))
+        }
+    }
+
+    suspend fun deleteNotice(id: String) = repository.online { api, session -> api.deleteWhere(session, "v21_notices", mapOf("id" to "eq.$id")) }
 
     /** Sauvegarde complète (JSON), comme le bouton du site. */
     suspend fun exportJson(context: Context): File = repository.online { api, session ->

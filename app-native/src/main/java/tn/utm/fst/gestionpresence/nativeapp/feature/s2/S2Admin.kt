@@ -159,6 +159,65 @@ class S2Admin(private val repository: PresenceRepository) {
         audit(api, session, "settings", buildJsonObject { put("end_date", endDate ?: ""); put("source", "android") })
     }
 
+    /** Manipulations : intitulé, salle par défaut, active (onglet « Manipulations » du site). */
+    suspend fun saveManips(list: List<Manip>) = repository.online { api, session ->
+        api.upsertRows(session, "v33_s2_manipulations", buildJsonArray {
+            list.forEach { m ->
+                add(buildJsonObject {
+                    put("code", m.code)
+                    if (m.title.isNullOrBlank()) put("title", JsonNull) else put("title", m.title.trim().take(120))
+                    if (m.room.isNullOrBlank()) put("room", JsonNull) else put("room", m.room.trim().take(40))
+                    put("active", m.active); put("updated_at", java.time.Instant.now().toString())
+                })
+            }
+        }, "code")
+        audit(api, session, "manips", buildJsonObject { put("source", "android") })
+    }
+
+    /** Paramètres complets du S2 (début, fin, nombre de groupes et de manipulations), mêmes contrôles que le site. */
+    suspend fun saveSettingsFull(start: String, endDate: String?, groups: Int, manips: Int) = repository.online { api, session ->
+        LocalDate.parse(start); endDate?.let { LocalDate.parse(it) }
+        require(start >= "2027-01-11") { "Le S2 ne peut pas commencer avant le 11/01/2027." }
+        require(endDate == null || endDate > start) { "La fin du S2 précède son début." }
+        require(groups in 1..12 && manips in 1..9) { "Groupes : 1 à 12 ; manipulations : 1 à 9." }
+        api.patchRows(session, "v33_s2_settings", mapOf("id" to "eq.1"), buildJsonObject {
+            put("start_date", start); if (endDate == null) put("end_date", JsonNull) else put("end_date", endDate)
+            put("group_count", groups); put("manip_count", manips); put("updated_at", java.time.Instant.now().toString())
+        })
+        audit(api, session, "settings", buildJsonObject { put("start_date", start); put("end_date", endDate ?: ""); put("group_count", groups); put("manip_count", manips); put("source", "android") })
+    }
+
+    /** « Reprendre ceux du S1 » : pour chaque manipulation du jour, l'enseignant qui l'a le plus souvent encadrée au S1 (même règle que le site). */
+    suspend fun stationsFromS1(weekday: Int): List<Station> = repository.online { api, session ->
+        val rows = api.rows(session, "sessions", "session_date,teacher_id,classes(name)",
+            mapOf("and" to "(session_date.gte.2026-09-01,session_date.lte.2026-11-22)", "deleted_at" to "is.null"), order = "id")
+        data class R(val cls: String, val g: Int, val date: String, val teacher: String)
+        val list = rows.mapNotNull { r ->
+            val name = (r["classes"] as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val m = Regex("^(.*)-G(\\d+)$").find(name) ?: return@mapNotNull null
+            val t = r["teacher_id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            R(m.groupValues[1], m.groupValues[2].toInt(), r["session_date"]!!.jsonPrimitive.content, t)
+        }
+        val votes = mutableMapOf<Triple<Int, String, String>, Int>()
+        list.groupBy { it.cls }.forEach { (_, l) ->
+            val dates = l.map { it.date }.distinct().sorted()
+            l.forEach { x ->
+                val occ = dates.indexOf(x.date) + 1
+                val code = "M" + (((x.g - 1) + (occ - 1)) % 6 + 1)
+                val k = Triple(LocalDate.parse(x.date).dayOfWeek.value, code, x.teacher)
+                votes[k] = (votes[k] ?: 0) + 1
+            }
+        }
+        votes.entries.filter { it.key.first == weekday }.groupBy { it.key.second }
+            .map { (code, e) -> val best = e.maxBy { it.value }; Station(weekday, code, best.key.third, null) }
+    }
+
+    /** Historique des actions sur le S2 (30 dernières), comme l'onglet « Versions » du site. */
+    suspend fun history(): List<Pair<String, String>> = repository.online { api, session ->
+        api.rows(session, "v33_s2_audit", "action,created_at", order = "created_at.desc").take(30)
+            .map { (it["action"]?.jsonPrimitive?.contentOrNull ?: "") to (it["created_at"]?.jsonPrimitive?.contentOrNull ?: "") }
+    }
+
     /** Génère (force) ou recalcule le planning côté serveur, à partir d'une date. */
     suspend fun replan(from: String, force: Boolean): String = repository.online { api, session ->
         val res = api.callRpc(session, "v37_s2_auto_replan", buildJsonObject {
