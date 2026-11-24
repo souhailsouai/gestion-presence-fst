@@ -328,7 +328,8 @@
       for(let g=0;g<G;g++){box(X+c0+c1+g*cw,y,cw,9,[221,235,247]);doc.text('G'+(g+1),X+c0+c1+g*cw+cw/2,y+6,{align:'center'});}y+=9;
       box(X,y,c0,8);doc.setFontSize(8.5);doc.text(slot?`${slot.start_time.slice(0,5).replace(':','H')} - ${slot.end_time.slice(0,5).replace(':','H')}`:'',X+c0/2,y+5.5,{align:'center'});if(multi)box(X+c0,y,c1,8);for(let g=0;g<G;g++)box(X+c0+c1+g*cw,y,cw,8);y+=8;
       const legend=(d.manips||[]).filter(m=>m.title&&!/[^\u0000-\u024F\u2000-\u206F]/.test(m.title)).map(m=>`${m.code} : ${m.title}`).join('    ·    ');
-      const rh=Math.min(17,(195-y-10-(legend?6:0))/Math.max(rows.length,1));doc.setFontSize(10);
+      const recap=slot?(d.manips||[]).filter(m=>m.active!==false).map(m=>{const st=(d.stations||[]).find(x=>x.weekday===slot.weekday&&x.manipulation_code===m.code);return st&&st.teacher_id?`${m.code} : ${tname(st.teacher_id)}`:null;}).filter(Boolean).join('    ·    '):'';
+      const rh=Math.min(17,(195-y-10-(legend?6:0)-(recap?6:0))/Math.max(rows.length,1));doc.setFontSize(10);
       for(const r of rows){
         if(r.ex){box(X,y,c0,rh,[252,229,180]);box(X+c0,y,W-c0,rh,[252,229,180]);doc.setFontSize(10);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.6,{align:'center'});doc.setTextColor(190,0,0);doc.text(`${r.ex} - aucun TP`,X+c0+(W-c0)/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(20);}
         else{const tint=multi?TINT[names.indexOf(r.s.class_name)%TINT.length]:null;
@@ -343,6 +344,7 @@
       const foot=names.map(n=>{const l=lastOf(n);return l?`${n} : dernière séance ${C().DAY_LABEL[C().weekdayOf(l)].toLowerCase()} ${C().fmt(l)}`:null;}).filter(Boolean).join('   ·   ');
       box(X,y,W,8,[230,230,230]);doc.setFont('helvetica','italic');doc.setFontSize(8);doc.text(`Planning arrêté au ${C().fmt(C().addDays(b,1))} - ${foot}`,X+W/2,y+5.3,{align:'center'});doc.setFont('helvetica','bold');
       if(legend){y+=8;box(X,y,W,6,[243,241,234]);doc.setFontSize(8.5);doc.setTextColor(20);doc.text(legend,X+W/2,y+4.1,{align:'center',maxWidth:W-4});}
+      if(recap){y+=legend?6:8;box(X,y,W,6,[221,235,247]);doc.setFontSize(8.5);doc.setTextColor(20);doc.text(`Intervenants du ${(C().DAY_LABEL[slot.weekday]||'').toLowerCase()} : ${recap}`,X+W/2,y+4.1,{align:'center',maxWidth:W-4});}
     }
     if(first){toast('Aucune séance à exporter.','err');return;}
     doc.save(pages.length===1?`Planning_${pages[0].list.map(c=>c.class_name).join('_')}_TP_Physique_S2.pdf`:'Planning_TP_Physique_S2.pdf');
@@ -519,6 +521,28 @@
   }
 
   /* ----- Enseignants : un jour à la fois, un enseignant par manipulation ----- */
+  /* Récapitulatif « Intervenants par jour » (comme au S1) : une ligne par enseignant, une colonne par jour, sa manipulation. */
+  function recapTable(d,days,profs,admin){
+    const act=d.manips.filter(m=>m.active!==false);
+    const codeOf=(t,w)=>(d.stations.find(s=>s.weekday===w&&s.teacher_id===t)||{}).manipulation_code||'';
+    const rows=profs.filter(p=>admin||days.some(w=>codeOf(p.id,w)));
+    const cell=(p,w)=>{const c=codeOf(p.id,w);return admin?`<select data-rt="${p.id}" data-rw="${w}" aria-label="${esc(p.full_name)} — ${C().DAY_LABEL[w]}"><option value="">—</option>${act.map(m=>`<option value="${m.code}" ${m.code===c?'selected':''}>${m.code}</option>`).join('')}</select>`:(c?`<span class="v33-m">${c}</span>`:'—');};
+    const missing=days.flatMap(w=>act.filter(m=>!d.stations.some(s=>s.weekday===w&&s.manipulation_code===m.code&&s.teacher_id)).map(m=>`${C().DAY_LABEL[w]} ${m.code}`));
+    return `<section class="v33-card v33-recap"><h4 class="v33-h">Intervenants par jour</h4><p class="v33-muted">Comme au S1 : la manipulation de chaque enseignant, jour par jour.${missing.length?` <b>Sans enseignant :</b> ${missing.join(', ')}.`:' Toutes les manipulations ont un enseignant.'}</p>
+      <div class="table-responsive"><table class="table v33-recap-t"><thead><tr><th>Intervenant</th>${days.map(w=>`<th>${C().DAY_LABEL[w]}</th>`).join('')}</tr></thead><tbody>${rows.map(p=>`<tr><td>${esc(p.full_name)}</td>${days.map(w=>`<td>${cell(p,w)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${days.length+1}">Aucun intervenant.</td></tr>`}</tbody></table></div>
+      ${admin?'<div class="v33-row"><button type="button" class="btn btn-primary v33-btn" data-recap><i class="fas fa-floppy-disk"></i> Enregistrer les intervenants</button></div>':''}</section>`;
+  }
+  async function saveRecap(v,d,days){
+    const act=d.manips.filter(m=>m.active!==false),rows=[],errs=[];
+    for(const w of days){
+      const pick=[...v.querySelectorAll(`select[data-rw="${w}"]`)].filter(x=>x.value).map(x=>({t:x.dataset.rt,c:x.value}));
+      for(const m of act){const who=pick.filter(x=>x.c===m.code);if(who.length>1)errs.push(`${C().DAY_LABEL[w]} ${m.code} : ${who.length} enseignants`);
+        const old=d.stations.find(s=>s.weekday===w&&s.manipulation_code===m.code)||{};
+        rows.push({weekday:w,manipulation_code:m.code,teacher_id:who[0]?.t||null,room:old.room||null,updated_at:new Date().toISOString()});}
+    }
+    if(errs.length){toast('Une manipulation ne peut avoir qu\'un enseignant par jour : '+errs.join(' · '),'err');return;}
+    return mutate('Intervenants enregistrés. Pensez à recalculer le planning.',()=>{d.stations=d.stations.filter(s=>!days.includes(s.weekday)).concat(rows);},async()=>{await q(client().from('v33_s2_stations').upsert(rows,{onConflict:'weekday,manipulation_code'}).select('weekday'));audit('stations',{recap:true});});
+  }
   function viewTeachers(v,d,admin){
     const days=[...new Set(d.slots.filter(s=>s.active).map(s=>s.weekday))].sort();
     if(!days.includes(state.teacherDay))state.teacherDay=days[0];
@@ -528,10 +552,12 @@
       ${chips(days.map(x=>[String(x),C().DAY_LABEL[x],d.slots.filter(s=>s.weekday===x).map(s=>s.class_name).join(' · ')]),String(w),'day','Jour')}
       <div class="v33-stations">${d.manips.map(m=>{const s=get(m.code);return `<section class="v33-card v33-station ${s.teacher_id?'set':''}"><header><span class="v33-m big">${m.code}</span><div><b>${esc(m.title||'Manipulation '+m.code.slice(1))}</b><small>Salle ${esc(s.room||m.room||'—')}</small></div></header>
         ${admin?`<select data-c="${m.code}" aria-label="Enseignant ${m.code}"><option value="">— Choisir l'enseignant —</option>${profs.map(p=>`<option value="${p.id}" ${p.id===s.teacher_id?'selected':''}>${esc(p.full_name)}</option>`).join('')}</select><input data-r="${m.code}" value="${esc(s.room||'')}" placeholder="Salle (par défaut ${esc(m.room||'—')})" maxlength="40" aria-label="Salle ${m.code}">`:`<p class="v33-who">${esc(tname(s.teacher_id))}</p>`}</section>`;}).join('')}</div>
-      ${admin?`<div class="v33-row v33-sticky"><button type="button" class="btn btn-primary v33-btn" data-save><i class="fas fa-floppy-disk"></i> Enregistrer le ${C().DAY_LABEL[w].toLowerCase()}</button><button type="button" class="btn v33-btn ghost" data-s1><i class="fas fa-clone"></i> Reprendre ceux du S1</button></div>`:''}`;
+      ${admin?`<div class="v33-row v33-sticky"><button type="button" class="btn btn-primary v33-btn" data-save><i class="fas fa-floppy-disk"></i> Enregistrer le ${C().DAY_LABEL[w].toLowerCase()}</button><button type="button" class="btn v33-btn ghost" data-s1><i class="fas fa-clone"></i> Reprendre ceux du S1</button></div>`:''}
+      ${recapTable(d,days,profs,admin)}`;
     v.onchange=e=>{const sel=e.target.closest('select[data-c]');if(sel)sel.closest('.v33-station').classList.toggle('set',!!sel.value);};
     v.onclick=async e=>{
       const day=e.target.closest('[data-day]');if(day){state.teacherDay=Number(day.dataset.day);return renderView();}
+      if(e.target.closest('[data-recap]'))return saveRecap(v,d,days);
       if(e.target.closest('[data-save]')){
         const rows=d.manips.map(m=>({weekday:w,manipulation_code:m.code,teacher_id:v.querySelector(`select[data-c="${m.code}"]`).value||null,room:v.querySelector(`input[data-r="${m.code}"]`).value.trim()||null,updated_at:new Date().toISOString()}));
         const ids=rows.map(r=>r.teacher_id).filter(Boolean);if(new Set(ids).size!==ids.length&&!confirm('Un même enseignant est sur deux manipulations le même jour. Continuer ?'))return;

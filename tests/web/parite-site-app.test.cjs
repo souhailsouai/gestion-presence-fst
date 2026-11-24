@@ -20,6 +20,8 @@ const FEATURES=[
   ['change-pin','change-pin'],
   ['generateStatisticsPdf','StatsPdf'],
   ['v37_s2_auto_replan','v37_s2_auto_replan'],
+  ['Intervenants par jour','Intervenants par jour'],
+  ['Intervenants du','Intervenants du'],
 ];
 for(const [s,a] of FEATURES){
   test(`parité : « ${s} » existe sur le site et dans l'application`,()=>{

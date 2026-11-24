@@ -1,6 +1,6 @@
 {
-  "version": "2.15.0",
-  "notes": "Mêmes fonctions que le site : Bilan S1 en couleur (Exports), PDF des statistiques, modification des avis officiels, onglets Manipulations et Historique du S2, paramètres complets du S2, « Reprendre ceux du S1 » pour les enseignants, « Rendre inactif » un étudiant, « Changer mon PIN ». Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.15.1",
+  "notes": "S2 : tableau « Intervenants par jour » (comme au S1) dans l'onglet Enseignants, et ligne des intervenants du jour en bas de chaque page du planning PDF. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3282215
+  "size": 3282211
 }
