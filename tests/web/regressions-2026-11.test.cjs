@@ -66,3 +66,13 @@ test('application Android : vise l\'API 36 (exigence Google Play depuis le 31/08
   assert.match(g, /targetSdk = 3[6-9]/);
   assert.match(g, /compileSdk = 3[6-9]/);
 });
+
+test('Avis : le site respecte la période d\'affichage (avis S2 à partir du 12/12/2026)',()=>{
+  const js=read('web/v32-notices.js');
+  assert.match(js,/starts_on,ends_on/);
+  assert.match(js,/ph==='actuel'/);
+  const sql=read('supabase/migrations/20261124140000_v42_avis_s2.sql');
+  assert.match(sql,/date '2026-12-12'/);
+  assert.match(sql,/S2 — Démarrage des TP MPI1/);
+  assert.match(sql,/S2 — Démarrage des TP PC1/);
+});

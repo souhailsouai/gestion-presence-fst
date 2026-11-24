@@ -135,6 +135,7 @@ body.app-active{background:var(--fst-canvas)!important}
 .v32-close{border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;color:var(--fst-muted)}
 .v32-edit-row{border:1px solid var(--fst-border);border-radius:12px;padding:10px;margin:10px 0;display:grid;gap:8px}
 .v32-edit-top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.v32-edit-top input[type=text]{flex:1 1 220px}
+.v32-edit-dates{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0}.v32-edit-dates label{display:flex;gap:6px;align-items:center;font-size:.9rem}.v32-edit-dates input{width:auto}
 .v32-check{display:flex;align-items:center;gap:6px;font-size:.9rem;white-space:nowrap}
 .v32-modal-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
 .v32-search{border:0!important;border-radius:16px!important;background:linear-gradient(135deg,#fff,var(--brand-navy-soft))!important;margin-bottom:18px}

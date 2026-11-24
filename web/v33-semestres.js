@@ -327,7 +327,8 @@
       if(multi){box(X+c0,y,c1,9,[221,235,247]);doc.text('Classe',X+c0+c1/2,y+6,{align:'center'});}
       for(let g=0;g<G;g++){box(X+c0+c1+g*cw,y,cw,9,[221,235,247]);doc.text('G'+(g+1),X+c0+c1+g*cw+cw/2,y+6,{align:'center'});}y+=9;
       box(X,y,c0,8);doc.setFontSize(8.5);doc.text(slot?`${slot.start_time.slice(0,5).replace(':','H')} - ${slot.end_time.slice(0,5).replace(':','H')}`:'',X+c0/2,y+5.5,{align:'center'});if(multi)box(X+c0,y,c1,8);for(let g=0;g<G;g++)box(X+c0+c1+g*cw,y,cw,8);y+=8;
-      const rh=Math.min(17,(195-y-10)/Math.max(rows.length,1));doc.setFontSize(10);
+      const legend=(d.manips||[]).filter(m=>m.title&&!/[^\u0000-\u024F\u2000-\u206F]/.test(m.title)).map(m=>`${m.code} : ${m.title}`).join('    ·    ');
+      const rh=Math.min(17,(195-y-10-(legend?6:0))/Math.max(rows.length,1));doc.setFontSize(10);
       for(const r of rows){
         if(r.ex){box(X,y,c0,rh,[252,229,180]);box(X+c0,y,W-c0,rh,[252,229,180]);doc.setFontSize(10);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.6,{align:'center'});doc.setTextColor(190,0,0);doc.text(`${r.ex} - aucun TP`,X+c0+(W-c0)/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(20);}
         else{const tint=multi?TINT[names.indexOf(r.s.class_name)%TINT.length]:null;
@@ -341,6 +342,7 @@
       const lastOf=n=>{const l=list.filter(s=>s.class_name===n);return l.length?l[l.length-1].session_date:null;};
       const foot=names.map(n=>{const l=lastOf(n);return l?`${n} : dernière séance ${C().DAY_LABEL[C().weekdayOf(l)].toLowerCase()} ${C().fmt(l)}`:null;}).filter(Boolean).join('   ·   ');
       box(X,y,W,8,[230,230,230]);doc.setFont('helvetica','italic');doc.setFontSize(8);doc.text(`Planning arrêté au ${C().fmt(C().addDays(b,1))} - ${foot}`,X+W/2,y+5.3,{align:'center'});doc.setFont('helvetica','bold');
+      if(legend){y+=8;box(X,y,W,6,[243,241,234]);doc.setFontSize(8.5);doc.setTextColor(20);doc.text(legend,X+W/2,y+4.1,{align:'center',maxWidth:W-4});}
     }
     if(first){toast('Aucune séance à exporter.','err');return;}
     doc.save(pages.length===1?`Planning_${pages[0].list.map(c=>c.class_name).join('_')}_TP_Physique_S2.pdf`:'Planning_TP_Physique_S2.pdf');

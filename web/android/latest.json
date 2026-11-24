@@ -1,6 +1,6 @@
 {
-  "version": "2.14.0",
-  "notes": "Nouveau : cahier de présence du S2 en PDF (page de garde par jour, puis une page par classe et par groupe, comme le cahier papier). PDF du planning plus lisible. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.14.1",
+  "notes": "Avis du S2 (MPI1 et PC1) affichés à partir du 12/12/2026. Les intitulés des manipulations apparaissent dans le planning PDF et le cahier de présence dès qu'ils sont saisis. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3233063
+  "size": 3233059
 }
