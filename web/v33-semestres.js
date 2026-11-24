@@ -163,7 +163,7 @@
       ${d.sessions.length?`<div class="v33-toolbar">
         <div class="v33-seg" role="tablist" aria-label="Vue">${[['classe','Par classe'],['enseignant','Par enseignant'],['semaine','Par semaine']].map(([k,l])=>`<button type="button" data-pv="${k}" aria-pressed="${k===state.planView}">${l}</button>`).join('')}</div>
         <div class="v33-grow"></div>${status}
-        <button type="button" class="btn v33-btn ghost" data-act="pdf"><i class="fas fa-file-pdf"></i> PDF</button><button type="button" class="btn v33-btn ghost" data-act="pdfall"><i class="fas fa-file-pdf"></i> Toutes</button></div>
+        <button type="button" class="btn v33-btn ghost" data-act="pdf"><i class="fas fa-file-pdf"></i> PDF</button><button type="button" class="btn v33-btn ghost" data-act="pdfall"><i class="fas fa-file-pdf"></i> Toutes</button><button type="button" class="btn v33-btn ghost" data-act="book" title="Cahier de présence du jour de la classe choisie : page de garde puis une page par groupe"><i class="fas fa-book"></i> Cahier</button><button type="button" class="btn v33-btn ghost" data-act="bookall"><i class="fas fa-book"></i> Tous les cahiers</button></div>
         ${monthChips(d)}
         ${state.planView==='classe'?chips(CLASSES.map(c=>[c,c,d.sessions.filter(s=>s.class_name===c).length+' séances']),state.planClass,'pc','Classe'):''}
         ${state.planView==='enseignant'?chips(teachers.map(t=>[t,short(tname(t)),null]),state.planTeacher,'pt','Enseignant'):''}
@@ -196,6 +196,8 @@
     const a=e.target.closest('[data-act]').dataset.act;
     if(a==='pdf')return exportPdf(state.planView==='classe'?[state.planClass]:CLASSES,d);
     if(a==='pdfall')return exportPdf(CLASSES,d);
+    if(a==='book')return exportBook([state.planClass],d);
+    if(a==='bookall')return exportBook(CLASSES,d);
     if(a==='version'){const label=prompt('Nom de la version :','Version du '+new Date().toLocaleDateString('fr-FR'));if(!label)return;
       return mutate('Version enregistrée',null,async()=>{await q(client().rpc('v33_s2_save_version',{p_label:label.slice(0,120)}));state.data.versions=await q(client().from('v33_s2_versions').select('id,label,created_at').order('created_at',{ascending:false}));});}
     if(a==='gen'||a==='regen'){
@@ -318,30 +320,108 @@
       const box=(x,yy,w,h,fill)=>{if(fill){doc.setFillColor(...fill);doc.rect(x,yy,w,h,'FD');}else doc.rect(x,yy,w,h);};
       doc.setDrawColor(40);doc.setLineWidth(0.2);
       const levels=[...new Set(names.map(n=>n.split('-')[0]))].join(' / ');
-      box(X,y,W,8,[243,241,234]);doc.setFont('times','bold');doc.setFontSize(10);doc.setTextColor(20);doc.text(`[${levels}] - [${d.settings.academic_year}] - [SEMESTRE 2]`,X+W/2,y+5.5,{align:'center'});y+=8;
+      box(X,y,W,8,[243,241,234]);doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(20);doc.text(`[${levels}] - [${d.settings.academic_year}] - [SEMESTRE 2]`,X+W/2,y+5.5,{align:'center'});y+=8;
       box(X,y,W,12,[243,241,234]);doc.setFontSize(16);doc.text('PLANNING DES TP DE PHYSIQUE',X+W/2,y+8.3,{align:'center'});y+=12;
       box(X,y,W,9,[255,242,0]);doc.setFontSize(12);doc.text(names.join('  /  ')+(multi?(pg.mode==='bloc'?'   (l\'une après l\'autre, comme au S1)':'   (une semaine sur deux)'):''),X+W/2,y+6.3,{align:'center'});y+=9;
       box(X,y,c0,9);doc.setTextColor(190,0,0);doc.setFontSize(9);doc.text(slot?C().DAY_LABEL[slot.weekday]:'',X+c0/2,y+6,{align:'center'});doc.setTextColor(20);
       if(multi){box(X+c0,y,c1,9,[221,235,247]);doc.text('Classe',X+c0+c1/2,y+6,{align:'center'});}
       for(let g=0;g<G;g++){box(X+c0+c1+g*cw,y,cw,9,[221,235,247]);doc.text('G'+(g+1),X+c0+c1+g*cw+cw/2,y+6,{align:'center'});}y+=9;
       box(X,y,c0,8);doc.setFontSize(8.5);doc.text(slot?`${slot.start_time.slice(0,5).replace(':','H')} - ${slot.end_time.slice(0,5).replace(':','H')}`:'',X+c0/2,y+5.5,{align:'center'});if(multi)box(X+c0,y,c1,8);for(let g=0;g<G;g++)box(X+c0+c1+g*cw,y,cw,8);y+=8;
-      const rh=Math.min(17,(195-y-10)/Math.max(rows.length,1));
+      const rh=Math.min(17,(195-y-10)/Math.max(rows.length,1));doc.setFontSize(10);
       for(const r of rows){
-        if(r.ex){box(X,y,c0,rh,[252,229,180]);box(X+c0,y,W-c0,rh,[252,229,180]);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(190,0,0);doc.text(`${r.ex} - aucun TP`,X+c0+(W-c0)/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(20);}
+        if(r.ex){box(X,y,c0,rh,[252,229,180]);box(X+c0,y,W-c0,rh,[252,229,180]);doc.setFontSize(10);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.6,{align:'center'});doc.setTextColor(190,0,0);doc.text(`${r.ex} - aucun TP`,X+c0+(W-c0)/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(20);}
         else{const tint=multi?TINT[names.indexOf(r.s.class_name)%TINT.length]:null;
-          box(X,y,c0,rh,tint);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.5,{align:'center'});
-          if(multi){box(X+c0,y,c1,rh,tint);doc.text(r.s.class_name,X+c0+c1/2,y+rh/2+1.5,{align:'center'});}
+          box(X,y,c0,rh,tint);doc.setFontSize(10);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.6,{align:'center'});
+          if(multi){box(X+c0,y,c1,rh,tint);doc.text(r.s.class_name,X+c0+c1/2,y+rh/2+1.6,{align:'center'});}doc.setFontSize(9.5);
           doc.setTextColor(31,73,125);
-          for(let g=0;g<G;g++){const x=r.s.slots.find(z=>z.group_no===g+1);box(X+c0+c1+g*cw,y,cw,rh);if(x){doc.text(`${x.manipulation_code}${x.room?' - Salle '+x.room:''}`,X+c0+c1+g*cw+cw/2,y+rh/2,{align:'center'});doc.setFontSize(6.5);doc.setFont('times','normal');doc.text(tname(x.teacher_id),X+c0+c1+g*cw+cw/2,y+rh/2+4,{align:'center'});doc.setFontSize(8.5);doc.setFont('times','bold');}}
+          for(let g=0;g<G;g++){const x=r.s.slots.find(z=>z.group_no===g+1);box(X+c0+c1+g*cw,y,cw,rh);if(x){doc.text(`${x.manipulation_code}${x.room?' - Salle '+x.room:''}`,X+c0+c1+g*cw+cw/2,y+rh/2,{align:'center'});doc.setFontSize(7.5);doc.setFont('helvetica','normal');doc.text(tname(x.teacher_id),X+c0+c1+g*cw+cw/2,y+rh/2+4,{align:'center'});doc.setFontSize(9.5);doc.setFont('helvetica','bold');}}
           doc.setTextColor(20);}
         y+=rh;
       }
       const lastOf=n=>{const l=list.filter(s=>s.class_name===n);return l.length?l[l.length-1].session_date:null;};
       const foot=names.map(n=>{const l=lastOf(n);return l?`${n} : dernière séance ${C().DAY_LABEL[C().weekdayOf(l)].toLowerCase()} ${C().fmt(l)}`:null;}).filter(Boolean).join('   ·   ');
-      box(X,y,W,8,[230,230,230]);doc.setFont('times','italic');doc.setFontSize(8);doc.text(`Planning arrêté au ${C().fmt(C().addDays(b,1))} - ${foot}`,X+W/2,y+5.3,{align:'center'});doc.setFont('times','bold');
+      box(X,y,W,8,[230,230,230]);doc.setFont('helvetica','italic');doc.setFontSize(8);doc.text(`Planning arrêté au ${C().fmt(C().addDays(b,1))} - ${foot}`,X+W/2,y+5.3,{align:'center'});doc.setFont('helvetica','bold');
     }
     if(first){toast('Aucune séance à exporter.','err');return;}
     doc.save(pages.length===1?`Planning_${pages[0].list.map(c=>c.class_name).join('_')}_TP_Physique_S2.pdf`:'Planning_TP_Physique_S2.pdf');
+  }
+
+  /* ----- Cahier de présence (modèle du cahier papier) : page de garde par jour, puis une page par classe et par groupe ----- */
+  const GROUP_RGB=[[61,124,201],[91,154,60],[236,196,64],[232,131,58],[181,72,122],[106,90,205]];
+  const CLASS_RGB=[[207,221,240],[235,207,214],[222,235,210]];
+  const EXKIND={ds:'Semaine des DS',vacances:'Vacances',ferie:'Jour férié',examen:'Examens',autre:'Date exclue'};
+  async function exportBook(classes,d){
+    const jsPDF=root.jspdf?.jsPDF;if(!jsPDF){toast('Le moteur PDF n\'est pas chargé.','err');return;}
+    if(!d.members.some(m=>m.status==='actif')){toast('Préparez d\'abord les groupes du S2 (onglet Groupes).','err');return;}
+    const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const F=C().fmt,G=d.settings.group_count,DAY=C().DAY_LABEL;
+    const latin=t=>!/[^\u0000-ɏ -⁯]/.test(t||'');
+    const exText=e=>{const lab=latin(e.label)&&e.label?e.label:(EXKIND[e.kind]||'Date exclue');return `${lab} : ${e.starts_on===e.ends_on?'le '+F(e.starts_on):'du '+F(e.starts_on)+' au '+F(e.ends_on)} — aucun TP`;};
+    const exList=(d.excluded||[]).filter(e=>e.validated!==false&&e.ends_on>=d.settings.start_date&&(!d.settings.end_date||e.starts_on<=d.settings.end_date)).sort((a,b)=>a.starts_on.localeCompare(b.starts_on));
+    const onDay=(e,wd)=>{for(let x=e.starts_on;x<=e.ends_on;x=C().addDays(x,1))if(C().weekdayOf(x)===wd)return true;return false;};
+    const exShort=e=>{const lab=latin(e.label)&&e.label?e.label:(EXKIND[e.kind]||'Date exclue');const f=x=>F(x).slice(0,5);return `${lab} ${e.starts_on===e.ends_on?F(e.starts_on):f(e.starts_on)+' – '+F(e.ends_on)}`;};
+    const pairs=pairsOf(d),seen=new Set(),books=[];
+    for(const cls of classes){const p=pairs.find(x=>x.list.some(c=>c.class_name===cls));const k=p?p.key:cls;if(seen.has(k))continue;seen.add(k);books.push(p||{key:cls,list:[d.slots.find(s=>s.class_name===cls)||{class_name:cls,weekday:1,start_time:'14:00',end_time:'17:00'}],weekday:1});}
+    books.sort((a,b)=>a.weekday-b.weekday);
+    const W=297,M=14,IW=W-2*M;let first=true;
+    const page=()=>{if(!first)doc.addPage();first=false;};
+    const band=(x,y,w,h,rgb,txt,size,color,bold=true)=>{doc.setFillColor(...rgb);doc.setDrawColor(40);doc.setLineWidth(0.3);doc.rect(x,y,w,h,'FD');if(txt!=null){doc.setFont('helvetica',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(...(color||[30,30,30]));doc.text(String(txt),x+w/2,y+h/2+size*0.13,{align:'center'});}};
+    const hhmm=t=>String(t||'').slice(0,5).replace(':','H');
+    const ink=rgb=>(rgb[0]*0.299+rgb[1]*0.587+rgb[2]*0.114)>165?[30,30,30]:[255,255,255];
+    for(const bk of books){
+      const names=bk.list.map(c=>c.class_name),day=DAY[bk.weekday]||'',slot=bk.list[0];
+      const hours=`${hhmm(slot.start_time)} – ${hhmm(slot.end_time)}`;
+      /* Page de garde */
+      page();let y=22;
+      doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(40);doc.text('UNIVERSITÉ DE TUNIS EL MANAR — FACULTÉ DES SCIENCES DE TUNIS',W/2,y,{align:'center'});y+=7;
+      band(M+12,y,IW-24,11,[243,239,200],'CAHIER DE PRÉSENCE — TRAVAUX PRATIQUES DE PHYSIQUE',15);y+=15;
+      band(M+12,y,IW-24,10,[215,215,215],day.toUpperCase(),16);y+=10;
+      const cw=(IW-24)/names.length;names.forEach((n,i)=>band(M+12+i*cw,y,cw,10,CLASS_RGB[i%CLASS_RGB.length],n,14));y+=18;
+      doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(30);doc.text(`Année universitaire ${d.settings.academic_year||''} — Semestre 2`,W/2,y,{align:'center'});y+=6;
+      doc.setFont('helvetica','normal');doc.text(`Horaire : ${hours} — ${G} groupes par classe`,W/2,y,{align:'center'});y+=4;
+      for(const e of exList){if(!onDay(e,bk.weekday))continue;
+        band(M+12,y,IW-24,7,[244,176,120],exText(e).toUpperCase(),9.5);y+=7.5;}
+      y+=5;band(M+12,y,IW-24,7,[243,239,200],'LÉGENDE DES MANIPULATIONS',10.5);y+=11;
+      doc.setFontSize(9.5);doc.setFont('helvetica','bold');doc.text('Code',M+16,y);doc.text('Intitulé',M+110,y,{align:'center'});doc.text('Salle',W-M-28,y,{align:'center'});y+=1.5;doc.setLineWidth(0.4);doc.line(M+12,y,W-M-12,y);y+=6;
+      for(const m of d.manips){const st=d.stations.find(x=>x.weekday===bk.weekday&&x.manipulation_code===m.code);
+        doc.setFont('helvetica','bold');doc.text(m.code,M+16,y);doc.setFont('helvetica','normal');doc.text(m.title&&latin(m.title)?m.title:'.....................................................................................',M+30,y);
+        doc.text(st?.room?String(st.room):'..................',W-M-28,y,{align:'center'});y+=1.8;doc.setLineWidth(0.2);doc.line(M+12,y,W-M-12,y);y+=6;}
+      y+=4;doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Repérage des groupes',W/2,y,{align:'center'});y+=2.5;
+      const gw=(IW-24)/G;for(let g=0;g<G;g++){const c=GROUP_RGB[g%GROUP_RGB.length];band(M+12+g*gw,y,gw,7,c,'G'+(g+1),10,ink(c));}y+=15;
+      doc.setFont('helvetica','italic');doc.setFontSize(9.5);doc.setTextColor(40);doc.text('Présence / absence à renseigner dans les cases. Manipulations prévues indiquées sous chaque date (à corriger à la main si besoin).',W/2,y,{align:'center'});
+      /* Une page par classe et par groupe */
+      names.forEach((cls,ci)=>{
+        const sess=d.sessions.filter(s=>s.class_name===cls).sort((a,b)=>a.session_date.localeCompare(b.session_date));
+        const cols=Math.max(sess.length+1,6);
+        for(let g=1;g<=G;g++){
+          const stu=d.members.filter(m=>m.class_name===cls&&m.group_no===g&&m.status==='actif').map(m=>d.studentById?.get(m.student_id)?.name||sname(m.student_id)).sort((a,b)=>a.localeCompare(b,'fr'));
+          const nrows=Math.max(12,stu.length+2);
+          page();let y=14;const X=M,Wt=IW;
+          band(X,y,Wt,8,[243,239,200],`CAHIER DE PRÉSENCE — TP PHYSIQUE — ${day.toUpperCase()}`,12);y+=8;
+          const gc=GROUP_RGB[(g-1)%GROUP_RGB.length];band(X,y,Wt*0.57,8,CLASS_RGB[ci%CLASS_RGB.length],`CLASSE ${cls}`,12);band(X+Wt*0.57,y,Wt*0.43,8,gc,`GROUPE G${g}`,12,ink(gc));y+=12;
+          doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.setTextColor(30);doc.text(`Horaire : ${hours}  |  Effectif actuel : ${stu.length}/${nrows}`,W/2,y,{align:'center'});y+=2.5;
+          const cN=10,cName=68,cd=(Wt-cN-cName)/cols,hh=13;
+          const rh=Math.min(10,(186-y-hh)/nrows);
+          doc.setFillColor(243,239,200);doc.setDrawColor(40);doc.setLineWidth(0.5);doc.rect(X,y,Wt,hh,'FD');
+          doc.setLineWidth(0.25);doc.setFontSize(9);doc.text('N°',X+cN/2,y+hh/2+1.3,{align:'center'});doc.text('NOM ET PRÉNOM',X+cN+cName/2,y+hh/2+1.3,{align:'center'});
+          doc.line(X+cN,y,X+cN,y+hh+nrows*rh);doc.line(X+cN+cName,y,X+cN+cName,y+hh+nrows*rh);
+          for(let c=0;c<cols;c++){const x=X+cN+cName+c*cd;if(c)doc.line(x,y,x,y+hh+nrows*rh);const s=sess[c];
+            if(s){const sl=s.slots.find(z=>z.group_no===g);doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.text(F(s.session_date),x+cd/2,y+5,{align:'center'});
+              doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.text(`Manip. : ${sl?sl.manipulation_code:'..........'}`,x+cd/2,y+10,{align:'center'});}
+            else{doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.text('...../...../.......',x+cd/2,y+5,{align:'center'});doc.text('Manip. : ..........',x+cd/2,y+10,{align:'center'});}}
+          y+=hh;
+          for(let r=0;r<nrows;r++){doc.setDrawColor(60);doc.line(X,y+(r+1)*rh,X+Wt,y+(r+1)*rh);doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text(String(r+1),X+cN/2,y+r*rh+rh/2+1.3,{align:'center'});
+            if(stu[r]){doc.setFont('helvetica','normal');doc.setFontSize(stu[r].length>30?8:9.5);doc.text(stu[r].toUpperCase(),X+cN+2,y+r*rh+rh/2+1.3);}}
+          doc.setLineWidth(0.5);doc.setDrawColor(40);doc.rect(X,y-hh,Wt,hh+nrows*rh);y+=nrows*rh+1;
+          const exs=exList.filter(e=>onDay(e,bk.weekday)).map(exShort);
+          if(exs.length){doc.setFont('helvetica','bold');doc.setFontSize(9);const lines=doc.splitTextToSize('Aucun TP : '+exs.join('  ·  '),Wt-6);const bh=2.5+lines.length*4;
+            doc.setFillColor(243,239,200);doc.rect(X,y,Wt,bh,'F');doc.setTextColor(30);doc.text(lines,W/2,y+4.3,{align:'center'});y+=bh;}
+          y+=6;doc.setFont('helvetica','italic');doc.setFontSize(10);doc.text('Signature enseignant : .....................................................',X,y);doc.setFont('helvetica','normal');doc.text('Observations : .....................................................',X+Wt*0.6,y);
+          y+=7;doc.text('.........................................................................................................................................................................................',X,y);
+        }
+      });
+    }
+    doc.save(books.length===1?`Cahier_presence_${(DAY[books[0].weekday]||'').toLowerCase()}_${books[0].list.map(c=>c.class_name).join('_')}_S2.pdf`:'Cahiers_presence_TP_Physique_S2.pdf');
   }
 
   /* ----- Groupes : une classe à la fois, équilibre sur les étudiants présents (actifs) ----- */
@@ -584,5 +664,5 @@
     root.addEventListener('v16:role-changed',()=>{state.data=null;if(isActive())render();});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-  root.V33Semestres={render,reload:()=>{state.data=null;return render();},exportPdf,sync};
+  root.V33Semestres={render,reload:()=>{state.data=null;return render();},exportPdf,exportBook,sync};
 })(typeof window!=='undefined'?window:globalThis);

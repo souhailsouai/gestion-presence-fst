@@ -653,11 +653,20 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
         val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, pagesOf, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount)
         if (file == null) msg = "Aucune séance à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
     }
+    fun book(classes: List<String>) {
+        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.AttendanceBookPdf.build(context, s, plan, classes)
+        if (file == null) msg = "Préparez d’abord les groupes du S2 (onglet Groupes)." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
+    }
     Panel("Exporter le planning en PDF", "Même modèle que le site : une page A4 paysage par jour ; les classes qui alternent sont sur la même feuille.") {
         AdminTabs(S2_CLASSES.map { it to it }, cls) { cls = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { export(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("PDF $cls") }
             OutlinedButton(onClick = { export(S2_CLASSES) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Toutes les classes") }
+        }
+        Text("Cahier de présence : page de garde du jour, puis une page par groupe (modèle du cahier papier).", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { book(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("Cahier $cls") }
+            OutlinedButton(onClick = { book(S2_CLASSES) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Tous les cahiers") }
         }
         msg?.let { Text(it, color = Uphf.Bad) }
     }
