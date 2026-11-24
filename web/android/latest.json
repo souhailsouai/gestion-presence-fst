@@ -1,6 +1,6 @@
 {
-  "version": "2.14.1",
-  "notes": "Avis du S2 (MPI1 et PC1) affichés à partir du 12/12/2026. Les intitulés des manipulations apparaissent dans le planning PDF et le cahier de présence dès qu'ils sont saisis. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.14.2",
+  "notes": "Appel : la note /20 de chaque étudiant est toujours visible et accepte 12,5. Séances : nouveau filtre « Sans note » pour retrouver les séances où des notes manquent. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3233059
+  "size": 3233063
 }

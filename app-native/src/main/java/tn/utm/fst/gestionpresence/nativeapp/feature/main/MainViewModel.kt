@@ -351,7 +351,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     sessionId = sessionId,
                     expectedRevision = _state.value.attendanceRevision,
                     operationId = operationId,
-                    records = _state.value.attendanceDrafts.values.toList()
+                    records = _state.value.attendanceDrafts.values.map { if (it.status == AttendanceStatus.ABSENT) it.copy(grade = null) else it }
                 )
                 // Mise à jour locale avec la feuille renvoyée par le serveur : pas de rechargement complet.
                 val current = _state.value.data
@@ -406,7 +406,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val classId = data.sessions.firstOrNull { it.id == sid }?.classId ?: continue
                     val ids = data.students.filter { it.classId == classId }.map { it.id }.toSet()
                     val sheet = repository.saveAttendance(sessionId = sid, expectedRevision = rev, operationId = UUID.randomUUID().toString(),
-                        records = _state.value.attendanceDrafts.values.filter { it.studentId in ids })
+                        records = _state.value.attendanceDrafts.values.filter { it.studentId in ids }.map { if (it.status == AttendanceStatus.ABSENT) it.copy(grade = null) else it })
                     revisions[sid] = sheet.revision
                     if (sheet.records.isNotEmpty()) data = data.copy(attendance = data.attendance.filter { it.sessionId != sid } + sheet.records)
                 }

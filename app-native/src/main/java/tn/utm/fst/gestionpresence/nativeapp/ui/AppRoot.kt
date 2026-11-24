@@ -9,6 +9,8 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.scaleIn
@@ -813,6 +815,8 @@ private fun SessionCard(s: TeachingSession, data: RepositoryData, viewModel: Mai
                 AnimatedBar(t.rate / 100f, Uphf.rateColor(t.rate), Modifier.weight(1f), 8.dp)
                 Text("  ${t.present + t.late}/${t.total}", color = Uphf.Title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
             }
+            val missing = remember(recs) { recs.count { it.status != AttendanceStatus.ABSENT && it.grade == null } }
+            if (missing > 0) Text("$missing note(s) à saisir", color = Uphf.Ochre, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -851,8 +855,12 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
     var scope by rememberSaveable { mutableStateOf(if (state.isAdmin) "all" else "mine") }
     var sem by rememberSaveable { mutableStateOf(currentSemester()) }
     var query by rememberSaveable { mutableStateOf("") }
-    val list = remember(data, scope, sem, query, me) { data.sessions
+    var noGrade by rememberSaveable { mutableStateOf(false) }
+    // Séances dont l'appel est fait mais où un étudiant présent (ou en retard / justifié) n'a pas encore de note.
+    val missingBySession = remember(data) { data.attendance.filter { it.status != AttendanceStatus.ABSENT && it.grade == null }.groupingBy { it.sessionId }.eachCount() }
+    val list = remember(data, scope, sem, query, me, noGrade) { data.sessions
         .filter { scope == "all" || it.teacherId == me }
+        .filter { !noGrade || (missingBySession[it.id] ?: 0) > 0 }
         .filter { semesterOf(it.sessionDate) == sem }
         .filter { query.isBlank() || data.className(it.classId).contains(query.trim(), ignoreCase = true) }
         .sortedWith(compareByDescending<TeachingSession> { it.sessionDate }.thenBy { data.className(it.classId) }) }
@@ -863,10 +871,17 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
                 Segmented(listOf("mine" to "Mes séances", "all" to "Toutes"), scope) { scope = it }
                 if (!data.onlyLpc3()) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Classe ou groupe (ex. MPI1-B)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                NewSessionForm(state, viewModel)
+                val nNoGrade = remember(data, scope, sem, me) { data.sessions.count { (scope == "all" || it.teacherId == me) && semesterOf(it.sessionDate) == sem && (missingBySession[it.id] ?: 0) > 0 } }
+                FilterChip(
+                    selected = noGrade, onClick = { noGrade = !noGrade },
+                    label = { Text(if (nNoGrade == 0) "Sans note — tout est saisi" else "Sans note ($nNoGrade séance${if (nNoGrade > 1) "s" else ""})") },
+                    leadingIcon = { Icon(if (noGrade) Icons.Default.Check else Icons.Default.EditNote, null, modifier = Modifier.size(18.dp)) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Ochre, selectedLabelColor = Color(0xFF1D1A14), selectedLeadingIconColor = Color(0xFF1D1A14))
+                )
+                if (!noGrade) NewSessionForm(state, viewModel)
             }
         }
-        if (sem == "S1") {
+        if (sem == "S1" && !noGrade) {
             val pending = data.pendingS1(me, scope == "all", if (state.isAdmin) "" else today()).filter { query.isBlank() || it.groupName.contains(query.trim(), ignoreCase = true) }
             if (pending.isNotEmpty()) {
                 item { SectionHeader("Séances du planning à ouvrir", "Touchez « Faire l’appel » le jour de la séance pour saisir présences et notes.") }
@@ -887,7 +902,7 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
             if (examHere.isNotEmpty()) item(key = "exam-$date") { ExamCard(examHere, data, viewModel) }
             items(others, key = { it.id }) { s -> Box(Modifier.animateItem()) { SessionCard(s, data, viewModel) } }
         }
-        if (list.isEmpty()) item { EmptyState(if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
+        if (list.isEmpty()) item { EmptyState(if (noGrade) "Toutes les notes sont saisies." else if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }
@@ -1020,6 +1035,7 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
                     Text(student.firstName, style = MaterialTheme.typography.bodyLarge, color = Uphf.Title)
                     saved?.makeupDate?.let { Text("Rattrapé le ${fmt(it)}", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
                 }
+                Text(if (expanded) "Masquer" else "Commentaire", color = Uphf.Teal, style = MaterialTheme.typography.labelMedium)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AttendanceStatus.entries.forEach { st ->
@@ -1041,16 +1057,39 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
                     Icon(Icons.Default.Replay, null, tint = Uphf.Ochre, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Marquer « Rattrapé »…", color = Uphf.Ochre)
                 }
             }
+            // Note de la séance : toujours visible (sauf absent). Le texte tapé est gardé tel quel,
+            // pour pouvoir écrire « 12,5 » sans que le champ se transforme en « 12.0 » à chaque touche.
+            if (draft.status != AttendanceStatus.ABSENT) {
+                var gradeText by rememberSaveable(student.id) { mutableStateOf(draft.grade?.let(::gradeLabel).orEmpty()) }
+                val parsed = gradeText.replace(',', '.').trim().let { t -> if (t.isEmpty()) null else t.toDoubleOrNull() }
+                val invalid = gradeText.isNotBlank() && (parsed == null || parsed !in 0.0..20.0)
+                OutlinedTextField(
+                    value = gradeText,
+                    onValueChange = { v ->
+                        val clean = v.filter { it.isDigit() || it == ',' || it == '.' }.take(5)
+                        gradeText = clean
+                        val g = clean.replace(',', '.').trim().let { t -> if (t.isEmpty()) "" else t }
+                        val d = g.toDoubleOrNull()
+                        if (g.isEmpty() || (d != null && d in 0.0..20.0)) viewModel.updateAttendanceGrade(student.id, g)
+                    },
+                    label = { Text("Note /20") },
+                    placeholder = { Text("ex. 14,5") },
+                    singleLine = true,
+                    isError = invalid,
+                    supportingText = if (invalid) { { Text("Entre 0 et 20") } } else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             if (expanded) {
                 OutlinedTextField(draft.comment, { viewModel.updateAttendanceComment(student.id, it) }, label = { Text("Commentaire") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    draft.grade?.toString().orEmpty(), { viewModel.updateAttendanceGrade(student.id, it) }, label = { Text("Note /20 (facultative)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }
 }
+
+/** 12.0 → « 12 », 12.5 → « 12,5 ». */
+private fun gradeLabel(g: Double): String = if (g % 1.0 == 0.0) g.toInt().toString() else g.toString().replace('.', ',')
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
