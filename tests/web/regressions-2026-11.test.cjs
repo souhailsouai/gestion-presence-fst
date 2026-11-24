@@ -47,10 +47,11 @@ test('Application : le planning S1 vient du planning réel (session_plans), 6 gr
   assert.match(api,/suspend fun s1Plan[\s\S]{0,1200}"session_plans"/);
 });
 
-test('Sécurité : les pouvoirs administrateur exigent la double authentification (AAL2)',()=>{
-  const sql=read('supabase/migrations/20261123210000_v39_admin_mfa.sql');
-  assert.match(sql,/function public\.current_user_is_admin\(\)[\s\S]*'aal2'/);
-  assert.match(sql,/function private\.is_admin\(\)[\s\S]*'aal2'/);
+test('Connexion : la double authentification est facultative (V41, demande du 24/11/2026)',()=>{
+  const sql=read('supabase/migrations/20261124080000_v41_mfa_facultative.sql');
+  assert.match(sql,/set mfa_required = false/);
+  assert.match(sql,/"optional"/);
+  assert.doesNotMatch(sql,/'aal2'/);
 });
 
 test('Sécurité : la clé de publication Android ne peut pas être versionnée',()=>{
