@@ -40,7 +40,7 @@ object PlanningPdf {
             val fill = Paint().apply { style = Paint.Style.FILL }
             fun txt(size: Float, bold: Boolean = true, color: Int = Color.rgb(20, 20, 20), italic: Boolean = false) = Paint().apply {
                 textSize = size; this.color = color; isAntiAlias = true; textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.SERIF, when { bold && italic -> Typeface.BOLD_ITALIC; bold -> Typeface.BOLD; italic -> Typeface.ITALIC; else -> Typeface.NORMAL })
+                typeface = Typeface.create(Typeface.SANS_SERIF, when { bold && italic -> Typeface.BOLD_ITALIC; bold -> Typeface.BOLD; italic -> Typeface.ITALIC; else -> Typeface.NORMAL })
             }
             fun box(x: Float, y: Float, w: Float, h: Float, rgb: Int? = null) {
                 if (rgb != null) { fill.color = rgb; c.drawRect(x * MM, y * MM, (x + w) * MM, (y + h) * MM, fill) }
@@ -73,17 +73,17 @@ object PlanningPdf {
             rows.forEach { (date, s) ->
                 if (s == null) {
                     box(X, y, c0, rh, Color.rgb(252, 229, 180)); box(X + c0, y, W - c0, rh, Color.rgb(252, 229, 180))
-                    text(S2Admin.fmt(date), X + c0 / 2, y + rh / 2 + 1.5f, txt(8.5f))
-                    text("${excluded[date]} - aucun TP", X + c0 + (W - c0) / 2, y + rh / 2 + 1.5f, txt(8.5f, color = Color.rgb(190, 0, 0)))
+                    text(S2Admin.fmt(date), X + c0 / 2, y + rh / 2 + 1.6f, txt(10f))
+                    text("${excluded[date]} - aucun TP", X + c0 + (W - c0) / 2, y + rh / 2 + 1.6f, txt(10f, color = Color.rgb(190, 0, 0)))
                 } else {
                     val tint = if (multi) tints[names.indexOf(s.className).coerceAtLeast(0) % tints.size] else null
-                    box(X, y, c0, rh, tint); text(S2Admin.fmt(date), X + c0 / 2, y + rh / 2 + 1.5f, txt(8.5f))
-                    if (multi) { box(X + c0, y, c1, rh, tint); text(s.className, X + c0 + c1 / 2, y + rh / 2 + 1.5f, txt(8.5f)) }
+                    box(X, y, c0, rh, tint); text(S2Admin.fmt(date), X + c0 / 2, y + rh / 2 + 1.6f, txt(10f))
+                    if (multi) { box(X + c0, y, c1, rh, tint); text(s.className, X + c0 + c1 / 2, y + rh / 2 + 1.6f, txt(10f)) }
                     for (g in 0 until groupCount) {
                         box(X + c0 + c1 + g * cw, y, cw, rh)
                         s.slots.firstOrNull { it.groupNo == g + 1 }?.let { x ->
-                            text("${x.manipulation}${x.room?.takeIf { it.isNotBlank() }?.let { " - Salle $it" } ?: ""}", X + c0 + c1 + g * cw + cw / 2, y + rh / 2, txt(8.5f, color = Color.rgb(31, 73, 125)))
-                            text(teacherName(x.teacherId), X + c0 + c1 + g * cw + cw / 2, y + rh / 2 + 4f, txt(6.5f, bold = false, color = Color.rgb(31, 73, 125)))
+                            text("${x.manipulation}${x.room?.takeIf { it.isNotBlank() }?.let { " - Salle $it" } ?: ""}", X + c0 + c1 + g * cw + cw / 2, y + rh / 2, txt(9.5f, color = Color.rgb(31, 73, 125)))
+                            text(teacherName(x.teacherId), X + c0 + c1 + g * cw + cw / 2, y + rh / 2 + 4f, txt(7.5f, bold = false, color = Color.rgb(31, 73, 125)))
                         }
                     }
                 }
