@@ -1020,6 +1020,7 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
                     Text(student.firstName, style = MaterialTheme.typography.bodyLarge, color = Uphf.Title)
                     saved?.makeupDate?.let { Text("Rattrapé le ${fmt(it)}", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
                 }
+                Text(if (expanded) "Masquer" else "Commentaire", color = Uphf.Teal, style = MaterialTheme.typography.labelMedium)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AttendanceStatus.entries.forEach { st ->
@@ -1041,16 +1042,39 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
                     Icon(Icons.Default.Replay, null, tint = Uphf.Ochre, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Marquer « Rattrapé »…", color = Uphf.Ochre)
                 }
             }
+            // Note de la séance : toujours visible (sauf absent). Le texte tapé est gardé tel quel,
+            // pour pouvoir écrire « 12,5 » sans que le champ se transforme en « 12.0 » à chaque touche.
+            if (draft.status != AttendanceStatus.ABSENT) {
+                var gradeText by rememberSaveable(student.id) { mutableStateOf(draft.grade?.let(::gradeLabel).orEmpty()) }
+                val parsed = gradeText.replace(',', '.').trim().let { t -> if (t.isEmpty()) null else t.toDoubleOrNull() }
+                val invalid = gradeText.isNotBlank() && (parsed == null || parsed !in 0.0..20.0)
+                OutlinedTextField(
+                    value = gradeText,
+                    onValueChange = { v ->
+                        val clean = v.filter { it.isDigit() || it == ',' || it == '.' }.take(5)
+                        gradeText = clean
+                        val g = clean.replace(',', '.').trim().let { t -> if (t.isEmpty()) "" else t }
+                        val d = g.toDoubleOrNull()
+                        if (g.isEmpty() || (d != null && d in 0.0..20.0)) viewModel.updateAttendanceGrade(student.id, g)
+                    },
+                    label = { Text("Note /20") },
+                    placeholder = { Text("ex. 14,5") },
+                    singleLine = true,
+                    isError = invalid,
+                    supportingText = if (invalid) { { Text("Entre 0 et 20") } } else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             if (expanded) {
                 OutlinedTextField(draft.comment, { viewModel.updateAttendanceComment(student.id, it) }, label = { Text("Commentaire") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    draft.grade?.toString().orEmpty(), { viewModel.updateAttendanceGrade(student.id, it) }, label = { Text("Note /20 (facultative)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }
 }
+
+/** 12.0 → « 12 », 12.5 → « 12,5 ». */
+private fun gradeLabel(g: Double): String = if (g % 1.0 == 0.0) g.toInt().toString() else g.toString().replace('.', ',')
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
