@@ -133,7 +133,17 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             "groupes" -> groupsTab(s, ::run, viewModel)
             "creneaux" -> item { SlotsEditor(s) { rows -> run("Créneaux enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveSlots(rows); null } } }
             "postes" -> item { StationsEditor(s) { rows -> run("Enseignants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
-            else -> { item { PdfPanel(state, s) }; item { GenerateTab(s, ::run, viewModel) } }
+            else -> {
+                item {
+                    SharePanel(s) { key, mode ->
+                        run("Partage enregistré.", true) {
+                            viewModel.s2.saveSlots(s.slots.map { if (it.pairKey == key) it.copy(mode = mode) else it })
+                            if (s.sessionCount > 0) viewModel.s2.replan(s.settings.startDate, force = false) else null
+                        }
+                    }
+                }
+                item { PdfPanel(state, s) }; item { GenerateTab(s, ::run, viewModel) }
+            }
         }
         item { Spacer(Modifier.height(30.dp)) }
     }
@@ -586,6 +596,43 @@ private fun MemberDialog(m: tn.utm.fst.gestionpresence.nativeapp.feature.s2.Memb
     )
 }
 
+/* ---------------- Partage d'un jour entre deux classes ---------------- */
+
+/** Classes actives qui partagent un jour, triées par jour puis par ordre. */
+internal fun sharePairs(s: S2Snapshot): List<Pair<String, List<ClassSlot>>> =
+    s.slots.filter { it.active }.groupBy { it.pairKey }
+        .map { (k, l) -> k to l.sortedWith(compareBy<ClassSlot>({ it.pairOrder }, { it.className })) }
+        .sortedBy { it.second.first().weekday }
+
+@Composable
+private fun SharePanel(s: S2Snapshot, onChoose: (String, String) -> Unit) {
+    val pairs = sharePairs(s).filter { it.second.size > 1 }
+    if (pairs.isEmpty()) return
+    var pending by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+    Panel("Partage des jours entre classes", "Deux classes d’un même jour alternent chaque semaine, ou font toutes leurs séances l’une après l’autre comme au S1. Changer de choix recalcule le planning (sauvegarde faite avant).") {
+        pairs.forEach { (key, l) ->
+            val names = l.map { it.className }; val bloc = l.first().mode == "bloc"
+            Text("${DAY_LABEL[l.first().weekday]} — ${names.joinToString(" et ")}", fontWeight = FontWeight.Bold, color = Uphf.Title)
+            Text(if (bloc) "Toutes les séances de ${names.first()}, puis celles de ${names.drop(1).joinToString()}" else "Une semaine chacune, à tour de rôle", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(!bloc, { if (bloc) pending = Triple(key, "alternance", names.joinToString(" et ")) }, label = { Text("Semaine par semaine") },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                FilterChip(bloc, { if (!bloc) pending = Triple(key, "bloc", names.joinToString(" et ")) }, label = { Text("Comme au S1") },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+            }
+        }
+    }
+    pending?.let { (key, mode, label) ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text(label) },
+            text = { Text((if (mode == "bloc") "Toutes les séances de la première classe, puis celles de la seconde (comme au S1)." else "Une semaine chacune, à tour de rôle.") + "\n\nLe planning sera recalculé à partir du ${f(s.settings.startDate)} ; une sauvegarde est faite avant.") },
+            confirmButton = { TextButton(onClick = { pending = null; onChoose(key, mode) }) { Text("Continuer") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("Annuler") } }
+        )
+    }
+}
+
 /* ---------------- Export PDF ---------------- */
 
 @Composable
@@ -599,11 +646,14 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
             s.excluded.filter { it.validated }.forEach { x -> var d = LocalDate.parse(x.startsOn); while (!d.isAfter(LocalDate.parse(x.endsOn))) { putIfAbsent(d.toString(), x.label); d = d.plusDays(1) } }
         }
         val times = s.slots.associate { it.className to Triple(it.weekday, it.start, it.end) }
+        val pairs = sharePairs(s)
+        val pagesOf = classes.map { c -> pairs.firstOrNull { p -> p.second.any { it.className == c } }?.let { p -> p.second.map { it.className } to p.second.first().mode } ?: (listOf(c) to "alternance") }
+            .distinct().sortedBy { p -> s.slots.firstOrNull { it.className == p.first.first() }?.weekday ?: 9 }
         val names = s.teachers.associate { it.id to it.name }
-        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, classes, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount)
+        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, pagesOf, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount)
         if (file == null) msg = "Aucune séance à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
     }
-    Panel("Exporter le planning en PDF", "Même modèle que le site : une page A4 paysage par classe.") {
+    Panel("Exporter le planning en PDF", "Même modèle que le site : une page A4 paysage par jour ; les classes qui alternent sont sur la même feuille.") {
         AdminTabs(S2_CLASSES.map { it to it }, cls) { cls = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { export(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("PDF $cls") }
