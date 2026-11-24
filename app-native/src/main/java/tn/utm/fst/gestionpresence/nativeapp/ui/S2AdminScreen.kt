@@ -650,7 +650,8 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
         val pagesOf = classes.map { c -> pairs.firstOrNull { p -> p.second.any { it.className == c } }?.let { p -> p.second.map { it.className } to p.second.first().mode } ?: (listOf(c) to "alternance") }
             .distinct().sortedBy { p -> s.slots.firstOrNull { it.className == p.first.first() }?.weekday ?: 9 }
         val names = s.teachers.associate { it.id to it.name }
-        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, pagesOf, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount)
+        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, pagesOf, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount,
+            legend = s.manips.filter { it.active && !it.title.isNullOrBlank() }.joinToString("    ·    ") { "${it.code} : ${it.title}" })
         if (file == null) msg = "Aucune séance à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
     }
     fun book(classes: List<String>) {

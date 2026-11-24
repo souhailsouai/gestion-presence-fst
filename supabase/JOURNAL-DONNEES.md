@@ -30,3 +30,6 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 
 ## 24/11/2026 — V41 : double authentification facultative
 - À la demande de l’administrateur : plus de code à chaque connexion. 1 profil administrateur (mfa_required → false), politique « optional », droits admin sans exigence AAL2. Aucune donnée étudiante modifiée.
+
+## 24/11/2026 — V42 : avis officiels du S2
+- 6 avis S1 sans date de fin : fin d’affichage fixée au 11/12/2026. 4 avis S2 (horaire, démarrage MPI1, démarrage PC1, dates sans TP) visibles du 12/12/2026 au 30/04/2027. Sauvegarde : backup_20261122_enseignants_s1.v21_notices_v42.

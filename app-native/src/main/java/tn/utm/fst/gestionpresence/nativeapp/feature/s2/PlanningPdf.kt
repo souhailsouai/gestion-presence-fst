@@ -24,7 +24,8 @@ object PlanningPdf {
         slotTimes: Map<String, Triple<Int, String, String>>,
         teacherName: (String?) -> String,
         groupCount: Int,
-        academicYear: String = "2026/2027"
+        academicYear: String = "2026/2027",
+        legend: String = ""
     ): File? {
         val doc = PdfDocument()
         var pages = 0
@@ -69,7 +70,7 @@ object PlanningPdf {
             if (multi) box(X + c0, y, c1, 8f)
             for (g in 0 until groupCount) box(X + c0 + c1 + g * cw, y, cw, 8f)
             y += 8f
-            val rh = minOf(17f, (195f - y - 10f) / maxOf(rows.size, 1))
+            val rh = minOf(17f, (195f - y - 10f - (if (legend.isNotBlank()) 6f else 0f)) / maxOf(rows.size, 1))
             rows.forEach { (date, s) ->
                 if (s == null) {
                     box(X, y, c0, rh, Color.rgb(252, 229, 180)); box(X + c0, y, W - c0, rh, Color.rgb(252, 229, 180))
@@ -93,6 +94,7 @@ object PlanningPdf {
             val foot = names.mapNotNull { n -> list.lastOrNull { it.className == n }?.let { LocalDate.parse(it.date) }?.let { l -> "$n : dernière séance ${DAY_LABEL[l.dayOfWeek.value]?.lowercase()} ${S2Admin.fmt(l.toString())}" } }.joinToString("   ·   ")
             box(X, y, W, 8f, Color.rgb(230, 230, 230))
             text("Planning arrêté au ${S2Admin.fmt(lastDate.plusDays(1).toString())} - $foot", X + W / 2, y + 5.3f, txt(8f, bold = false, italic = true))
+            if (legend.isNotBlank()) { y += 8f; box(X, y, W, 6f, Color.rgb(243, 241, 234)); text(legend, X + W / 2, y + 4.1f, txt(8.5f)) }
             doc.finishPage(page)
         }
         if (pages == 0) { doc.close(); return null }
