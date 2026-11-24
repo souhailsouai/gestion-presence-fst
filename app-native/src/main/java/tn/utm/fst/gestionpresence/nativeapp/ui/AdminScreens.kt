@@ -187,9 +187,19 @@ fun NoticesCard(viewModel: MainViewModel) {
             Text("Avis officiels", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
             list.forEach { n ->
                 Text(n.title, fontWeight = FontWeight.Bold, color = Uphf.Title)
-                Text(n.body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim(), color = Uphf.Text, style = MaterialTheme.typography.bodyMedium)
+                Text(noticeText(n.body), color = Uphf.Text, style = MaterialTheme.typography.bodyMedium)
             }
         }
+    }
+}
+
+/** Texte d'un avis : lignes conservées, **gras** comme sur le site, balises HTML retirées. */
+private fun noticeText(body: String) = androidx.compose.ui.text.buildAnnotatedString {
+    val clean = body.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n").replace(Regex("<[^>]+>"), " ").lines().joinToString("\n") { it.replace(Regex("[ \\t]+"), " ").trim() }.trim()
+    var bold = false
+    clean.split("**").forEachIndexed { i, part ->
+        if (i > 0) bold = !bold
+        if (bold) with(this) { val i0 = pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)); append(part); pop(i0) } else append(part)
     }
 }
 
@@ -201,6 +211,23 @@ fun StudentAdminActions(student: Student, viewModel: MainViewModel, onDeleted: (
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { edit = true }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Modifier") }
         OutlinedButton(onClick = { del = true }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Supprimer", color = Uphf.Bad) }
+    }
+    var inactive by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { inactive = true }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Rendre inactif", color = Uphf.Ochre) }
+    if (inactive) {
+        var date by remember { mutableStateOf(LocalDate.now().let { "%02d/%02d/%d".format(it.dayOfMonth, it.monthValue, it.year) }) }
+        var err by remember { mutableStateOf<String?>(null) }
+        AlertDialog(onDismissRequest = { inactive = false }, title = { Text("Rendre l’étudiant inactif") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("L’étudiant quitte son groupe à partir de cette date. Ses présences passées sont conservées (comme « Rendre inactif » sur le site).", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+                OutlinedTextField(date, { date = it }, label = { Text("À partir du (JJ/MM/AAAA)") }, singleLine = true, isError = err != null, supportingText = err?.let { e -> { Text(e) } })
+            } },
+            confirmButton = { TextButton(onClick = {
+                val iso = runCatching { isoDate(date) }.getOrElse { err = it.message; return@TextButton }
+                if (iso == null) { err = "Choisissez une date."; return@TextButton }
+                inactive = false; viewModel.endMembership(student.id, iso)
+            }) { Text("Confirmer") } },
+            dismissButton = { TextButton(onClick = { inactive = false }) { Text("Annuler") } }, containerColor = Color.White)
     }
     if (edit) {
         var last by remember { mutableStateOf(student.lastName) }; var first by remember { mutableStateOf(student.firstName) }; var mail by remember { mutableStateOf(student.email.orEmpty()) }
@@ -325,5 +352,81 @@ fun HelpScreen() {
     )
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items(topics) { (t, b) -> Box(t) { Text(b, color = Uphf.Text) } }
+    }
+}
+
+/* -------- Avis officiels : édition (administrateur), comme « Modifier les avis » du site -------- */
+private fun frDate(iso: String?) = iso?.takeIf { it.length >= 10 }?.let { it.substring(8, 10) + "/" + it.substring(5, 7) + "/" + it.substring(0, 4) }.orEmpty()
+private fun isoDate(fr: String): String? {
+    val t = fr.trim(); if (t.isEmpty()) return null
+    val m = Regex("^(\\d{1,2})/(\\d{1,2})/(\\d{4})$").find(t) ?: throw IllegalArgumentException("Date « $t » : utilisez le format JJ/MM/AAAA.")
+    val (d, mo, y) = m.destructured
+    return runCatching { LocalDate.of(y.toInt(), mo.toInt(), d.toInt()).toString() }.getOrElse { throw IllegalArgumentException("Date « $t » invalide.") }
+}
+
+@Composable
+fun NoticesEditorScreen(viewModel: MainViewModel) {
+    var list by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.admin.NoticeRow>?>(null) }
+    var msg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(reload) { list = runCatching { viewModel.admin.allNotices() }.getOrElse { msg = true to (it.message ?: "Lecture impossible."); emptyList() } }
+    fun act(ok: String, block: suspend () -> Unit) = scope.launch {
+        try { block(); msg = false to ok; reload++ } catch (e: CancellationException) { throw e } catch (e: Exception) { msg = true to (e.message ?: "Échec.") }
+    }
+    val today = LocalDate.now().toString()
+    val cycle = list?.firstNotNullOfOrNull { it.cycleId }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Text("Les avis s’affichent sur l’accueil du site et de l’application pendant leur période (dates vides = sans limite). Mettez un mot entre **deux étoiles** pour l’écrire en gras sur le site.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall) }
+        msg?.let { (e, m) -> item { Text(m, color = if (e) Uphf.Bad else Uphf.Teal, fontWeight = FontWeight.SemiBold) } }
+        val l = list
+        if (l == null) item { CircularProgressIndicator() }
+        else {
+            items(l.size, key = { l[it].id ?: "new-$it" }) { i ->
+                val n = l[i]
+                var title by rememberSaveable(n.id) { mutableStateOf(n.title) }
+                var body by rememberSaveable(n.id) { mutableStateOf(n.body) }
+                var from by rememberSaveable(n.id) { mutableStateOf(frDate(n.startsOn)) }
+                var to by rememberSaveable(n.id) { mutableStateOf(frDate(n.endsOn)) }
+                var visible by rememberSaveable(n.id) { mutableStateOf(n.active) }
+                var del by remember { mutableStateOf(false) }
+                val phase = when { n.startsOn != null && n.startsOn > today -> "programmé (à partir du ${frDate(n.startsOn)})"; n.endsOn != null && n.endsOn < today -> "terminé"; else -> "affiché" }
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(if (n.id == null) "Nouvel avis" else "Avis ${i + 1} — ${if (!n.active) "masqué" else phase}", color = Uphf.Muted, style = MaterialTheme.typography.labelMedium)
+                        OutlinedTextField(title, { title = it }, label = { Text("Titre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(body, { body = it }, label = { Text("Texte") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(from, { from = it }, label = { Text("Visible du") }, placeholder = { Text("JJ/MM/AAAA") }, singleLine = true, modifier = Modifier.weight(1f))
+                            OutlinedTextField(to, { to = it }, label = { Text("au") }, placeholder = { Text("JJ/MM/AAAA") }, singleLine = true, modifier = Modifier.weight(1f))
+                        }
+                        FilterChip(visible, { visible = !visible }, label = { Text(if (visible) "Visible" else "Masqué") })
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(onClick = {
+                                act("Avis enregistré.") {
+                                    viewModel.admin.saveNotice(n.copy(title = title, body = body, startsOn = isoDate(from), endsOn = isoDate(to), active = visible,
+                                        sortOrder = if (n.id == null) ((l.maxOfOrNull { it.sortOrder } ?: 0) + 10) else n.sortOrder), cycle)
+                                }
+                            }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal)) { Text("Enregistrer") }
+                            if (n.id != null && i > 0) OutlinedButton(onClick = {
+                                val p = l[i - 1]; act("Ordre modifié.") { viewModel.admin.saveNotice(n.copy(sortOrder = p.sortOrder), cycle); viewModel.admin.saveNotice(p.copy(sortOrder = n.sortOrder), cycle) }
+                            }, shape = RoundedCornerShape(50)) { Text("↑") }
+                            if (n.id != null && i < l.size - 1 && l[i + 1].id != null) OutlinedButton(onClick = {
+                                val q = l[i + 1]; act("Ordre modifié.") { viewModel.admin.saveNotice(n.copy(sortOrder = q.sortOrder), cycle); viewModel.admin.saveNotice(q.copy(sortOrder = n.sortOrder), cycle) }
+                            }, shape = RoundedCornerShape(50)) { Text("↓") }
+                            if (n.id != null) OutlinedButton(onClick = { del = true }, shape = RoundedCornerShape(50)) { Text("Supprimer", color = Uphf.Bad) }
+                            else OutlinedButton(onClick = { list = l.filter { it !== n } }, shape = RoundedCornerShape(50)) { Text("Annuler") }
+                        }
+                    }
+                }
+                if (del) AlertDialog(onDismissRequest = { del = false }, title = { Text("Supprimer cet avis ?") }, text = { Text(n.title) },
+                    confirmButton = { TextButton(onClick = { del = false; act("Avis supprimé.") { viewModel.admin.deleteNotice(n.id!!) } }) { Text("Supprimer", color = Uphf.Bad) } },
+                    dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Color.White)
+            }
+            item {
+                OutlinedButton(onClick = { list = l + tn.utm.fst.gestionpresence.nativeapp.feature.admin.NoticeRow(null, cycle, "", "", null, null, true, 0) },
+                    shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Ajouter un avis") }
+            }
+        }
     }
 }

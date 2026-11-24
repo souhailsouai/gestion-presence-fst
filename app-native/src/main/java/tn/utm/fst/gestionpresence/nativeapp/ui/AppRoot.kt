@@ -11,6 +11,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.scaleIn
@@ -460,14 +461,14 @@ private val TABS = listOf(
 private fun tabOf(screen: AppScreen): AppScreen = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
-    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT, AppScreen.ACCOUNTS, AppScreen.REPORT_PDF, AppScreen.S1_CONFIG, AppScreen.HELP -> AppScreen.MORE
+    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT, AppScreen.ACCOUNTS, AppScreen.REPORT_PDF, AppScreen.S1_CONFIG, AppScreen.HELP, AppScreen.NOTICES -> AppScreen.MORE
     else -> screen
 }
 
 private fun backOf(screen: AppScreen): AppScreen? = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
-    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT, AppScreen.ACCOUNTS, AppScreen.REPORT_PDF, AppScreen.S1_CONFIG, AppScreen.HELP -> AppScreen.MORE
+    AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT, AppScreen.ACCOUNTS, AppScreen.REPORT_PDF, AppScreen.S1_CONFIG, AppScreen.HELP, AppScreen.NOTICES -> AppScreen.MORE
     else -> null
 }
 
@@ -538,6 +539,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
                         AppScreen.REPORT_PDF -> ReportPdfScreen(state)
                         AppScreen.S1_CONFIG -> S1ConfigScreen(state, viewModel)
                         AppScreen.HELP -> HelpScreen()
+                        AppScreen.NOTICES -> NoticesEditorScreen(viewModel)
                         else -> Unit
                     }
                 }
@@ -1526,6 +1528,15 @@ private fun ExportScreen(state: MainUiState, viewModel: MainViewModel) {
         if (file == null) msg = "Aucune donnée à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.export.TrackingXlsx.share(context, file)
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (families.any { it.startsWith("MPI1") || it.startsWith("PC1") }) {
+            item { SectionHeader("Bilan S1 (absences en couleur)", "Comme sur le site : une feuille par classe, note de chaque manipulation, absences en rouge, justifiées en orange, rattrapées en vert ; synthèse et légende.") }
+            item {
+                Button(onClick = {
+                    val file = runCatching { tn.utm.fst.gestionpresence.nativeapp.feature.export.BilanS1Xlsx.build(context, data) }.getOrElse { msg = "Échec du bilan : ${it.message}"; null }
+                    if (file != null) tn.utm.fst.gestionpresence.nativeapp.feature.export.TrackingXlsx.share(context, file) else if (msg == null) msg = "Aucune donnée du S1."
+                }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Bad), modifier = Modifier.fillMaxWidth()) { Text("Bilan S1 (absences en couleur)") }
+            }
+        }
         item { SectionHeader("Export Excel du suivi des TP", "Une feuille par classe : statut et note de chaque manipulation, présences, absences et pourcentages.") }
         item {
             Button(onClick = { export(families, if (families.any { it.startsWith("LPC") }) "LPC3" else "MPI1_PC1") }, shape = RoundedCornerShape(50),
@@ -1653,6 +1664,12 @@ private fun StatsScreen(state: MainUiState) {
                     OutlinedTextField(from, { from = it.trim().take(10) }, label = { Text("Du (AAAA-MM-JJ)") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(to, { to = it.trim().take(10) }, label = { Text("Au") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
+                val context = LocalContext.current
+                OutlinedButton(onClick = {
+                    val lines = filtered.map { (rec, ses, name) -> tn.utm.fst.gestionpresence.nativeapp.feature.admin.StatsPdf.Line(rec, data.teacherNames[ses.teacherId] ?: "—", name, data.sessionManipulations[ses.id].orEmpty()) }
+                    val sub = listOfNotNull(if (sem == "S1") "semestre 1" else "semestre 2", cls.takeIf { it != "all" }, data.teacherNames[teacher]?.takeIf { teacher.isNotBlank() }, manip.ifBlank { null }).joinToString(" · ")
+                    tn.utm.fst.gestionpresence.nativeapp.feature.admin.StatsPdf.build(context, lines, sub)?.let { tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, it) }
+                }, enabled = filtered.isNotEmpty(), shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("PDF statistiques") }
             }
         }
         if (filtered.isEmpty()) {
@@ -1722,6 +1739,7 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
         add(Triple(AppScreen.EXPORT, "Exports (Excel, sauvegardes)", Icons.Default.Assessment))
         if (state.isAdmin) add(Triple(AppScreen.ACCOUNTS, "Comptes enseignants", Icons.Default.AdminPanelSettings))
         if (state.isAdmin) add(Triple(AppScreen.S1_CONFIG, "Intervenants S1 par jour", Icons.Default.Groups))
+        if (state.isAdmin) add(Triple(AppScreen.NOTICES, "Avis officiels (modifier)", Icons.Default.Campaign))
         add(Triple(AppScreen.HELP, "Aide", Icons.Default.School))
         if (state.isAdmin) add(Triple(AppScreen.SWAP, "Permuter des enseignants", Icons.Default.Groups))
         add(Triple(AppScreen.CLASSES, "Classes et groupes", Icons.Default.Groups))
@@ -1929,6 +1947,17 @@ private fun AdminScreen(state: MainUiState, viewModel: MainViewModel) {
 @Composable
 private fun AccountScreen(state: MainUiState, viewModel: MainViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            var cur by rememberSaveable { mutableStateOf("") }; var nw by rememberSaveable { mutableStateOf("") }; var cf by rememberSaveable { mutableStateOf("") }
+            FormCard("Changer mon PIN") {
+                val digits = { v: String -> v.filter(Char::isDigit).take(12) }
+                OutlinedTextField(cur, { cur = digits(it) }, label = { Text("PIN actuel") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(nw, { nw = digits(it) }, label = { Text(if (state.isAdmin) "Nouveau PIN (6 à 12 chiffres)" else "Nouveau PIN (6 chiffres)") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(cf, { cf = digits(it) }, label = { Text("Confirmer le nouveau PIN") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), singleLine = true, modifier = Modifier.fillMaxWidth())
+                Button(onClick = { viewModel.changeOwnPin(cur, nw, cf); cur = ""; nw = ""; cf = "" }, enabled = state.online && cur.isNotBlank() && nw.isNotBlank() && cf.isNotBlank(),
+                    shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Changer mon PIN") }
+            }
+        }
         item { SectionHeader("Sécurité du compte", "Appareils de double authentification") }
         items(state.factors) { factor ->
             InfoCard {
@@ -1977,6 +2006,7 @@ private fun screenTitle(screen: AppScreen): String = when (screen) {
     AppScreen.REPORT_PDF -> "Rapport PDF"
     AppScreen.S1_CONFIG -> "Intervenants S1"
     AppScreen.HELP -> "Aide"
+    AppScreen.NOTICES -> "Avis officiels"
     AppScreen.STATS -> "Statistiques"
     AppScreen.MORE -> "Plus"
     AppScreen.CLASSES -> "Classes et groupes"
