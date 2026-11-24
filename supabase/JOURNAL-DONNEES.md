@@ -27,3 +27,6 @@ puis une ligne dans ce journal.
 
 `admin_pin_attempts`, `admin_pin_credentials`, `legacy_entity_map`, `super_admin_owner` :
 accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur y accèdent.
+
+## 24/11/2026 — V41 : double authentification facultative
+- À la demande de l’administrateur : plus de code à chaque connexion. 1 profil administrateur (mfa_required → false), politique « optional », droits admin sans exigence AAL2. Aucune donnée étudiante modifiée.
