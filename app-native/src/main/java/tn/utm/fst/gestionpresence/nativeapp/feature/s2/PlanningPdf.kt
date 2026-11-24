@@ -25,7 +25,9 @@ object PlanningPdf {
         teacherName: (String?) -> String,
         groupCount: Int,
         academicYear: String = "2026/2027",
-        legend: String = ""
+        legend: String = "",
+        /** Intervenants par jour (jour ISO 1..7 → « M1 : Nom · M2 : Nom… »), ligne en bas de chaque page. */
+        recapByDay: Map<Int, String> = emptyMap()
     ): File? {
         val doc = PdfDocument()
         var pages = 0
@@ -70,7 +72,8 @@ object PlanningPdf {
             if (multi) box(X + c0, y, c1, 8f)
             for (g in 0 until groupCount) box(X + c0 + c1 + g * cw, y, cw, 8f)
             y += 8f
-            val rh = minOf(17f, (195f - y - 10f - (if (legend.isNotBlank()) 6f else 0f)) / maxOf(rows.size, 1))
+            val recap = slot?.first?.let { recapByDay[it] }.orEmpty()
+            val rh = minOf(17f, (195f - y - 10f - (if (legend.isNotBlank()) 6f else 0f) - (if (recap.isNotBlank()) 6f else 0f)) / maxOf(rows.size, 1))
             rows.forEach { (date, s) ->
                 if (s == null) {
                     box(X, y, c0, rh, Color.rgb(252, 229, 180)); box(X + c0, y, W - c0, rh, Color.rgb(252, 229, 180))
@@ -95,6 +98,7 @@ object PlanningPdf {
             box(X, y, W, 8f, Color.rgb(230, 230, 230))
             text("Planning arrêté au ${S2Admin.fmt(lastDate.plusDays(1).toString())} - $foot", X + W / 2, y + 5.3f, txt(8f, bold = false, italic = true))
             if (legend.isNotBlank()) { y += 8f; box(X, y, W, 6f, Color.rgb(243, 241, 234)); text(legend, X + W / 2, y + 4.1f, txt(8.5f)) }
+            if (recap.isNotBlank()) { y += if (legend.isNotBlank()) 6f else 8f; box(X, y, W, 6f, Color.rgb(221, 235, 247)); text("Intervenants du ${DAY_LABEL[slot!!.first]?.lowercase()} : $recap", X + W / 2, y + 4.1f, txt(8.5f)) }
             doc.finishPage(page)
         }
         if (pages == 0) { doc.close(); return null }

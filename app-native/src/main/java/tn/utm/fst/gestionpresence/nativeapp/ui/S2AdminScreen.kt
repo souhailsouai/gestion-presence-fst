@@ -54,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -133,7 +134,10 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             "dates" -> { item { ImportCalendarButton(::run, viewModel) }; datesTab(s, ::run, viewModel) }
             "groupes" -> groupsTab(s, ::run, viewModel)
             "creneaux" -> item { SlotsEditor(s) { rows -> run("Créneaux enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveSlots(rows); null } } }
-            "postes" -> item { StationsEditor(s, { day -> viewModel.s2.stationsFromS1(day) }) { rows -> run("Enseignants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
+            "postes" -> {
+                item { StationsEditor(s, { day -> viewModel.s2.stationsFromS1(day) }) { rows -> run("Enseignants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
+                item { RecapIntervenants(s) { rows -> run("Intervenants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
+            }
             "manips" -> item { ManipsEditor(s) { rows -> run("Manipulations enregistrées : les PDF et les cahiers reprennent les nouveaux intitulés.", false) { viewModel.s2.saveManips(rows); null } } }
             "historique" -> item { HistoryPanel(viewModel) }
             else -> {
@@ -381,6 +385,54 @@ private fun StationsEditor(s: S2Snapshot, fromS1: suspend (Int) -> List<Station>
         }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Reprendre ceux du S1") }
         Button(onClick = { onSave(edits.toList()) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Enregistrer les enseignants")
+        }
+    }
+}
+
+/** « Intervenants par jour » (comme au S1) : une ligne par enseignant, une colonne par jour, sa manipulation. */
+@Composable
+private fun RecapIntervenants(s: S2Snapshot, onSave: (List<Station>) -> Unit) {
+    val days = s.slots.filter { it.active }.map { it.weekday }.distinct().sorted().ifEmpty { listOf(1, 4, 5) }
+    val codes = s.manips.filter { it.active }.map { it.code }
+    // choix[enseignant to jour] = code de la manipulation
+    val pick = remember(s) { mutableStateMapOf<Pair<String, Int>, String>().apply { s.stations.forEach { st -> st.teacherId?.let { put(it to st.weekday, st.code) } } } }
+    var err by remember { mutableStateOf<String?>(null) }
+    Panel("Intervenants par jour", "Comme au S1 : la manipulation de chaque enseignant, jour par jour. Touchez une case pour la changer.") {
+        val missing = days.flatMap { d -> codes.filter { c -> pick.none { it.key.second == d && it.value == c } }.map { "${DAY_LABEL[d]} $it" } }
+        Text(if (missing.isEmpty()) "Toutes les manipulations ont un enseignant." else "Sans enseignant : ${missing.joinToString(", ")}", color = if (missing.isEmpty()) Uphf.Teal else Uphf.Ochre, style = MaterialTheme.typography.bodySmall)
+        Row(Modifier.fillMaxWidth()) {
+            Text("Intervenant", fontWeight = FontWeight.Bold, color = Uphf.Title, modifier = Modifier.weight(1.6f))
+            days.forEach { d -> Text(DAY_LABEL[d].orEmpty(), fontWeight = FontWeight.Bold, color = Uphf.Title, modifier = Modifier.weight(1f)) }
+        }
+        s.teachers.sortedBy { it.name }.forEach { t ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(t.name, color = Uphf.Text, style = MaterialTheme.typography.bodySmall, maxLines = 2, modifier = Modifier.weight(1.6f))
+                days.forEach { d ->
+                    var open by remember(t.id, d) { mutableStateOf(false) }
+                    Box(Modifier.weight(1f).padding(2.dp)) {
+                        val cur = pick[t.id to d]
+                        OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(cur ?: "—", color = if (cur == null) Uphf.Muted else Uphf.Teal, fontWeight = FontWeight.Bold)
+                        }
+                        DropdownMenu(open, { open = false }) {
+                            DropdownMenuItem(text = { Text("—") }, onClick = { open = false; pick.remove(t.id to d) })
+                            codes.forEach { c -> DropdownMenuItem(text = { Text(c + (s.manips.firstOrNull { it.code == c }?.title?.let { " — $it" } ?: "")) }, onClick = { open = false; pick[t.id to d] = c }) }
+                        }
+                    }
+                }
+            }
+        }
+        err?.let { Text(it, color = Uphf.Bad) }
+        Button(onClick = {
+            val dup = days.flatMap { d -> codes.mapNotNull { c -> pick.count { it.key.second == d && it.value == c }.takeIf { it > 1 }?.let { "${DAY_LABEL[d]} $c" } } }
+            if (dup.isNotEmpty()) { err = "Une manipulation ne peut avoir qu’un enseignant par jour : ${dup.joinToString(", ")}"; return@Button }
+            err = null
+            onSave(days.flatMap { d -> codes.map { c ->
+                val old = s.stations.firstOrNull { it.weekday == d && it.code == c }
+                Station(d, c, pick.entries.firstOrNull { it.key.second == d && it.value == c }?.key?.first, old?.room)
+            } })
+        }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Enregistrer les intervenants")
         }
     }
 }
@@ -721,7 +773,8 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
             .distinct().sortedBy { p -> s.slots.firstOrNull { it.className == p.first.first() }?.weekday ?: 9 }
         val names = s.teachers.associate { it.id to it.name }
         val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, pagesOf, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount,
-            legend = s.manips.filter { it.active && !it.title.isNullOrBlank() }.joinToString("    ·    ") { "${it.code} : ${it.title}" })
+            legend = s.manips.filter { it.active && !it.title.isNullOrBlank() }.joinToString("    ·    ") { "${it.code} : ${it.title}" },
+            recapByDay = s.stations.filter { it.teacherId != null }.groupBy { it.weekday }.mapValues { (_, l) -> l.sortedBy { it.code }.joinToString("    ·    ") { "${it.code} : ${names[it.teacherId].orEmpty()}" } })
         if (file == null) msg = "Aucune séance à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
     }
     fun book(classes: List<String>) {
