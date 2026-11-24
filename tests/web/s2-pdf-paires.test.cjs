@@ -42,3 +42,17 @@ test('Partage « comme au S1 » : toutes les séances de MPI1-B avant celles de 
   const alt=data('alternance').sessions.filter(s=>['MPI1-B','PC1-A'].includes(s.class_name)).map(s=>s.class_name);
   assert.deepEqual(alt.slice(0,4),['MPI1-B','PC1-A','MPI1-B','PC1-A']);
 });
+
+test('Cahier de présence S2 : page de garde + une page par classe et par groupe',async()=>{
+  const {api,out}=load();const d=data('alternance');
+  d.members=[];d.studentById=new Map();let k=0;
+  for(const c of ALL)for(let g=1;g<=5;g++)for(let i=0;i<7;i++){const id='st'+(k++);d.members.push({student_id:id,class_name:c,group_no:g,status:'actif'});d.studentById.set(id,{name:`ETUDIANT ${c} G${g} N${i}`});}
+  d.members.push({student_id:'x',class_name:'MPI1-A',group_no:1,status:'exclu'});d.studentById.set('x',{name:'MIS DE COTE'});
+  d.manips=['M1','M2','M3','M4','M5'].map(code=>({code,title:null}));d.stations=[];
+  await api.exportBook(['MPI1-A'],d);
+  assert.equal(out[0].name,'Cahier_presence_lundi_MPI1-A_MPI1-E_S2.pdf');
+  assert.equal(out[0].pages,1+2*5);
+  assert.ok(!out[0].text.includes('MIS DE COTE'),'un étudiant mis de côté ne figure pas dans le cahier');
+  await api.exportBook(ALL,d);
+  assert.equal(out[1].pages,3*(1+2*5));
+});

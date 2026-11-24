@@ -1,6 +1,6 @@
 {
-  "version": "2.13.3",
-  "notes": "PDF du planning S2 plus lisible : police sans empattement, dates en plus grand. Une feuille par jour, les deux classes qui alternent sur la même page ; choix « semaine par semaine » ou « comme au S1 ». Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.14.0",
+  "notes": "Nouveau : cahier de présence du S2 en PDF (page de garde par jour, puis une page par classe et par groupe, comme le cahier papier). PDF du planning plus lisible. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3216679
+  "size": 3233063
 }
