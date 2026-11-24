@@ -9,6 +9,8 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.scaleIn
@@ -813,6 +815,8 @@ private fun SessionCard(s: TeachingSession, data: RepositoryData, viewModel: Mai
                 AnimatedBar(t.rate / 100f, Uphf.rateColor(t.rate), Modifier.weight(1f), 8.dp)
                 Text("  ${t.present + t.late}/${t.total}", color = Uphf.Title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
             }
+            val missing = remember(recs) { recs.count { it.status != AttendanceStatus.ABSENT && it.grade == null } }
+            if (missing > 0) Text("$missing note(s) à saisir", color = Uphf.Ochre, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -851,8 +855,12 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
     var scope by rememberSaveable { mutableStateOf(if (state.isAdmin) "all" else "mine") }
     var sem by rememberSaveable { mutableStateOf(currentSemester()) }
     var query by rememberSaveable { mutableStateOf("") }
-    val list = remember(data, scope, sem, query, me) { data.sessions
+    var noGrade by rememberSaveable { mutableStateOf(false) }
+    // Séances dont l'appel est fait mais où un étudiant présent (ou en retard / justifié) n'a pas encore de note.
+    val missingBySession = remember(data) { data.attendance.filter { it.status != AttendanceStatus.ABSENT && it.grade == null }.groupingBy { it.sessionId }.eachCount() }
+    val list = remember(data, scope, sem, query, me, noGrade) { data.sessions
         .filter { scope == "all" || it.teacherId == me }
+        .filter { !noGrade || (missingBySession[it.id] ?: 0) > 0 }
         .filter { semesterOf(it.sessionDate) == sem }
         .filter { query.isBlank() || data.className(it.classId).contains(query.trim(), ignoreCase = true) }
         .sortedWith(compareByDescending<TeachingSession> { it.sessionDate }.thenBy { data.className(it.classId) }) }
@@ -863,10 +871,17 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
                 Segmented(listOf("mine" to "Mes séances", "all" to "Toutes"), scope) { scope = it }
                 if (!data.onlyLpc3()) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Classe ou groupe (ex. MPI1-B)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                NewSessionForm(state, viewModel)
+                val nNoGrade = remember(data, scope, sem, me) { data.sessions.count { (scope == "all" || it.teacherId == me) && semesterOf(it.sessionDate) == sem && (missingBySession[it.id] ?: 0) > 0 } }
+                FilterChip(
+                    selected = noGrade, onClick = { noGrade = !noGrade },
+                    label = { Text(if (nNoGrade == 0) "Sans note — tout est saisi" else "Sans note ($nNoGrade séance${if (nNoGrade > 1) "s" else ""})") },
+                    leadingIcon = { Icon(if (noGrade) Icons.Default.Check else Icons.Default.EditNote, null, modifier = Modifier.size(18.dp)) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Ochre, selectedLabelColor = Color(0xFF1D1A14), selectedLeadingIconColor = Color(0xFF1D1A14))
+                )
+                if (!noGrade) NewSessionForm(state, viewModel)
             }
         }
-        if (sem == "S1") {
+        if (sem == "S1" && !noGrade) {
             val pending = data.pendingS1(me, scope == "all", if (state.isAdmin) "" else today()).filter { query.isBlank() || it.groupName.contains(query.trim(), ignoreCase = true) }
             if (pending.isNotEmpty()) {
                 item { SectionHeader("Séances du planning à ouvrir", "Touchez « Faire l’appel » le jour de la séance pour saisir présences et notes.") }
@@ -887,7 +902,7 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
             if (examHere.isNotEmpty()) item(key = "exam-$date") { ExamCard(examHere, data, viewModel) }
             items(others, key = { it.id }) { s -> Box(Modifier.animateItem()) { SessionCard(s, data, viewModel) } }
         }
-        if (list.isEmpty()) item { EmptyState(if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
+        if (list.isEmpty()) item { EmptyState(if (noGrade) "Toutes les notes sont saisies." else if (sem == "S2") "Aucune séance S2 enregistrée pour l’instant." else "Aucune séance.", Icons.Default.Event) }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }

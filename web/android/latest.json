@@ -1,6 +1,6 @@
 {
   "version": "2.14.2",
-  "notes": "Appel : la note /20 de chaque étudiant est maintenant toujours visible sous Présent / Absent / Retard, et accepte 12,5 ou 12.5. Le commentaire s'ouvre en touchant le nom. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "notes": "Appel : la note /20 de chaque étudiant est toujours visible et accepte 12,5. Séances : nouveau filtre « Sans note » pour retrouver les séances où des notes manquent. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
   "size": 3233063
 }
