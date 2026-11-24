@@ -159,7 +159,7 @@
           <button type="button" class="btn btn-primary v33-btn" data-act="gen"><i class="fas fa-wand-magic-sparkles"></i> ${d.sessions.length?'Regénérer':'Générer le planning'}</button>
           <div class="v33-inline"><label for="v33-from">Recalculer à partir du</label><input type="date" id="v33-from" min="${d.settings.start_date}" value="${d.settings.start_date}"><button type="button" class="btn v33-btn ghost" data-act="regen">Recalculer</button></div>
           <button type="button" class="btn v33-btn ghost" data-act="version"><i class="fas fa-bookmark"></i> Version</button></div>
-          <p class="v33-muted v33-autonote"><i class="fas fa-rotate"></i> Recalcul automatique : chaque date ou semaine exclue ajoutée, validée ou retirée replanifie le S2 à partir de cette date (sauvegarde faite avant, séances verrouillées conservées). Fin du S2 : ${d.settings.end_date?C().fmt(d.settings.end_date):'non fixée'}.</p></section>`:''}
+          <p class="v33-muted v33-autonote"><i class="fas fa-rotate"></i> Recalcul automatique : chaque date ou semaine exclue ajoutée, validée ou retirée replanifie le S2 à partir de cette date (sauvegarde faite avant, séances verrouillées conservées). Fin du S2 : ${d.settings.end_date?C().fmt(d.settings.end_date):'non fixée'}.</p></section>${shareCard(d)}`:''}
       ${d.sessions.length?`<div class="v33-toolbar">
         <div class="v33-seg" role="tablist" aria-label="Vue">${[['classe','Par classe'],['enseignant','Par enseignant'],['semaine','Par semaine']].map(([k,l])=>`<button type="button" data-pv="${k}" aria-pressed="${k===state.planView}">${l}</button>`).join('')}</div>
         <div class="v33-grow"></div>${status}
@@ -177,6 +177,7 @@
       if(pt){state.planTeacher=pt.dataset.pt;return renderView();}
       const pm=e.target.closest('[data-pm]');if(pm){state.planMonth=pm.dataset.pm;return renderView();}
       if(e.target.closest('[data-issues]')){const b=v.querySelector('#v33-issues');b.hidden=!b.hidden;return;}
+      const sm=e.target.closest('[data-share]');if(sm)return setShareMode(sm.dataset.share,sm.dataset.mode,d);
       if(e.target.closest('[data-act]'))return toolbar(e,d);
       planClick(e,d);
     };
@@ -227,6 +228,33 @@
         ${admin?`<td class="v33-rowact"><button type="button" class="v33-icon" data-lock="${r.s.id}" title="${r.s.locked?'Déverrouiller':'Verrouiller (gardée par les recalculs)'}"><i class="fas ${r.s.locked?'fa-lock':'fa-lock-open'}"></i></button><button type="button" class="v33-icon" data-move="${r.s.id}" title="Changer la date"><i class="fas fa-calendar-day"></i></button></td>`:''}</tr>`).join('')}
       </tbody></table></div></div>`;
   }
+  /* ----- Classes qui partagent un jour (« paires ») ----- */
+  function pairsOf(d){
+    const act=d.slots.filter(s=>s.active!==false),m=new Map();
+    for(const s of act){if(!m.has(s.pair_key))m.set(s.pair_key,[]);m.get(s.pair_key).push(s);}
+    return [...m].map(([key,l])=>({key,list:l.sort((a,b)=>a.pair_order-b.pair_order||a.class_name.localeCompare(b.class_name)),weekday:l[0].weekday,mode:l[0].mode||'alternance'}))
+      .sort((a,b)=>a.weekday-b.weekday||a.key.localeCompare(b.key));
+  }
+  function shareCard(d){
+    const pairs=pairsOf(d).filter(p=>p.list.length>1);if(!pairs.length)return '';
+    return `<section class="v33-card"><h4 class="v33-h">Partage des jours entre classes</h4><p class="v33-muted">Deux classes qui partagent un jour peuvent alterner chaque semaine, ou faire toutes leurs séances l'une après l'autre comme au S1. Changer de choix recalcule le planning (sauvegarde faite avant, séances verrouillées conservées).</p>
+      ${pairs.map(p=>{const n=p.list.map(c=>c.class_name);return `<div class="v33-item"><div><b>${C().DAY_LABEL[p.weekday]} — ${n.join(' et ')}</b><small>${p.mode==='bloc'?`Toutes les séances de ${n[0]}, puis celles de ${n.slice(1).join(', ')}`:'Une semaine chacune, à tour de rôle'}</small></div>
+        <div class="v33-seg" role="radiogroup" aria-label="Partage du ${C().DAY_LABEL[p.weekday]}"><button type="button" data-share="${esc(p.key)}" data-mode="alternance" aria-pressed="${p.mode!=='bloc'}">Semaine par semaine</button><button type="button" data-share="${esc(p.key)}" data-mode="bloc" aria-pressed="${p.mode==='bloc'}">Comme au S1</button></div></div>`;}).join('')}</section>`;
+  }
+  async function setShareMode(key,mode,d){
+    const p=pairsOf(d).find(x=>x.key===key);if(!p||p.mode===mode)return;
+    const n=p.list.map(c=>c.class_name).join(' et ');
+    if(d.sessions.length&&!confirm(`${n} : ${mode==='bloc'?'toutes les séances de '+p.list[0].class_name+' puis celles de '+p.list.slice(1).map(c=>c.class_name).join(', ')+' (comme au S1)':'une semaine chacune'}.\n\nLe planning sera recalculé à partir du ${C().fmt(d.settings.start_date)} (sauvegarde faite avant). Continuer ?`))return;
+    state.busy++;
+    try{
+      await q(client().from('v33_s2_class_slots').update({mode,updated_at:new Date().toISOString()}).eq('pair_key',key).select('class_name'));
+      audit('class_slots',{pair:key,mode});
+      if(d.sessions.length){const r=await q(client().rpc('v37_s2_auto_replan',{p_from:d.settings.start_date,p_reason:'partage '+key+' : '+mode,p_force:false}));
+        await load(true);toast(`Partage enregistré — ${r?.inserted??''} séance(s) replanifiée(s)`);}
+      else{await load(true);toast('Partage enregistré');}
+    }catch(err){toast('Échec : '+err.message,'err');}finally{state.busy--;}
+    renderView();
+  }
   function planClick(e,d){
     const lk=e.target.closest('[data-lock]'),mv=e.target.closest('[data-move]'),sl=e.target.closest('[data-slot]');
     if(lk){const s=d.sessions.find(x=>x.id===lk.dataset.lock);const v=!s.locked;
@@ -267,40 +295,53 @@
     box.innerHTML=`<div class="v33-weeks">${[...weeks].map(([w,list])=>`<section class="v33-card v33-week"><h4>Semaine du ${C().fmt(w)}</h4>${list.map(s=>`<div class="v33-item"><div class="v33-date"><b>${C().fmt(s.session_date).slice(0,5)}</b><small>${C().DAY_LABEL[C().weekdayOf(s.session_date)]}</small></div><div><b>${s.class_name}</b><small>passage ${s.occurrence} · ${s.start_time} – ${s.end_time}</small></div>${s.locked?'<i class="fas fa-lock v33-muted"></i>':''}</div>`).join('')}</section>`).join('')}</div>`;
   }
 
-  /* ----- PDF (modèle du S1 : une page par classe) ----- */
+  /* ----- PDF (modèle du S1) : une page par jour partagé — les classes qui alternent sont sur la même feuille ----- */
   async function exportPdf(classes,d){
     const jsPDF=root.jspdf?.jsPDF;if(!jsPDF){toast('Le moteur PDF n\'est pas chargé.','err');return;}
     const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     const ex=C().excludedMap(d.excluded);let first=true;
-    for(const cls of classes){
-      const list=d.sessions.filter(s=>s.class_name===cls);if(!list.length)continue;
+    const pairs=pairsOf(d),seen=new Set(),pages=[];
+    for(const cls of classes){const p=pairs.find(x=>x.list.some(c=>c.class_name===cls));const k=p?p.key:cls;if(seen.has(k))continue;seen.add(k);pages.push(p||{key:cls,list:[{class_name:cls}],mode:'alternance'});}
+    pages.sort((a,b)=>(a.weekday||9)-(b.weekday||9));
+    const TINT=[[255,250,214],[226,239,218],[222,235,247]];
+    // La police du PDF ne dessine que l'alphabet latin : un libellé en arabe est remplacé par le type de date.
+    const exLabel=x=>{const t=ex.get(x)||'';if(!/[^\u0000-\u024F\u2000-\u206F]/.test(t))return t;const e=(d.excluded||[]).find(e=>e.starts_on<=x&&x<=e.ends_on&&e.label===t);return KIND[e?.kind]||'Date exclue';};
+    for(const pg of pages){
+      const names=pg.list.map(c=>c.class_name);
+      const list=d.sessions.filter(s=>names.includes(s.class_name)).sort((a,b)=>a.session_date.localeCompare(b.session_date));if(!list.length)continue;
       if(!first)doc.addPage();first=false;
-      const slot=d.slots.find(s=>s.class_name===cls);const G=d.settings.group_count;
+      const slot=d.slots.find(s=>s.class_name===names[0]);const G=d.settings.group_count;const multi=names.length>1;
       const rows=[];const a=list[0].session_date,b=list[list.length-1].session_date;
-      for(let x=a;x<=b;x=C().addDays(x,7))if(ex.has(x)&&!list.some(s=>s.session_date===x))rows.push({date:x,ex:ex.get(x)});
+      for(let x=a;x<=b;x=C().addDays(x,7))if(ex.has(x)&&!list.some(s=>s.session_date===x))rows.push({date:x,ex:exLabel(x)});
       for(const s of list)rows.push({date:s.session_date,s});rows.sort((p,q2)=>p.date.localeCompare(q2.date));
-      const X=14,W=269,c0=36,cw=(W-c0)/G;let y=10;
+      const X=14,W=269,c0=multi?30:36,c1=multi?24:0,cw=(W-c0-c1)/G;let y=10;
       const box=(x,yy,w,h,fill)=>{if(fill){doc.setFillColor(...fill);doc.rect(x,yy,w,h,'FD');}else doc.rect(x,yy,w,h);};
       doc.setDrawColor(40);doc.setLineWidth(0.2);
-      box(X,y,W,8,[243,241,234]);doc.setFont('times','bold');doc.setFontSize(10);doc.setTextColor(20);doc.text(`[${cls.split('-')[0]}] - [${d.settings.academic_year}] - [SEMESTRE 2]`,X+W/2,y+5.5,{align:'center'});y+=8;
+      const levels=[...new Set(names.map(n=>n.split('-')[0]))].join(' / ');
+      box(X,y,W,8,[243,241,234]);doc.setFont('times','bold');doc.setFontSize(10);doc.setTextColor(20);doc.text(`[${levels}] - [${d.settings.academic_year}] - [SEMESTRE 2]`,X+W/2,y+5.5,{align:'center'});y+=8;
       box(X,y,W,12,[243,241,234]);doc.setFontSize(16);doc.text('PLANNING DES TP DE PHYSIQUE',X+W/2,y+8.3,{align:'center'});y+=12;
-      box(X,y,W,9,[255,242,0]);doc.setFontSize(12);doc.text(cls,X+W/2,y+6.3,{align:'center'});y+=9;
+      box(X,y,W,9,[255,242,0]);doc.setFontSize(12);doc.text(names.join('  /  ')+(multi?(pg.mode==='bloc'?'   (l\'une après l\'autre, comme au S1)':'   (une semaine sur deux)'):''),X+W/2,y+6.3,{align:'center'});y+=9;
       box(X,y,c0,9);doc.setTextColor(190,0,0);doc.setFontSize(9);doc.text(slot?C().DAY_LABEL[slot.weekday]:'',X+c0/2,y+6,{align:'center'});doc.setTextColor(20);
-      for(let g=0;g<G;g++){box(X+c0+g*cw,y,cw,9,[221,235,247]);doc.text('G'+(g+1),X+c0+g*cw+cw/2,y+6,{align:'center'});}y+=9;
-      box(X,y,c0,8);doc.setFontSize(8.5);doc.text(slot?`${slot.start_time.slice(0,5).replace(':','H')} - ${slot.end_time.slice(0,5).replace(':','H')}`:'',X+c0/2,y+5.5,{align:'center'});for(let g=0;g<G;g++)box(X+c0+g*cw,y,cw,8);y+=8;
+      if(multi){box(X+c0,y,c1,9,[221,235,247]);doc.text('Classe',X+c0+c1/2,y+6,{align:'center'});}
+      for(let g=0;g<G;g++){box(X+c0+c1+g*cw,y,cw,9,[221,235,247]);doc.text('G'+(g+1),X+c0+c1+g*cw+cw/2,y+6,{align:'center'});}y+=9;
+      box(X,y,c0,8);doc.setFontSize(8.5);doc.text(slot?`${slot.start_time.slice(0,5).replace(':','H')} - ${slot.end_time.slice(0,5).replace(':','H')}`:'',X+c0/2,y+5.5,{align:'center'});if(multi)box(X+c0,y,c1,8);for(let g=0;g<G;g++)box(X+c0+c1+g*cw,y,cw,8);y+=8;
       const rh=Math.min(17,(195-y-10)/Math.max(rows.length,1));
       for(const r of rows){
         if(r.ex){box(X,y,c0,rh,[252,229,180]);box(X+c0,y,W-c0,rh,[252,229,180]);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(190,0,0);doc.text(`${r.ex} - aucun TP`,X+c0+(W-c0)/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(20);}
-        else{box(X,y,c0,rh);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.5,{align:'center'});doc.setTextColor(31,73,125);
-          for(let g=0;g<G;g++){const x=r.s.slots.find(z=>z.group_no===g+1);box(X+c0+g*cw,y,cw,rh);if(x){doc.text(`${x.manipulation_code}${x.room?' - Salle '+x.room:''}`,X+c0+g*cw+cw/2,y+rh/2,{align:'center'});doc.setFontSize(6.5);doc.setFont('times','normal');doc.text(tname(x.teacher_id),X+c0+g*cw+cw/2,y+rh/2+4,{align:'center'});doc.setFontSize(8.5);doc.setFont('times','bold');}}
+        else{const tint=multi?TINT[names.indexOf(r.s.class_name)%TINT.length]:null;
+          box(X,y,c0,rh,tint);doc.text(C().fmt(r.date),X+c0/2,y+rh/2+1.5,{align:'center'});
+          if(multi){box(X+c0,y,c1,rh,tint);doc.text(r.s.class_name,X+c0+c1/2,y+rh/2+1.5,{align:'center'});}
+          doc.setTextColor(31,73,125);
+          for(let g=0;g<G;g++){const x=r.s.slots.find(z=>z.group_no===g+1);box(X+c0+c1+g*cw,y,cw,rh);if(x){doc.text(`${x.manipulation_code}${x.room?' - Salle '+x.room:''}`,X+c0+c1+g*cw+cw/2,y+rh/2,{align:'center'});doc.setFontSize(6.5);doc.setFont('times','normal');doc.text(tname(x.teacher_id),X+c0+c1+g*cw+cw/2,y+rh/2+4,{align:'center'});doc.setFontSize(8.5);doc.setFont('times','bold');}}
           doc.setTextColor(20);}
         y+=rh;
       }
-      const last=list[list.length-1].session_date;
-      box(X,y,W,8,[230,230,230]);doc.setFont('times','italic');doc.setFontSize(8);doc.text(`Planning ${cls} arrêté au ${C().fmt(C().addDays(last,1))} - dernière séance : ${C().DAY_LABEL[C().weekdayOf(last)].toLowerCase()} ${C().fmt(last)}`,X+W/2,y+5.3,{align:'center'});doc.setFont('times','bold');
+      const lastOf=n=>{const l=list.filter(s=>s.class_name===n);return l.length?l[l.length-1].session_date:null;};
+      const foot=names.map(n=>{const l=lastOf(n);return l?`${n} : dernière séance ${C().DAY_LABEL[C().weekdayOf(l)].toLowerCase()} ${C().fmt(l)}`:null;}).filter(Boolean).join('   ·   ');
+      box(X,y,W,8,[230,230,230]);doc.setFont('times','italic');doc.setFontSize(8);doc.text(`Planning arrêté au ${C().fmt(C().addDays(b,1))} - ${foot}`,X+W/2,y+5.3,{align:'center'});doc.setFont('times','bold');
     }
     if(first){toast('Aucune séance à exporter.','err');return;}
-    doc.save(classes.length===1?`Planning_${classes[0]}_TP_Physique_S2.pdf`:'Planning_TP_Physique_S2.pdf');
+    doc.save(pages.length===1?`Planning_${pages[0].list.map(c=>c.class_name).join('_')}_TP_Physique_S2.pdf`:'Planning_TP_Physique_S2.pdf');
   }
 
   /* ----- Groupes : une classe à la fois, équilibre sur les étudiants présents (actifs) ----- */

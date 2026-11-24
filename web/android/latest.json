@@ -1,6 +1,6 @@
 {
-  "version": "2.13.1",
-  "notes": "Application plus fluide : transitions animées entre les écrans, cartes et boutons qui réagissent au toucher, geste « retour » qui revient à l'écran précédent. Compatible Android 16. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois (vos données restent sur le serveur).",
+  "version": "2.13.2",
+  "notes": "Planning S2 en PDF : une feuille par jour, les deux classes qui alternent sont sur la même page (3 pages au lieu de 6). Nouveau choix pour chaque jour partagé : « semaine par semaine » ou « comme au S1 ». Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3216675
+  "size": 3216679
 }
