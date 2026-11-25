@@ -171,7 +171,8 @@ data class PlanSession(
     val endTime: String,
     val occurrence: Int,
     val locked: Boolean,
-    val slots: List<PlanSlot>
+    val slots: List<PlanSlot>,
+    val spaceId: String = "00000000-0000-4000-8000-000000000001"
 )
 
 class ApiException(

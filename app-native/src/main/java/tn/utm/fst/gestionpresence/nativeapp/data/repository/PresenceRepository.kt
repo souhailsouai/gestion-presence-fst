@@ -216,7 +216,8 @@ class PresenceRepository(context: Context) {
             val titles = async { api.manipulationTitles(session) }
             val s1 = async { api.s1Plan(session) }
             val manips = async { api.sessionManipulations(session) }
-            Triple(classes.await(), students.await(), sessions.await()) to listOf(attendance.await(), directory.await(), plan.await(), names.await(), titles.await(), s1.await(), manips.await(), contractJob.await())
+            val spaces = async { api.s2Spaces(session) }
+            Triple(classes.await(), students.await(), sessions.await()) to listOf(attendance.await(), directory.await(), plan.await(), names.await(), titles.await(), s1.await(), manips.await(), contractJob.await(), spaces.await())
         }
         val contract = extras[7] as AppContract
         if (contract.maintenanceEnabled) {
@@ -230,6 +231,9 @@ class PresenceRepository(context: Context) {
         @Suppress("UNCHECKED_CAST") val titles = extras[4] as Map<String, String>
         @Suppress("UNCHECKED_CAST") val s1 = extras[5] as Pair<List<PlanSession>, Map<Int, List<String>>>
         @Suppress("UNCHECKED_CAST") val sessionManips = extras[6] as Map<String, String>
+        @Suppress("UNCHECKED_CAST") val spaces = extras[8] as Pair<List<Pair<String, String>>, Set<String>>
+        // Mes espaces : ceux dont je suis membre ; MPI1 · PC1 aussi pour un administrateur ou un compte sans espace.
+        val mySpaces = spaces.second.toMutableSet().apply { if (session.role == "admin" || isEmpty()) add("00000000-0000-4000-8000-000000000001") }
         return RepositoryData(
             contract = contract,
             classes = classes,
@@ -243,7 +247,9 @@ class PresenceRepository(context: Context) {
             manipulationTitles = titles,
             s1Plan = s1.first,
             s1Pool = s1.second,
-            sessionManipulations = sessionManips
+            sessionManipulations = sessionManips,
+            spaces = spaces.first,
+            mySpaces = mySpaces
         )
     }
 
@@ -497,8 +503,13 @@ data class RepositoryData(
     val manipulationTitles: Map<String, String> = emptyMap(),
     val s1Plan: List<PlanSession> = emptyList(),
     val s1Pool: Map<Int, List<String>> = emptyMap(),
-    val sessionManipulations: Map<String, String> = emptyMap()
+    val sessionManipulations: Map<String, String> = emptyMap(),
+    val spaces: List<Pair<String, String>> = emptyList(),
+    val mySpaces: Set<String> = setOf("00000000-0000-4000-8000-000000000001")
 ) {
+    /** Titre d'une manipulation dans son espace. */
+    fun manipTitle(spaceId: String, code: String): String? = manipulationTitles["$spaceId|$code"] ?: manipulationTitles[code].takeIf { spaceId == "00000000-0000-4000-8000-000000000001" }
+
     // Index calculés une seule fois : l'interface ne parcourt plus les 1000+ présences à chaque affichage.
     val classById: Map<String, AcademicClass> by lazy { classes.associateBy { it.id } }
     val sessionById: Map<String, TeachingSession> by lazy { sessions.associateBy { it.id } }

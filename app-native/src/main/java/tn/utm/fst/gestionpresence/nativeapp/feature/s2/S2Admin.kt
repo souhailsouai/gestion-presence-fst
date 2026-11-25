@@ -66,7 +66,8 @@ data class S2Snapshot(
     val spaces: List<Space> = emptyList(),
     val myRoles: Map<String, String> = emptyMap(),
     val spaceClasses: List<SpaceClass> = emptyList(),
-    val spaceStudents: List<SpaceStudent> = emptyList()
+    val spaceStudents: List<SpaceStudent> = emptyList(),
+    val isSuper: Boolean = false
 )
 
 val DAY_LABEL = mapOf(1 to "Lundi", 2 to "Mardi", 3 to "Mercredi", 4 to "Jeudi", 5 to "Vendredi", 6 to "Samedi")
@@ -78,6 +79,7 @@ private fun JsonObject.i(k: String): Int? = (this[k] as? JsonPrimitive)?.intOrNu
 private fun JsonObject.b(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanOrNull
 
 class S2Admin(private val repository: PresenceRepository) {
+    private var landed = false
     /** Espace S2 affiché (MPI1 · PC1 par défaut). */
     var space: String = DEFAULT_SPACE
     private val sp get() = mapOf("space_id" to "eq.$space")
@@ -90,7 +92,9 @@ class S2Admin(private val repository: PresenceRepository) {
             .associate { it.s("space_id")!! to (it.s("role") ?: "teacher") }
         if (spaces.none { it.id == space }) space = spaces.firstOrNull()?.id ?: DEFAULT_SPACE
         // Un administrateur d'espace arrive directement sur l'espace qu'il administre.
-        if (mine[space] != "admin") mine.entries.firstOrNull { it.value == "admin" && spaces.any { sp -> sp.id == it.key } }?.let { space = it.key }
+        if (!landed && mine[space] != "admin") mine.entries.firstOrNull { it.value == "admin" && spaces.any { sp -> sp.id == it.key } }?.let { space = it.key }
+        landed = true
+        val amSuper = runCatching { (api.callRpc(session, "v45_am_super_admin", buildJsonObject { }) as? JsonPrimitive)?.booleanOrNull == true }.getOrDefault(false)
         coroutineScope {
             val settings = async { api.rows(session, "v33_s2_settings", filters = sp, order = "space_id").firstOrNull() }
             val slots = async { api.rows(session, "v33_s2_class_slots", filters = sp, order = "weekday") }
@@ -127,7 +131,7 @@ class S2Admin(private val repository: PresenceRepository) {
                     val names = students.await().associate { it.s("id")!! to "${it.s("last_name").orEmpty()} ${it.s("first_name").orEmpty()}".trim() }
                     members.await().map { Member(it.s("student_id")!!, names[it.s("student_id")] ?: "?", it.s("class_name") ?: "", it.i("group_no") ?: 1, it.s("s1_class_id"), it.s("status") ?: "actif", it.s("reason"), it.b("locked") ?: false) }
                 },
-                space = space, spaces = spaces, myRoles = mine, spaceClasses = allClasses.filter { it.id !in groupOf }, spaceStudents = spaceStudents.await().map { x -> groupOf[x.classId]?.let { x.copy(classId = it) } ?: x }
+                space = space, spaces = spaces, myRoles = mine, isSuper = amSuper, spaceClasses = allClasses.filter { it.id !in groupOf }, spaceStudents = spaceStudents.await().map { x -> groupOf[x.classId]?.let { x.copy(classId = it) } ?: x }
             )
         }
     }
