@@ -126,17 +126,23 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
                 othersOn = !othersOn
                 if (!othersOn && s.space !in mine) mine.firstOrNull()?.let { id -> viewModel.s2.space = id; snap = null; run(null, false) { null } }
             }) { Text(if (othersOn) "Mes espaces seulement" else "Autres espaces") }
-            if (!canAdmin) Text("Lecture seule : vous n’administrez pas cet espace.", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall)
+            if (!canAdmin && s.myPerms.isEmpty()) Text("Lecture seule : vous n’administrez pas cet espace.", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall)
         }
         item {
             val tabs = buildList {
+                if (sup) add("acces" to "Rôles et accès")
                 if (sup) add("espaces" to "Espaces")
                 if (s != null && !def) add("classes" to "Classes & étudiants")
-                if (s != null && !def && canAdmin) add("equipe" to "Équipe")
+                if (s != null && !def && (canAdmin || "team.edit" in s.myPerms)) add("equipe" to "Équipe")
                 addAll(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "manips" to "Manipulations", "planning" to "Générer & PDF", "historique" to "Historique"))
             }
             // Espace consulté sans en être administrateur : planning et PDF, manipulations (lecture).
-            val shownTabs = if (canAdmin) tabs else tabs.filter { it.first in setOf("planning", "manips", "postes") }
+            // Permissions choisies par le super administrateur : chaque onglet s'ouvre avec la permission correspondante.
+            val tabPerm = mapOf("dates" to listOf("planning.settings"), "creneaux" to listOf("planning.settings", "classes.edit"), "groupes" to listOf("groups.edit"),
+                "postes" to listOf("planning.stations"), "manips" to listOf("planning.manips"), "planning" to listOf("planning.generate", "planning.sessions"),
+                "historique" to listOf("planning.generate"), "classes" to listOf("classes.edit", "students.edit"), "equipe" to listOf("team.edit"))
+            val mine = s?.myPerms.orEmpty()
+            val shownTabs = if (canAdmin) tabs else tabs.filter { it.first in setOf("planning", "manips", "postes") || tabPerm[it.first].orEmpty().any { p -> p in mine } }
             if (shownTabs.none { it.first == tab }) tab = shownTabs.first().first
             AdminTabs(shownTabs, tab) { tab = it }
         }
@@ -170,6 +176,7 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             "historique" -> item { HistoryPanel(viewModel) }
             "espaces" -> item { SpacesPanel(viewModel) { id -> viewModel.s2.space = id; tab = "classes"; snap = null; run(null, false) { null } } }
             "classes" -> item { ClassesPanel(s, ::run, viewModel) }
+            "acces" -> item { AccessPanel(s, viewModel, state.profile?.id) }
             "equipe" -> item { TeamPanel(s.space, viewModel) { snap = null; run(null, false) { null } } }
             else -> {
                 item {
@@ -889,6 +896,89 @@ private fun SpacesPanel(viewModel: MainViewModel, open: (String) -> Unit) {
             }
         }
         Text("Pour créer un compte enseignant : Plus → Comptes enseignants, puis ajoutez-le ici à son espace.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+/* ---------------- Rôles et accès (super administrateur) ---------------- */
+private val PERM_GROUPS = listOf(
+    "Étudiants et classes" to listOf("students.edit" to "Ajouter, modifier, retirer des étudiants", "classes.edit" to "Créer ou supprimer des classes", "groups.edit" to "Changer le groupe d’un étudiant, le rendre inactif"),
+    "Planning" to listOf("planning.settings" to "Dates, créneaux, jours exclus, réglages", "planning.manips" to "Manipulations (codes, titres, salles)", "planning.stations" to "Affecter les enseignants aux postes",
+        "planning.generate" to "Générer ou recalculer le planning, versions", "planning.sessions" to "Verrouiller ou déplacer une séance, changer un enseignant"),
+    "Appel et notes" to listOf("attendance.any" to "Faire l’appel de toutes les cases", "attendance.edit" to "Modifier présences et notes après la séance", "attendance.makeup" to "Enregistrer les rattrapages"),
+    "Exports et documents" to listOf("exports" to "PDF (planning, cahier), Excel, Bilan S1", "stats" to "Statistiques"),
+    "Équipe et comptes" to listOf("team.edit" to "Ajouter ou retirer des enseignants de l’espace", "accounts.manage" to "Créer des comptes, réinitialiser un PIN", "notices.edit" to "Modifier les avis officiels"))
+private val ALL_PERMS = PERM_GROUPS.flatMap { g -> g.second.map { it.first } }
+private val PRESETS = listOf("Enseignant" to emptyList(), "Assistant" to listOf("attendance.any", "attendance.makeup", "exports"),
+    "Gestionnaire du planning" to listOf("planning.settings", "planning.manips", "planning.stations", "planning.generate", "planning.sessions", "exports"),
+    "Administrateur d’espace" to ALL_PERMS.filter { it != "accounts.manage" && it != "notices.edit" })
+
+@Composable
+private fun AccessPanel(s: S2Snapshot, viewModel: MainViewModel, me: String?) {
+    val scope = rememberCoroutineScope()
+    var dir by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Teacher>>(emptyList()) }
+    var perms by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.S2Admin.PermRow>>(emptyList()) }
+    var members by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.SpaceMember>>(emptyList()) }
+    var history by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.S2Admin.PermChange>>(emptyList()) }
+    var msg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    var who by rememberSaveable { mutableStateOf("") }
+    var space by rememberSaveable { mutableStateOf(s.space) }
+    var checked by remember { mutableStateOf(setOf<String>()) }
+    var confirm by remember { mutableStateOf(false) }
+    LaunchedEffect(reload) {
+        runCatching {
+            dir = viewModel.s2.directory().filter { it.id != me }
+            perms = viewModel.s2.allPermissions(); members = viewModel.s2.allMembers(); history = viewModel.s2.permissionHistory()
+        }.onFailure { msg = true to (it.message ?: "Chargement impossible.") }
+    }
+    if (who.isBlank() || dir.none { it.id == who }) dir.firstOrNull()?.let { who = it.id }
+    LaunchedEffect(who, space, perms) { checked = perms.filter { it.spaceId == space && it.profileId == who }.map { it.perm }.toSet() }
+    val nameOf = { id: String -> dir.firstOrNull { it.id == id }?.name ?: "—" }
+    val spaceName = { id: String -> s.spaces.firstOrNull { it.id == id }?.name ?: "—" }
+    fun save(sp: String, person: String, list: List<String>, ok: String) = scope.launch {
+        try { viewModel.s2.setPermissions(sp, person, list); msg = false to ok; reload++ } catch (e: CancellationException) { throw e } catch (e: Exception) { msg = true to (e.message ?: "Échec.") }
+    }
+    Panel("Rôles et accès", "Choisissez une personne et un espace, puis cochez ce qu’elle peut gérer. Partez d’un modèle, puis ajoutez ou retirez des cases. Chaque changement est enregistré et peut être annulé.") {
+        msg?.let { (e, m) -> Text(m, color = if (e) Uphf.Bad else Uphf.Teal, fontWeight = FontWeight.SemiBold) }
+        if (dir.isEmpty()) { CircularProgressIndicator(color = Uphf.Teal); return@Panel }
+        var openWho by remember { mutableStateOf(false) }
+        Box {
+            OutlinedButton(onClick = { openWho = true }, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) { Text(nameOf(who)) }
+            DropdownMenu(openWho, { openWho = false }) { dir.forEach { t -> DropdownMenuItem(text = { Text(t.name) }, onClick = { who = t.id; openWho = false }) } }
+        }
+        AdminTabs(s.spaces.map { it.id to it.name }, space) { space = it }
+        if (members.any { it.spaceId == space && it.profileId == who && it.role == "admin" })
+            Text("${nameOf(who)} est administrateur de ${spaceName(space)} : il a déjà tout dans cet espace. Pour limiter ses droits, retirez-le des administrateurs (onglet Espaces), puis cochez ses permissions ici.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+        Text("Modèles", color = Uphf.Muted, style = MaterialTheme.typography.labelMedium)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PRESETS.forEach { (n, list) -> FilterChip(checked == list.toSet(), { checked = list.toSet() }, label = { Text(n) }) }
+        }
+        PERM_GROUPS.forEach { (group, list) ->
+            Text(group, fontWeight = FontWeight.Bold, color = Uphf.Title, modifier = Modifier.padding(top = 6.dp))
+            list.forEach { (k, label) ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { checked = if (k in checked) checked - k else checked + k }) {
+                    androidx.compose.material3.Checkbox(k in checked, { on -> checked = if (on) checked + k else checked - k })
+                    Text(label, color = Uphf.Text)
+                }
+            }
+        }
+        Text("Réservé au super administrateur : créer ou supprimer des espaces, changer les permissions, archives S1.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+        Button(onClick = { confirm = true }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) { Text("Enregistrer les permissions") }
+        if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("Enregistrer ?") },
+            text = { Text("${checked.size} permission(s) pour ${nameOf(who)} dans ${spaceName(space)}.") },
+            confirmButton = { TextButton(onClick = { confirm = false; save(space, who, ALL_PERMS.filter { it in checked }, "Permissions enregistrées.") }) { Text("Enregistrer") } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annuler") } }, containerColor = Color.White)
+        Text("Historique", fontWeight = FontWeight.Bold, color = Uphf.Title, modifier = Modifier.padding(top = 8.dp))
+        if (history.isEmpty()) Text("Aucun changement pour l’instant.", color = Uphf.Muted)
+        history.forEach { h ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("${nameOf(h.profileId)} · ${spaceName(h.spaceId)}", color = Uphf.Title, fontWeight = FontWeight.SemiBold)
+                    Text("${h.at.take(16).replace('T', ' ')} · ${h.before.size} → ${h.after.size} permission(s)", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = { save(h.spaceId, h.profileId, h.before, "Changement annulé.") }) { Text("Annuler") }
+            }
+        }
     }
 }
 

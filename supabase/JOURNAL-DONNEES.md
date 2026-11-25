@@ -56,3 +56,7 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 
 ## 2026-11-25 — V46 : S1 masqué après le 12/12/2026 (aucune donnée supprimée)
 - Site et application ne chargent plus les séances et le planning datés d'avant le 12/12/2026 ; « Archives S1 » (Administration) les réaffiche pour un administrateur. Toutes les données du S1 restent en base.
+
+## 2026-11-25 — V47 : rôles et accès (permissions par personne et par espace)
+- Table `space_permissions` ; `private.can_do` / `can_do_any` ; règles d'écriture S2, classes, étudiants, avis, appel et équipe vérifiées par permission. Un administrateur d'espace garde tout dans son espace.
+- `v47_set_permissions` (super administrateur seul) : historique dans `v33_s2_audit` (action `set_permissions`, avant/après) pour annuler.

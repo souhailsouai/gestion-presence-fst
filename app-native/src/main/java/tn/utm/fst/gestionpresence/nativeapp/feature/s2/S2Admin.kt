@@ -67,7 +67,9 @@ data class S2Snapshot(
     val myRoles: Map<String, String> = emptyMap(),
     val spaceClasses: List<SpaceClass> = emptyList(),
     val spaceStudents: List<SpaceStudent> = emptyList(),
-    val isSuper: Boolean = false
+    val isSuper: Boolean = false,
+    /** Permissions (V47) de l'utilisateur dans l'espace affiché. */
+    val myPerms: Set<String> = emptySet()
 )
 
 val DAY_LABEL = mapOf(1 to "Lundi", 2 to "Mardi", 3 to "Mercredi", 4 to "Jeudi", 5 to "Vendredi", 6 to "Samedi")
@@ -94,6 +96,7 @@ class S2Admin(private val repository: PresenceRepository) {
         // Un administrateur d'espace arrive directement sur l'espace qu'il administre.
         if (!landed && mine[space] != "admin") mine.entries.firstOrNull { it.value == "admin" && spaces.any { sp -> sp.id == it.key } }?.let { space = it.key }
         landed = true
+        val myPerms = runCatching { api.rows(session, "space_permissions", "perm", mapOf("profile_id" to "eq.$uid", "space_id" to "eq.$space"), "perm").mapNotNull { it.s("perm") }.toSet() }.getOrDefault(emptySet())
         val amSuper = runCatching { (api.callRpc(session, "v45_am_super_admin", buildJsonObject { }) as? JsonPrimitive)?.booleanOrNull == true }.getOrDefault(false)
         coroutineScope {
             val settings = async { api.rows(session, "v33_s2_settings", filters = sp, order = "space_id").firstOrNull() }
@@ -131,7 +134,7 @@ class S2Admin(private val repository: PresenceRepository) {
                     val names = students.await().associate { it.s("id")!! to "${it.s("last_name").orEmpty()} ${it.s("first_name").orEmpty()}".trim() }
                     members.await().map { Member(it.s("student_id")!!, names[it.s("student_id")] ?: "?", it.s("class_name") ?: "", it.i("group_no") ?: 1, it.s("s1_class_id"), it.s("status") ?: "actif", it.s("reason"), it.b("locked") ?: false) }
                 },
-                space = space, spaces = spaces, myRoles = mine, isSuper = amSuper, spaceClasses = allClasses.filter { it.id !in groupOf }, spaceStudents = spaceStudents.await().map { x -> groupOf[x.classId]?.let { x.copy(classId = it) } ?: x }
+                space = space, spaces = spaces, myRoles = mine, isSuper = amSuper, myPerms = myPerms, spaceClasses = allClasses.filter { it.id !in groupOf }, spaceStudents = spaceStudents.await().map { x -> groupOf[x.classId]?.let { x.copy(classId = it) } ?: x }
             )
         }
     }
@@ -339,7 +342,24 @@ class S2Admin(private val repository: PresenceRepository) {
     // ---- Espaces (V43) ----
     /** L'utilisateur administre-t-il au moins un espace S2 ? */
     suspend fun isSpaceAdmin(): Boolean = repository.online { api, session ->
-        api.rows(session, "space_members", "role", mapOf("profile_id" to "eq.${session.userId}", "role" to "eq.admin"), "space_id").isNotEmpty()
+        api.rows(session, "space_members", "role", mapOf("profile_id" to "eq.${session.userId}", "role" to "eq.admin"), "space_id").isNotEmpty() ||
+            runCatching { api.rows(session, "space_permissions", "perm", mapOf("profile_id" to "eq.${session.userId}"), "perm").isNotEmpty() }.getOrDefault(false)
+    }
+    /** Rôles et accès (super administrateur). */
+    data class PermRow(val spaceId: String, val profileId: String, val perm: String)
+    data class PermChange(val id: String, val spaceId: String, val profileId: String, val before: List<String>, val after: List<String>, val at: String)
+    suspend fun allPermissions(): List<PermRow> = repository.online { api, session ->
+        api.rows(session, "space_permissions", "space_id,profile_id,perm", order = "space_id").map { PermRow(it.s("space_id")!!, it.s("profile_id")!!, it.s("perm")!!) }
+    }
+    suspend fun permissionHistory(): List<PermChange> = repository.online { api, session ->
+        api.rows(session, "v33_s2_audit", "id,space_id,detail,created_at", mapOf("action" to "eq.set_permissions"), "created_at.desc").take(30).mapNotNull { r ->
+            val d = r["detail"] as? JsonObject ?: return@mapNotNull null
+            fun list(k: String) = (d[k] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            PermChange(r.s("id")!!, r.s("space_id")!!, d.s("profile") ?: return@mapNotNull null, list("before"), list("after"), r.s("created_at").orEmpty())
+        }
+    }
+    suspend fun setPermissions(spaceId: String, profileId: String, perms: List<String>) = repository.online { api, session ->
+        api.callRpc(session, "v47_set_permissions", buildJsonObject { put("p_space", spaceId); put("p_profile", profileId); put("p_perms", buildJsonArray { perms.forEach { add(JsonPrimitive(it)) } }) })
     }
     suspend fun createSpace(name: String): String = repository.online { api, session ->
         require(name.trim().length in 2..60) { "Nom d’espace : 2 à 60 caractères." }
