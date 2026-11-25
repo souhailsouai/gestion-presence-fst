@@ -241,11 +241,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteSession(id: String) = mutate("Séance supprimée.") { repository.deleteSession(id) }
 
     /** Ouvre l'appel d'un groupe du planning : crée la séance réelle puis affiche la feuille d'appel. */
-    fun openPlannedSession(planId: String) {
+    fun openPlannedSession(planId: String, s2: Boolean = false) {
         viewModelScope.launch {
             setLoading(true); clearNotice()
             try {
-                val sessionId = repository.startPlannedSession(planId)
+                val sessionId = if (s2) repository.startS2Slot(planId) else repository.startPlannedSession(planId)
                 val data = repository.load()
                 _state.value = _state.value.copy(data = data, reports = repository.reports(data), online = repository.isOnline())
                 selectAttendanceSession(sessionId)

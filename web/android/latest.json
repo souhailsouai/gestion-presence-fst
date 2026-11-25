@@ -1,6 +1,6 @@
 {
-  "version": "2.16.0",
-  "notes": "Espaces S2 : chaque groupe de classes a son propre espace (classes, étudiants, réglages, planning). Le super administrateur crée les espaces et nomme leurs administrateurs ; un administrateur d'espace gère ses classes et ses étudiants. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.17.0",
+  "notes": "Appel S2 : touchez « Faire l'appel » sur une case du planning S2 (tous les espaces), le jour de la séance. Les changements de groupe du S2 sont datés : le bilan S1 garde le groupe du S1. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3298595
+  "size": 3314979
 }

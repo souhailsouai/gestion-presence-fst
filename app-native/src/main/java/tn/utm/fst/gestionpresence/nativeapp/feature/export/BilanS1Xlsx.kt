@@ -34,12 +34,16 @@ object BilanS1Xlsx {
         val sessions = data.sessions.filter { it.sessionDate in S1_START..S1_END && it.classId in classById }.associateBy { it.id }
         val manipOf = { sid: String -> data.sessionManipulations[sid].orEmpty() }
         val manips = sessions.keys.map(manipOf).filter { it.isNotBlank() }.distinct().sortedWith(compareBy({ it.drop(1).toIntOrNull() ?: 99 }, { it }))
+        // Groupe du S1 : celui des séances S1 suivies (le plus fréquent), pas la liste actuelle (changée au S2).
+        val s1Class = data.attendance.filter { it.sessionId in sessions }.groupBy { it.studentId }
+            .mapValues { (_, l) -> l.groupingBy { sessions.getValue(it.sessionId).classId }.eachCount().maxByOrNull { it.value }!!.key }
+        val classOf = { st: tn.utm.fst.gestionpresence.nativeapp.core.model.Student -> s1Class[st.id] ?: st.classId }
         val families = classes.map { base(it.name) }.distinct().sorted()
         val sheets = mutableListOf<Sheet>(); val summary = mutableListOf<List<Int>>(); val summaryNames = mutableListOf<String>()
         val today = LocalDate.now().let { "%02d/%02d/%d".format(it.dayOfMonth, it.monthValue, it.year) }
         for (fam in families) {
             val ids = classes.filter { base(it.name) == fam }.map { it.id }.toSet()
-            val students = data.students.filter { it.classId in ids }.sortedWith(compareBy({ it.lastName.lowercase() }, { it.firstName.lowercase() }))
+            val students = data.students.filter { classOf(it) in ids }.sortedWith(compareBy({ it.lastName.lowercase() }, { it.firstName.lowercase() }))
             if (students.isEmpty()) continue
             val head = listOf("N°", "Nom", "Prénom", "Groupe") + manips + listOf("Sans manip.", "Moyenne", "Absences", "Justifiées", "Rattrapées", "Détail des absences")
             val rows = mutableListOf<List<Cell>>(
@@ -78,7 +82,7 @@ object BilanS1Xlsx {
                     Cell.N((i + 1).toDouble(), if (nameStyle > 0) nameStyle else BOX),
                     Cell.T(st.lastName, if (nameStyle > 0) nameStyle else LEFT),
                     Cell.T(st.firstName, if (nameStyle > 0) nameStyle else LEFT),
-                    Cell.T(group(classById[st.classId]?.name.orEmpty()), BOX)
+                    Cell.T(group(classById[classOf(st)]?.name.orEmpty()), BOX)
                 )
                 manips.forEach { m -> row += cellFor(recs.filter { manipOf(it.sessionId) == m }) }
                 row += cellFor(recs.filter { manipOf(it.sessionId).isBlank() })

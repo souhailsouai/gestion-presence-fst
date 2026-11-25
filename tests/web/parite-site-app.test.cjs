@@ -21,6 +21,8 @@ const FEATURES=[
   ['generateStatisticsPdf','StatsPdf'],
   ['v37_s2_auto_replan','v37_s2_auto_replan'],
   ['Intervenants par jour','Intervenants par jour'],
+  ['v44_s2_start_slot','v44_s2_start_slot'],
+  ['S1 : celui des séances S1 suivies','S1 : celui des séances S1 suivies'],
   ['Intervenants du','Intervenants du'],
   ['v43_create_space','v43_create_space'],
   ['v43_set_member','v43_set_member'],
