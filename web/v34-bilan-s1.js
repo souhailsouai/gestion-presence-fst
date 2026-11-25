@@ -27,12 +27,15 @@
     const manipBySession=new Map((input.plans||[]).filter(p=>p.session_id&&p.manipulation).map(p=>[String(p.session_id),String(p.manipulation)]));
     const att=(input.attendance||[]).filter(a=>sessionById.has(String(a.session_id)));
     const byStudent=new Map();for(const a of att){const k=String(a.student_id);if(!byStudent.has(k))byStudent.set(k,[]);byStudent.get(k).push(a);}
+    /* Groupe du S1 : celui des séances S1 suivies (le plus fréquent), pas la liste actuelle (changée au S2). */
+    const s1Class=new Map();for(const [k,list] of byStudent){const n=new Map();for(const a of list){const c=String(sessionById.get(String(a.session_id)).class_id);n.set(c,(n.get(c)||0)+1);}let best=null,bn=0;for(const [c,v] of n)if(v>bn){best=c;bn=v;}if(best)s1Class.set(k,best);}
+    const classOf=st=>s1Class.get(String(st.id))||String(st.class_id);
     const manips=[...new Set(sessions.map(s=>manipBySession.get(String(s.id))).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
     const families=[...new Set(classes.map(c=>base(c.name)))].sort();
     const sheets=[],summary=[];
     for(const fam of families){
       const ids=new Set(classes.filter(c=>base(c.name)===fam).map(c=>String(c.id)));
-      const students=(input.students||[]).filter(s=>ids.has(String(s.class_id))).sort((a,b)=>(a.last_name+' '+(a.first_name||'')).localeCompare(b.last_name+' '+(b.first_name||''),'fr'));
+      const students=(input.students||[]).filter(s=>ids.has(classOf(s))).sort((a,b)=>(a.last_name+' '+(a.first_name||'')).localeCompare(b.last_name+' '+(b.first_name||''),'fr'));
       if(!students.length)continue;
       const head=['N°','Nom','Prénom','Groupe',...manips,'Sans manip.','Moyenne','Absences','Justifiées','Rattrapées','Détail des absences'];
       const rows=[],styles=[];let tAbs=0,tJ=0,tR=0,withAbs=0;
@@ -59,7 +62,7 @@
           ...jus.map(r=>`${dm(r.session.session_date)}${r.manip?' ('+r.manip+')':''} justifiée`),
           ...rat.map(r=>`${dm(r.session.session_date)}${r.manip?' ('+r.manip+')':''} rattrapée le ${dm(r.makeup_date)}${r.makeup_note?' — '+r.makeup_note:''}`)].join(', ');
         const nameStyle=abs.length?C.red:jus.length?C.orange:rat.length?C.green:null;
-        rows.push([i+1,st.last_name||'',st.first_name||'',groupOf(classById.get(String(st.class_id))?.name),...cells,
+        rows.push([i+1,st.last_name||'',st.first_name||'',groupOf(classById.get(classOf(st))?.name),...cells,
           grades.length?Math.round(grades.reduce((a,b)=>a+b,0)/grades.length*100)/100:null,abs.length||null,jus.length||null,rat.length||null,detail||null]);
         styles.push([nameStyle,nameStyle,nameStyle,null,...cellStyles,null,null,abs.length?C.red:null,jus.length?C.orange:null,rat.length?C.green:null,nameStyle]);
       });

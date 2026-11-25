@@ -729,7 +729,7 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
                         Spacer(Modifier.height(10.dp))
                         Text("Bonjour, ${shortName(state.profile?.fullName)}", style = MaterialTheme.typography.headlineSmall, color = Uphf.Title)
                         Text(
-                            if (todays.isEmpty() && data.pendingS1(me, false).none { it.plan.date == today() }) "Aucune séance prévue aujourd’hui." else "Séance(s) aujourd’hui — touchez pour faire l’appel.",
+                            if (todays.isEmpty() && (data.pendingS1(me, false) + data.pendingS2(me, false)).none { it.plan.date == today() }) "Aucune séance prévue aujourd’hui." else "Séance(s) aujourd’hui — touchez pour faire l’appel.",
                             color = Uphf.Text
                         )
                     }
@@ -744,7 +744,7 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
             }
         }
         item { NoticesCard(viewModel) }
-        val todayPending = data.pendingS1(me, false).filter { it.plan.date == today() }
+        val todayPending = (data.pendingS1(me, false) + data.pendingS2(me, false)).filter { it.plan.date == today() }
         if (todays.isNotEmpty() || todayPending.isNotEmpty()) {
             item { SectionHeader("Aujourd’hui") }
             items(todayPending, key = { "plan-" + it.slot.id }) { x -> Box(Modifier.animateItem()) { PendingSlotCard(x, data, true, viewModel) } }
@@ -824,7 +824,17 @@ private fun SessionCard(s: TeachingSession, data: RepositoryData, viewModel: Mai
 }
 
 /** Groupes du planning S1 qui n'ont pas encore de séance réelle (appel pas encore ouvert). */
-private data class PendingSlot(val plan: PlanSession, val slot: tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSlot, val groupName: String)
+private data class PendingSlot(val plan: PlanSession, val slot: tn.utm.fst.gestionpresence.nativeapp.core.model.PlanSlot, val groupName: String, val s2: Boolean = false)
+
+/** Cases du planning S2 (tous les espaces lisibles) dont l'appel n'est pas encore ouvert. */
+private fun RepositoryData.pendingS2(me: String?, all: Boolean, fromDate: String = ""): List<PendingSlot> {
+    val existing = sessions.map { "${className(it.classId)}|${it.sessionDate}" }.toSet()
+    return plan.flatMap { p -> p.slots.map { PendingSlot(p, it, "${p.className}-G${it.groupNo}", s2 = true) } }
+        .filter { it.slot.id.isNotBlank() && "${it.groupName}|${it.plan.date}" !in existing }
+        .filter { all || it.slot.teacherId == me }
+        .filter { it.plan.date >= fromDate }
+        .sortedWith(compareBy({ it.plan.date }, { it.groupName }))
+}
 
 private fun RepositoryData.pendingS1(me: String?, all: Boolean, fromDate: String = ""): List<PendingSlot> {
     val existing = sessions.map { "${className(it.classId)}|${it.sessionDate}" }.toSet()
@@ -844,7 +854,7 @@ private fun PendingSlotCard(x: PendingSlot, data: RepositoryData, canOpen: Boole
                 Text("${dayName(x.plan.date)} ${fmt(x.plan.date)} · ${x.plan.startTime}–${x.plan.endTime}", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
                 Text("${x.slot.manipulation}${x.slot.room?.let { " · Salle $it" } ?: ""} · ${shortName(data.teacher(x.slot.teacherId))}", color = Uphf.Teal, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
             }
-            if (canOpen) Button(onClick = { viewModel.openPlannedSession(x.slot.id) }, colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal)) { Text("Faire l’appel") }
+            if (canOpen) Button(onClick = { viewModel.openPlannedSession(x.slot.id, x.s2) }, colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal)) { Text("Faire l’appel") }
             else Text("Prévue", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -883,8 +893,8 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
                 if (!noGrade) NewSessionForm(state, viewModel)
             }
         }
-        if (sem == "S1" && !noGrade) {
-            val pending = data.pendingS1(me, scope == "all", if (state.isAdmin) "" else today()).filter { query.isBlank() || it.groupName.contains(query.trim(), ignoreCase = true) }
+        if (!noGrade) {
+            val pending = (if (sem == "S1") data.pendingS1(me, scope == "all", if (state.isAdmin) "" else today()) else data.pendingS2(me, scope == "all", if (state.isAdmin) "" else today())).filter { query.isBlank() || it.groupName.contains(query.trim(), ignoreCase = true) }
             if (pending.isNotEmpty()) {
                 item { SectionHeader("Séances du planning à ouvrir", "Touchez « Faire l’appel » le jour de la séance pour saisir présences et notes.") }
                 items(pending, key = { "plan-" + it.slot.id }) { x -> Box(Modifier.animateItem()) { PendingSlotCard(x, data, state.isAdmin || x.plan.date <= today(), viewModel) } }

@@ -89,12 +89,16 @@
     const st=settings[0]||{start_date:'2027-01-11',group_count:5,manip_count:5,academic_year:'2026/2027'};
     const names=new Map(profiles.map(p=>[p.id,p.full_name||'—']));
     const own=new Set(slots.map(x=>x.class_name));
-    const studentRows=students.map(s=>{const cls=s.classes?.name||'';const m=def?/^(.*)-G(\d+)$/.exec(cls):null;return {id:s.id,last_name:s.last_name,first_name:s.first_name,name:norm((s.last_name||'')+' '+(s.first_name||'')),class_id:s.class_id,class_name:m?m[1]:cls,group_no:m?Number(m[2]):null};})
+    /* Les listes « X-Gn » créées à l'appel S2 restent rattachées à la classe X (et masquées de la liste des classes). */
+    const baseNames=new Set(spaceClasses.map(k=>k.name));
+    const baseId=new Map(spaceClasses.map(k=>[k.name,k.id]));
+    const groupClassIds=new Map(spaceClasses.map(k=>[k.id,/^(.*)-G\d+$/.exec(k.name)]).filter(([,m])=>m&&baseNames.has(m[1])).map(([id,m])=>[id,baseId.get(m[1])]));
+    const studentRows=students.map(s=>{const cls=s.classes?.name||'';const m0=/^(.*)-G(\d+)$/.exec(cls),m=m0&&(def||baseNames.has(m0[1]))?m0:null;return {id:s.id,last_name:s.last_name,first_name:s.first_name,name:norm((s.last_name||'')+' '+(s.first_name||'')),class_id:s.class_id,class_name:m?m[1]:cls,group_no:m?Number(m[2]):null};})
       .filter(s=>def?CLASSES.includes(s.class_name):own.has(s.class_name)||spaceClasses.some(k=>k.id===s.class_id));
     // Enseignants proposés dans l'espace : ses membres (tous les profils pour MPI1 · PC1, comme avant)
     const memberIds=new Set(spaceMembers.map(m=>m.profile_id));
     const staff=def||!memberIds.size?profiles:profiles.filter(p=>memberIds.has(p.id));
-    return {space:SP,settings:st,manips,slots,stations,members,excluded,sessions,versions,profiles:staff,allProfiles:profiles,names,students:studentRows,studentById:new Map(studentRows.map(s=>[s.id,s])),audit,spaceMembers,spaceClasses};
+    return {space:SP,settings:st,manips,slots,stations,members,excluded,sessions,versions,profiles:staff,allProfiles:profiles,names,students:studentRows.map(s=>groupClassIds.has(s.class_id)?{...s,class_id:groupClassIds.get(s.class_id)}:s),studentById:new Map(studentRows.map(s=>[s.id,s])),audit,spaceMembers,spaceClasses:spaceClasses.filter(k=>!groupClassIds.has(k.id))};
   }
   const hashOf=d=>JSON.stringify([d.settings,d.manips,d.slots,d.stations,d.members,d.excluded,d.sessions,d.versions.map(v=>v.id)]);
   async function load(force){

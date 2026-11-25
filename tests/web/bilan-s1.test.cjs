@@ -26,3 +26,11 @@ test('Bilan S1 : rouge = absent non rattrapé, orange = justifié, vert = rattra
   const ti=sh.rows.findIndex(r=>r[1]==='TRABELSI');assert.equal(sh.rows[ti][4],null);assert.equal(sh.styles[ti][1],null);
   assert.deepEqual(m.summary[0],['MPI1-A',3,1,1,1,1]);
 });
+test('Bilan S1 : un étudiant déplacé au S2 reste dans son groupe du S1',()=>{
+  const moved={...data,classes:[...data.classes,{id:4,name:'MPI1-B-G1'}],students:data.students.map(s=>s.id==='c'?{...s,class_id:4}:s.id==='b'?{...s,class_id:1}:s)};
+  const m=B.build(moved);const sh=m.sheets.find(s=>s.name==='MPI1-A');
+  assert.ok(sh.rows.some(r=>r[1]==='GHARBI'),'GHARBI reste en MPI1-A');
+  assert.equal(sh.rows.find(r=>r[1]==='GHARBI')[3],'G1');
+  assert.equal(sh.rows.find(r=>r[1]==='TRABELSI')[3],'G2','groupe du S1, pas la liste actuelle');
+  assert.ok(!m.sheets.some(s=>s.name==='MPI1-B'),'aucune feuille créée par le S2');
+});

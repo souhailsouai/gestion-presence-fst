@@ -109,6 +109,10 @@ class S2Admin(private val repository: PresenceRepository) {
                     mapOf("deleted_at" to "is.null", "classes.space_id" to "eq.$space"), "last_name").map { SpaceStudent(it.s("id")!!, it.s("last_name").orEmpty(), it.s("first_name").orEmpty(), it.s("class_id")!!) }
             }
             val st = settings.await()
+            // Les listes « X-Gn » créées à l'appel S2 restent rattachées à la classe X (et masquées de la liste des classes).
+            val allClasses = spaceClasses.await()
+            val baseIds = allClasses.associate { it.name to it.id }
+            val groupOf = allClasses.mapNotNull { c -> Regex("^(.*)-G\\d+$").find(c.name)?.groupValues?.get(1)?.let { baseIds[it] }?.let { c.id to it } }.toMap()
             S2Snapshot(
                 settings = S2Settings(st?.s("start_date") ?: S2_MIN, st?.s("end_date"), st?.i("group_count") ?: 5, st?.i("manip_count") ?: 5),
                 slots = slots.await().map { ClassSlot(it.s("class_name")!!, it.i("weekday") ?: 1, it.s("start_time")!!.take(5), it.s("end_time")!!.take(5), it.s("pair_key") ?: "", it.i("pair_order") ?: 1, it.s("mode") ?: "alternance", it.b("active") ?: true) }
@@ -123,7 +127,7 @@ class S2Admin(private val repository: PresenceRepository) {
                     val names = students.await().associate { it.s("id")!! to "${it.s("last_name").orEmpty()} ${it.s("first_name").orEmpty()}".trim() }
                     members.await().map { Member(it.s("student_id")!!, names[it.s("student_id")] ?: "?", it.s("class_name") ?: "", it.i("group_no") ?: 1, it.s("s1_class_id"), it.s("status") ?: "actif", it.s("reason"), it.b("locked") ?: false) }
                 },
-                space = space, spaces = spaces, myRoles = mine, spaceClasses = spaceClasses.await(), spaceStudents = spaceStudents.await()
+                space = space, spaces = spaces, myRoles = mine, spaceClasses = allClasses.filter { it.id !in groupOf }, spaceStudents = spaceStudents.await().map { x -> groupOf[x.classId]?.let { x.copy(classId = it) } ?: x }
             )
         }
     }

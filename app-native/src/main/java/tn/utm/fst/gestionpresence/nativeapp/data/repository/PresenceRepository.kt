@@ -119,6 +119,14 @@ class PresenceRepository(context: Context) {
             ?: throw IllegalStateException("Séance non créée.")
     }
 
+    /** « Faire l'appel » d'une case du planning S2 (tous les espaces) : crée ou retrouve la séance du groupe. */
+    suspend fun startS2Slot(slotId: String): String {
+        requireOnline()
+        val r = api.callRpc(authorizedSession(), "v44_s2_start_slot", buildJsonObject { put("p_slot_id", slotId) })
+        return (r as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() && it != "null" }
+            ?: throw IllegalStateException("Séance non créée.")
+    }
+
     /** Change l'enseignant d'un groupe du planning S1 (ligne session_plans). */
     suspend fun assignS1Teacher(planId: String, groupNo: Int, code: String, teacherId: String, room: String) {
         requireOnline()

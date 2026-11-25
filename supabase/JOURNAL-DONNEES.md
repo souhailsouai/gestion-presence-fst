@@ -36,3 +36,10 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 
 ## 25/11/2026 — V43 : espaces S2
 - Tables spaces et space_members ; MPI1 · PC1 = premier espace (11 membres : 1 admin, 10 enseignants). Colonne space_id sur les 10 tables S2 et sur classes ; clés et règles d’accès par espace ; fonctions du planning S2 avec p_space (MPI1 · PC1 par défaut). Planning MPI1 · PC1 inchangé (30 séances, recalcul identique). Sauvegarde : backup_20261122_enseignants_s1.*_v43.
+
+## 2026-11-25 — V44 à V44d : appel S2 depuis le planning (tous les espaces)
+- V44 : `v33_s2_slots.attendance_session_id` + fonction `v44_s2_start_slot` (l'enseignant de la case ou l'administrateur de l'espace ouvre la séance du groupe).
+- V44b : classes des autres espaces exemptées du catalogue MPI/PC/LPC3 (module libre, groupes 1–12) ; MPI1 · PC1 inchangé.
+- V44c (sécurité) : `can_read_space` / `can_admin_space` renvoient toujours vrai/faux (un résultat NULL laissait passer une personne hors de l'espace). Vérifié : aucun usage indu (seul espace créé : LPHE1, par le super administrateur).
+- V44d : à l'ouverture d'une séance S2 de MPI1 · PC1, un étudiant qui change de groupe est daté dans `v16_student_group_memberships` à la date de la séance (aucune ligne supprimée). Test annulé sur le vrai planning : 30 cases ouvertes, séances et présences du S1 inchangées, 0 chevauchement.
+- Aucune donnée réelle modifiée par ces migrations (fonctions et colonne seulement).
