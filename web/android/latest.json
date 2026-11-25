@@ -1,6 +1,6 @@
 {
-  "version": "2.15.1",
-  "notes": "S2 : tableau « Intervenants par jour » (comme au S1) dans l'onglet Enseignants, et ligne des intervenants du jour en bas de chaque page du planning PDF. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.16.0",
+  "notes": "Espaces S2 : chaque groupe de classes a son propre espace (classes, étudiants, réglages, planning). Le super administrateur crée les espaces et nomme leurs administrateurs ; un administrateur d'espace gère ses classes et ses étudiants. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3282211
+  "size": 3298595
 }

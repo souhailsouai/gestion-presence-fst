@@ -22,6 +22,10 @@ const FEATURES=[
   ['v37_s2_auto_replan','v37_s2_auto_replan'],
   ['Intervenants par jour','Intervenants par jour'],
   ['Intervenants du','Intervenants du'],
+  ['v43_create_space','v43_create_space'],
+  ['v43_set_member','v43_set_member'],
+  ['Classes & étudiants','Classes & étudiants'],
+  ['p_space','p_space'],
 ];
 for(const [s,a] of FEATURES){
   test(`parité : « ${s} » existe sur le site et dans l'application`,()=>{

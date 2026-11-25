@@ -76,3 +76,16 @@ test('Avis : le site respecte la période d\'affichage (avis S2 à partir du 12/
   assert.match(sql,/S2 — Démarrage des TP MPI1/);
   assert.match(sql,/S2 — Démarrage des TP PC1/);
 });
+
+test('Espaces S2 (V43) : tables par espace, droits par espace, super administrateur',()=>{
+  const sql=read('supabase/migrations/20261125210000_v43_espaces_s2.sql');
+  assert.match(sql,/create table public\.spaces/);
+  assert.match(sql,/private\.can_admin_space\(space_id\)/);
+  assert.match(sql,/Seul le super administrateur nomme ou retire un administrateur/);
+  const fn=read('supabase/migrations/20261125211000_v43b_fonctions_s2_par_espace.sql');
+  assert.match(fn,/p_space uuid default '00000000-0000-4000-8000-000000000001'/);
+  const js=read('web/v33-semestres.js');
+  assert.match(js,/eq\('space_id',SP\)/);
+  assert.match(js,/onConflict:'space_id,weekday,manipulation_code'/);
+  assert.match(js,/onConflict:'space_id,code'/);
+});

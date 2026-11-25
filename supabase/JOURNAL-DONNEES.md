@@ -33,3 +33,6 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 
 ## 24/11/2026 — V42 : avis officiels du S2
 - 6 avis S1 sans date de fin : fin d’affichage fixée au 11/12/2026. 4 avis S2 (horaire, démarrage MPI1, démarrage PC1, dates sans TP) visibles du 12/12/2026 au 30/04/2027. Sauvegarde : backup_20261122_enseignants_s1.v21_notices_v42.
+
+## 25/11/2026 — V43 : espaces S2
+- Tables spaces et space_members ; MPI1 · PC1 = premier espace (11 membres : 1 admin, 10 enseignants). Colonne space_id sur les 10 tables S2 et sur classes ; clés et règles d’accès par espace ; fonctions du planning S2 avec p_space (MPI1 · PC1 par défaut). Planning MPI1 · PC1 inchangé (30 séances, recalcul identique). Sauvegarde : backup_20261122_enseignants_s1.*_v43.

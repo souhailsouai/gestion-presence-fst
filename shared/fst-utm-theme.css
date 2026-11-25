@@ -206,6 +206,7 @@ body[data-semester="S2"] .v33-banner{border-left-color:var(--brand-red)}
 .v33-checks{background:#fff;border:1px solid #e3e8f0;border-radius:12px;padding:8px 14px;margin:8px 0}
 .v33-card{background:#fff;border:1px solid #e3e8f0;border-radius:14px;padding:12px 14px;margin:0 0 12px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
 .v33-recap{margin-top:16px}.v33-recap-t select{min-width:72px;padding:4px 6px;border-radius:8px;border:1px solid #cfd8e3}.v33-recap-t td,.v33-recap-t th{white-space:nowrap}
+.v33-spaces{margin:0 0 10px}.v33-form{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}.v33-form label{display:flex;flex-direction:column;font-size:.85rem;gap:4px}.v33-studs{columns:2;column-gap:28px;padding-left:22px}.v33-studs li{break-inside:avoid;padding:3px 0}@media(max-width:700px){.v33-studs{columns:1}}
 .v33-card h3{margin:0 0 8px;color:var(--brand-navy);font-size:1.05rem}
 .v33-card h3 small{color:#64748b;font-weight:500}
 .v33-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
