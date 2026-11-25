@@ -1,6 +1,6 @@
 {
-  "version": "2.17.0",
-  "notes": "Appel S2 : touchez « Faire l'appel » sur une case du planning S2 (tous les espaces), le jour de la séance. Les changements de groupe du S2 sont datés : le bilan S1 garde le groupe du S1. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.17.1",
+  "notes": "Onglet « Équipe » : l'administrateur d'un espace ajoute ou retire ses enseignants, puis génère le planning S2 de ses classes. Appel S2 depuis le planning. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
   "size": 3314979
 }
