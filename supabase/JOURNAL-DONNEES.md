@@ -43,3 +43,8 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 - V44c (sécurité) : `can_read_space` / `can_admin_space` renvoient toujours vrai/faux (un résultat NULL laissait passer une personne hors de l'espace). Vérifié : aucun usage indu (seul espace créé : LPHE1, par le super administrateur).
 - V44d : à l'ouverture d'une séance S2 de MPI1 · PC1, un étudiant qui change de groupe est daté dans `v16_student_group_memberships` à la date de la séance (aucune ligne supprimée). Test annulé sur le vrai planning : 30 cases ouvertes, séances et présences du S1 inchangées, 0 chevauchement.
 - Aucune donnée réelle modifiée par ces migrations (fonctions et colonne seulement).
+
+## 2026-11-25 — V45 : planning des autres espaces visible au choix
+- Tout enseignant peut consulter, en lecture, le planning S2 des autres espaces (séances, cases, créneaux, manipulations, réglages, postes, dates exclues). Les étudiants, groupes, versions et journal restent réservés aux membres.
+- `v45_am_super_admin()` : distingue le super administrateur des administrateurs de l'application.
+- Vérifié (test annulé) : un enseignant hors de LPHE1 voit son planning mais ni ses classes, ni ses étudiants, ni ses groupes, et ne peut rien modifier. Aucune donnée modifiée.
