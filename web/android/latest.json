@@ -1,6 +1,6 @@
 {
-  "version": "2.18.0",
-  "notes": "Planning S2 : chacun voit d'abord ses espaces ; le bouton « Autres espaces » montre le planning des autres (lecture seule, sans listes d'étudiants). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.18.1",
+  "notes": "Le super administrateur voit et gère tous les espaces. Planning S2 : chacun voit d'abord ses espaces ; « Autres espaces » montre le planning des autres (lecture seule). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
   "size": 3314979
 }

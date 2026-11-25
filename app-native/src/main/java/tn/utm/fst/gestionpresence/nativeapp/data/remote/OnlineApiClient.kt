@@ -327,7 +327,9 @@ class OnlineApiClient(
     suspend fun s2Spaces(session: AuthSession): Pair<List<Pair<String, String>>, Set<String>> = runCatching {
         val spaces = getPaged(session, "spaces", "id,name,created_at", emptyMap(), "created_at").map { it.jsonObject.let { o -> o.requiredString("id") to (o.string("name") ?: "—") } }
         val mine = getPaged(session, "space_members", "space_id", mapOf("profile_id" to "eq.${session.userId}"), "space_id").mapNotNull { it.jsonObject.string("space_id") }.toSet()
-        spaces to mine
+        // Le super administrateur supervise tous les espaces.
+        val superAdmin = runCatching { (callRpc(session, "v45_am_super_admin", kotlinx.serialization.json.buildJsonObject { }) as? kotlinx.serialization.json.JsonPrimitive)?.content == "true" }.getOrDefault(false)
+        spaces to (if (superAdmin) spaces.map { it.first }.toSet() else mine)
     }.getOrDefault(emptyList<Pair<String, String>>() to emptySet())
 
     suspend fun manipulationTitles(session: AuthSession): Map<String, String> = runCatching {
