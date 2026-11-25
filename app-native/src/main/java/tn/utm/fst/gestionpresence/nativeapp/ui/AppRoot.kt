@@ -865,7 +865,8 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
     val data = state.data ?: return EmptyState("Données indisponibles.")
     val me = state.profile?.id
     var scope by rememberSaveable { mutableStateOf(if (state.isAdmin) "all" else "mine") }
-    var sem by rememberSaveable { mutableStateOf(currentSemester()) }
+    var sem by rememberSaveable { mutableStateOf(if (state.data?.s1Hidden == true) "S2" else currentSemester()) }
+    if (state.data?.s1Hidden == true && sem == "S1") sem = "S2"
     var query by rememberSaveable { mutableStateOf("") }
     var noGrade by rememberSaveable { mutableStateOf(false) }
     // Séances dont l'appel est fait mais où un étudiant présent (ou en retard / justifié) n'a pas encore de note.
@@ -881,7 +882,7 @@ private fun SessionsScreen(state: MainUiState, viewModel: MainViewModel) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Segmented(listOf("mine" to "Mes séances", "all" to "Toutes"), scope) { scope = it }
-                if (!data.onlyLpc3()) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
+                if (!data.onlyLpc3() && !data.s1Hidden) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Classe ou groupe (ex. MPI1-B)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 val nNoGrade = remember(data, scope, sem, me) { data.sessions.count { (scope == "all" || it.teacherId == me) && semesterOf(it.sessionDate) == sem && (missingBySession[it.id] ?: 0) > 0 } }
                 FilterChip(
@@ -1129,7 +1130,8 @@ private val CLASS_ORDER = listOf("MPI1-A", "MPI1-B", "MPI1-C", "MPI1-D", "MPI1-E
 private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
     val data = state.data ?: return EmptyState("Données indisponibles.")
     val me = state.profile?.id
-    var sem by rememberSaveable { mutableStateOf(currentSemester()) }
+    var sem by rememberSaveable { mutableStateOf(if (state.data?.s1Hidden == true) "S2" else currentSemester()) }
+    if (state.data?.s1Hidden == true && sem == "S1") sem = "S2"
     var mode by rememberSaveable { mutableStateOf("class") }
     var cls by rememberSaveable(data.classes.size) { mutableStateOf(data.classNames().firstOrNull() ?: "MPI1-A") }
     var month by rememberSaveable(sem) { mutableStateOf("all") }
@@ -1144,7 +1146,7 @@ private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (data.plan.isNotEmpty() || data.classes.any { classOf(it.name) in CLASS_ORDER }) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
+                if (!data.s1Hidden && (data.plan.isNotEmpty() || data.classes.any { classOf(it.name) in CLASS_ORDER })) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 Segmented(listOf("class" to "Par classe", "mine" to "Mes créneaux"), mode) { mode = it }
                 if (sem == "S2" && mode == "class" && (data.spaces.size > 1)) {
                     if (shownSpaces.size > 1) ChipRow(shownSpaces.map { (id, n) -> id to (if (id in data.mySpaces) n else "$n · lecture") }, space) { space = it }
@@ -1550,7 +1552,7 @@ private fun ExportScreen(state: MainUiState, viewModel: MainViewModel) {
         if (file == null) msg = "Aucune donnée à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.export.TrackingXlsx.share(context, file)
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (families.any { it.startsWith("MPI1") || it.startsWith("PC1") }) {
+        if (!data.s1Hidden && families.any { it.startsWith("MPI1") || it.startsWith("PC1") }) {
             item { SectionHeader("Bilan S1 (absences en couleur)", "Comme sur le site : une feuille par classe, note de chaque manipulation, absences en rouge, justifiées en orange, rattrapées en vert ; synthèse et légende.") }
             item {
                 Button(onClick = {
@@ -1659,7 +1661,8 @@ private fun Donut(t: Tally, modifier: Modifier = Modifier) {
 @Composable
 private fun StatsScreen(state: MainUiState) {
     val data = state.data ?: return EmptyState("Données indisponibles.")
-    var sem by rememberSaveable { mutableStateOf(currentSemester()) }
+    var sem by rememberSaveable { mutableStateOf(if (state.data?.s1Hidden == true) "S2" else currentSemester()) }
+    if (state.data?.s1Hidden == true && sem == "S1") sem = "S2"
     var cls by rememberSaveable { mutableStateOf("all") }
     var teacher by rememberSaveable { mutableStateOf("") }
     var manip by rememberSaveable { mutableStateOf("") }
@@ -1678,7 +1681,7 @@ private fun StatsScreen(state: MainUiState) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (!data.onlyLpc3()) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
+                if (!data.onlyLpc3() && !data.s1Hidden) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 ChipRow(listOf("all" to "Toutes") + data.classNames().map { it to it }, cls) { cls = it }
                 ChipRow(listOf("" to "Tous les intervenants") + data.teacherNames.entries.sortedBy { it.value }.map { it.key to shortName(it.value) }, teacher) { teacher = it }
                 ChipRow(listOf("" to "Toutes les manipulations") + (1..6).map { "M$it" to "M$it" }, manip) { manip = it }
@@ -1967,6 +1970,13 @@ private fun AdminScreen(state: MainUiState, viewModel: MainViewModel) {
             Button(onClick = { viewModel.adminSetPin(adminPin) }, enabled = state.online && adminPin.length >= 6, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Modifier le PIN") }
         }
         OutlinedButton(onClick = { viewModel.navigate(AppScreen.S2_ADMIN) }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Gestion du S2 : dates exclues, créneaux, planning") }
+        // À partir du 12/12/2026, le S1 est masqué pour tous ; l'administrateur l'affiche ici (archives).
+        if (viewModel.s1HiddenByDate()) FormCard("Archives S1") {
+            val shown = viewModel.s1ArchiveShown()
+            Text(if (shown) "Le S1 est affiché (archives) : séances, présences, planning S1 et Bilan S1." else "Le S1 est terminé : il est masqué partout. Affichez-le pour consulter ou corriger les séances du S1, ou générer le Bilan S1.", color = Uphf.Muted)
+            Button(onClick = { viewModel.setS1Archive(!shown) }, enabled = state.online, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = if (shown) Uphf.Teal else Uphf.Ochre)) { Text(if (shown) "Masquer le S1" else "Afficher le S1 (archives)") }
+        }
     }
 }
 

@@ -48,3 +48,11 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 - Tout enseignant peut consulter, en lecture, le planning S2 des autres espaces (séances, cases, créneaux, manipulations, réglages, postes, dates exclues). Les étudiants, groupes, versions et journal restent réservés aux membres.
 - `v45_am_super_admin()` : distingue le super administrateur des administrateurs de l'application.
 - Vérifié (test annulé) : un enseignant hors de LPHE1 voit son planning mais ni ses classes, ni ses étudiants, ni ses groupes, et ne peut rien modifier. Aucune donnée modifiée.
+
+## 2026-11-25 — Besma Bellafi : administratrice de LPHE1 seulement (demande du super administrateur)
+- `profiles.role` de Besma Bellafi : `admin` → `teacher`. Sauvegarde : `backup_20261122_enseignants_s1.profiles_besma_v47`.
+- Elle reste administratrice de l'espace LPHE1. MPI1 · PC1 est géré par Dr. Souhail Souai seul (planning visible en lecture).
+- Vérifié : recalcul et modification de MPI1 · PC1 refusés ; administration de LPHE1 conservée.
+
+## 2026-11-25 — V46 : S1 masqué après le 12/12/2026 (aucune donnée supprimée)
+- Site et application ne chargent plus les séances et le planning datés d'avant le 12/12/2026 ; « Archives S1 » (Administration) les réaffiche pour un administrateur. Toutes les données du S1 restent en base.

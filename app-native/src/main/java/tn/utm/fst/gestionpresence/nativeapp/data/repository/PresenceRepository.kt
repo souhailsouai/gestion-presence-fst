@@ -190,6 +190,10 @@ class PresenceRepository(context: Context) {
         api.unenrollMfa(authorizedSession(), factorId)
     }
 
+    /** S1 masqué à partir du 12/12/2026 ; un administrateur l'affiche avec « Archives S1 ». */
+    var showS1Archive = false
+    fun s1Hidden(): Boolean = java.time.LocalDate.now().toString() >= S1_HIDDEN_FROM && !showS1Archive
+
     /** Données préchargées pendant la connexion (utilisées une seule fois, si récentes). */
     private var prefetched: Pair<Long, RepositoryData>? = null
 
@@ -234,7 +238,7 @@ class PresenceRepository(context: Context) {
         @Suppress("UNCHECKED_CAST") val spaces = extras[8] as Pair<List<Pair<String, String>>, Set<String>>
         // Mes espaces : ceux dont je suis membre ; MPI1 · PC1 aussi pour un administrateur ou un compte sans espace.
         val mySpaces = spaces.second.toMutableSet().apply { if (session.role == "admin" || isEmpty()) add("00000000-0000-4000-8000-000000000001") }
-        return RepositoryData(
+        return hideS1(RepositoryData(
             contract = contract,
             classes = classes,
             students = students,
@@ -250,7 +254,16 @@ class PresenceRepository(context: Context) {
             sessionManipulations = sessionManips,
             spaces = spaces.first,
             mySpaces = mySpaces
-        )
+        ))
+    }
+
+    /** Après le S1 : séances, présences et planning du S1 disparaissent (sauf « Archives S1 »). */
+    private fun hideS1(d: RepositoryData): RepositoryData {
+        if (!s1Hidden()) return d
+        val kept = d.sessions.filter { it.sessionDate >= S1_HIDDEN_FROM }
+        val ids = kept.map { it.id }.toSet()
+        return d.copy(sessions = kept, attendance = d.attendance.filter { it.sessionId in ids }, s1Plan = emptyList(),
+            stats = stats(d.classes, d.students, kept, d.attendance.filter { it.sessionId in ids }), s1Hidden = true)
     }
 
     suspend fun addClass(
@@ -490,6 +503,8 @@ data class LoginBundle(
     val factors: List<MfaFactor>
 )
 
+const val S1_HIDDEN_FROM = "2026-12-12"
+
 data class RepositoryData(
     val contract: AppContract,
     val classes: List<AcademicClass>,
@@ -505,6 +520,7 @@ data class RepositoryData(
     val s1Pool: Map<Int, List<String>> = emptyMap(),
     val sessionManipulations: Map<String, String> = emptyMap(),
     val spaces: List<Pair<String, String>> = emptyList(),
+    val s1Hidden: Boolean = false,
     val mySpaces: Set<String> = setOf("00000000-0000-4000-8000-000000000001")
 ) {
     /** Titre d'une manipulation dans son espace. */

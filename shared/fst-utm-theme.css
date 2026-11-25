@@ -802,3 +802,14 @@ h1,h2,h3,h4,#fst-page-title,.v33x .v33-hero h3,.v33x .v33-h,.v33s-card h3{font-f
   #fst-main .alert-info{font-size:.88rem}
 }
 @media (max-width:430px){#fst-main #sync-status,#fst-topbar #sync-status{display:none!important}}
+
+/* V46 — S1 masqué après le 12/12/2026 (sauf archives administrateur) */
+body[data-s1-hidden="1"] #v33-sem-switch,
+body[data-s1-hidden="1"] [data-tab="planning-v16"],
+body[data-s1-hidden="1"] [data-tab="presence-lpc3"],
+body[data-s1-hidden="1"] [data-v34-bilan]{display:none!important}
+.v46-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff4e0;border-left:4px solid #c98a2b;padding:10px 14px;margin:0 0 12px;border-radius:8px;color:#5b4320}
+.v46-banner .btn{margin-left:auto}
+.v46-admin{background:#fff;border:1px solid var(--line,#dfe5ec);border-radius:12px;padding:14px 16px;margin:0 0 16px}
+.v46-admin h3{margin:0 0 6px;font-size:1.05rem}
+.v46-admin p{margin:0 0 10px;color:#5d6b7a}
