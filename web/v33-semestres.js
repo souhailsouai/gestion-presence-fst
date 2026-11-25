@@ -75,6 +75,7 @@
     state.spaces=spaces;state.myRoles=new Map(mine.map(m=>[m.space_id,m.role]));
     /* Mes espaces par défaut ; les autres (planning seul, lecture) au choix « Autres espaces ». */
     const myIds=new Set(mine.map(m=>m.space_id));if(teacher()?.isAdmin||!myIds.size)myIds.add(DEFAULT_SPACE);
+    if(state.amSuper)spaces.forEach(x=>myIds.add(x.id)); /* le super administrateur supervise tous les espaces */
     state.mySpaces=spaces.filter(x=>myIds.has(x.id));if(!state.mySpaces.length)state.mySpaces=spaces.slice(0,1);
     try{state.showOthers=root.localStorage.getItem(OTHERS_KEY)==='1';}catch(_){}
     const allowed=state.showOthers?spaces:state.mySpaces;
