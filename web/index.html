@@ -1795,6 +1795,17 @@ h1,h2,h3,h4,#fst-page-title,.v33x .v33-hero h3,.v33x .v33-h,.v33s-card h3{font-f
 }
 @media (max-width:430px){#fst-main #sync-status,#fst-topbar #sync-status{display:none!important}}
 
+/* V46 — S1 masqué après le 12/12/2026 (sauf archives administrateur) */
+body[data-s1-hidden="1"] #v33-sem-switch,
+body[data-s1-hidden="1"] [data-tab="planning-v16"],
+body[data-s1-hidden="1"] [data-tab="presence-lpc3"],
+body[data-s1-hidden="1"] [data-v34-bilan]{display:none!important}
+.v46-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff4e0;border-left:4px solid #c98a2b;padding:10px 14px;margin:0 0 12px;border-radius:8px;color:#5b4320}
+.v46-banner .btn{margin-left:auto}
+.v46-admin{background:#fff;border:1px solid var(--line,#dfe5ec);border-radius:12px;padding:14px 16px;margin:0 0 16px}
+.v46-admin h3{margin:0 0 6px;font-size:1.05rem}
+.v46-admin p{margin:0 0 10px;color:#5d6b7a}
+
 </style>
 </head>
 <body>
@@ -8213,6 +8224,8 @@ if(typeof previousSwitch==='function'&&!previousSwitch.__v30OfficialTeachers){
 <script src="./v34-bilan-s1.js"></script>
 
 <script src="./v44-s2-appel.js"></script>
+
+<script src="./v46-s1-archives.js"></script>
 <script type="application/json" id="fst-nav-config">{"groups": [{"label": "Principal", "items": [{"tabId": "dashboard", "label": "Tableau de bord", "icon": "dashboard"}, {"tabId": "presence", "label": "Pr\u00e9sence", "icon": "check"}]}, {"label": "Enseignement", "items": [{"tabId": "semestres", "label": "Semestres S1 / S2", "icon": "layers"}, {"tabId": "classes", "label": "Classes & Groupes", "icon": "groups"}, {"tabId": "emploi", "label": "Emploi du temps", "icon": "calendar"}, {"tabId": "seances", "label": "S\u00e9ances", "icon": "calendar"}, {"tabId": "planning-v16", "label": "Planning des s\u00e9ances", "icon": "calendar"}]}, {"label": "Gestion", "items": [{"tabId": "enseignants", "label": "Enseignants", "icon": "teacher"}, {"tabId": "etudiants", "label": "\u00c9tudiants", "icon": "groups"}, {"tabId": "rapports", "label": "Rapports", "icon": "report"}, {"tabId": "statistiques", "label": "Statistiques", "icon": "chart"}]}, {"label": "Module sp\u00e9cifique", "items": [{"tabId": "presence-lpc3", "label": "LPC3", "icon": "wave", "id": "lpc3-nav-tab", "permission": "lpc3"}]}, {"label": "Administration", "items": [{"tabId": "administration", "label": "Administration", "icon": "settings", "id": "admin-nav-tab", "permission": "admin"}]}]}</script>
 <script data-fst-shell-js="inline">
 (function(root){

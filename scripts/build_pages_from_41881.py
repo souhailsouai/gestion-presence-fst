@@ -102,6 +102,7 @@ tags = [
     '<script src="./v33-statistiques.js"></script>',
     '<script src="./v34-bilan-s1.js"></script>',
     '<script src="./v44-s2-appel.js"></script>',
+    '<script src="./v46-s1-archives.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
@@ -144,6 +145,7 @@ for marker in [
     'v33-statistiques.js',
     'v34-bilan-s1.js',
     'v44-s2-appel.js',
+    'v46-s1-archives.js',
     'data-fst-shell-css="inline"',
     'data-fst-shell-js="inline"',
     'data-fst-auth-compat="inline"',

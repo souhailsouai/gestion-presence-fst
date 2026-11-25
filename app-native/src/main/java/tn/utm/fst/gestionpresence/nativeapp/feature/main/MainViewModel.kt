@@ -103,6 +103,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Recharge les données après une modification du S2 (planning recalculé côté serveur). */
     fun reloadData(message: String? = null) = mutate(message ?: "") { }
 
+    /** Archives S1 (administrateur) : affiche ou masque de nouveau le S1. */
+    fun setS1Archive(show: Boolean) = mutate(if (show) "Archives S1 affichées." else "S1 masqué.") { repository.showS1Archive = show }
+    fun s1ArchiveShown(): Boolean = repository.showS1Archive
+    fun s1HiddenByDate(): Boolean = java.time.LocalDate.now().toString() >= tn.utm.fst.gestionpresence.nativeapp.data.repository.S1_HIDDEN_FROM
+
     /** Action S2 (planning, groupes) puis rechargement des données. */
     fun s2Action(message: String, block: suspend () -> Unit) = mutate(message) { block() }
 

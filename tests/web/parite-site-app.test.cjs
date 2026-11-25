@@ -25,6 +25,7 @@ const FEATURES=[
   ['Autres espaces','Autres espaces'],
   ['Mes espaces seulement','Mes espaces seulement'],
   ['v45_am_super_admin','v45_am_super_admin'],
+  ['Afficher le S1 (archives)','Afficher le S1 (archives)'],
   ["Équipe de l'espace",'Équipe de l’espace'],
   ['S1 : celui des séances S1 suivies','S1 : celui des séances S1 suivies'],
   ['Intervenants du','Intervenants du'],
