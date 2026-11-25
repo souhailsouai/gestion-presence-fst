@@ -21,7 +21,7 @@
   const S1_FROM='2026-09-01',S1_TO='2026-12-31';
   const CLASSES=['MPI1-A','MPI1-B','MPI1-C','MPI1-D','MPI1-E','PC1-A'];
   const KIND={ferie:'Jour férié',vacances:'Vacances',ds:'Semaine des DS',examen:'Examens',autre:'Autre'};
-  const VIEWS=[['espaces','Espaces','fa-building-user'],['classes','Classes & étudiants','fa-user-graduate'],['planning','Planning','fa-calendar-days'],['groupes','Groupes','fa-people-group'],['enseignants','Enseignants','fa-chalkboard-user'],['manips','Manipulations','fa-flask'],['dates','Dates exclues','fa-calendar-xmark'],['parametres','Paramètres','fa-sliders'],['versions','Versions','fa-clock-rotate-left']];
+  const VIEWS=[['espaces','Espaces','fa-building-user'],['classes','Classes & étudiants','fa-user-graduate'],['equipe','Équipe','fa-users'],['planning','Planning','fa-calendar-days'],['groupes','Groupes','fa-people-group'],['enseignants','Enseignants','fa-chalkboard-user'],['manips','Manipulations','fa-flask'],['dates','Dates exclues','fa-calendar-xmark'],['parametres','Paramètres','fa-sliders'],['versions','Versions','fa-clock-rotate-left']];
   const state={space:(()=>{try{return root.localStorage.getItem(SPACE_KEY)||DEFAULT_SPACE;}catch(_){return DEFAULT_SPACE;}})(),spaces:[],myRoles:new Map(),sem:'S1',view:'planning',planView:'classe',planClass:'MPI1-A',planTeacher:'',planMonth:'all',groupClass:'MPI1-A',teacherDay:null,data:null,hash:'',busy:0,timer:null};
 
   /* ---------- Sélecteur de semestre ---------- */
@@ -137,7 +137,7 @@
     try{await load(false);}catch(e){out.innerHTML=`<div class="v33-empty"><i class="fas fa-plug-circle-exclamation"></i><p>Impossible de charger le S2 : ${esc(e.message)}</p></div>`;return;}
     const d=state.data,admin=isAdmin();
     const visible=(admin?VIEWS:VIEWS.filter(v=>['planning','groupes','enseignants','manips','dates','classes'].includes(v[0])))
-      .filter(v=>(v[0]!=='espaces'||isSuper())&&(v[0]!=='classes'||!isDefaultSpace()));
+      .filter(v=>(v[0]!=='espaces'||isSuper())&&(v[0]!=='classes'||!isDefaultSpace())&&(v[0]!=='equipe'||(admin&&!isDefaultSpace())));
     if(!visible.some(v=>v[0]===state.view))state.view='planning';
     const spaceName=state.spaces.find(x=>x.id===state.space)?.name||'MPI1 · PC1';
     const spaceChips=state.spaces.length>1?`<div class="v33-spaces">${chips(state.spaces.map(x=>[x.id,x.name,x.id===DEFAULT_SPACE?'MPI1 · PC1':(state.myRoles.get(x.id)==='admin'||isSuper()?'administration':'lecture')]),state.space,'space','Espace')}</div>`:'';
@@ -159,7 +159,7 @@
     const d=state.data,admin=isAdmin();
     const cl=classesOf(d);if(!cl.includes(state.planClass))state.planClass=cl[0]||'';if(!cl.includes(state.groupClass))state.groupClass=cl[0]||'';
     v.onclick=null;v.onchange=null;v.onsubmit=null;v.ondragstart=null;v.ondragover=null;v.ondrop=null;v.ondragend=null;
-    ({espaces:viewSpaces,classes:viewClasses,planning:viewPlanning,groupes:viewGroups,enseignants:viewTeachers,manips:viewManips,dates:viewDates,parametres:viewSettings,versions:viewVersions})[state.view](v,d,admin);
+    ({espaces:viewSpaces,equipe:viewTeam,classes:viewClasses,planning:viewPlanning,groupes:viewGroups,enseignants:viewTeachers,manips:viewManips,dates:viewDates,parametres:viewSettings,versions:viewVersions})[state.view](v,d,admin);
     heroStats(d);
     v.classList.remove('v33-fade');void v.offsetWidth;v.classList.add('v33-fade');
   }
@@ -742,6 +742,26 @@
       const ren=e.target.closest('[data-ren]');if(ren){const n=prompt('Nouveau nom de l\'espace :');if(n&&n.trim().length>=2)return call('Espace renommé',()=>q(client().rpc('v43_rename_space',{p_space:sp,p_name:n.trim()})));return;}
       const del=e.target.closest('[data-delsp]');if(del&&confirm('Supprimer cet espace ? (possible seulement s\'il n\'a plus de classe)'))return call('Espace supprimé',async()=>{await q(client().rpc('v43_delete_space',{p_space:sp}));state.space=DEFAULT_SPACE;});
       const op=e.target.closest('[data-open]');if(op){state.space=op.dataset.open;try{root.localStorage.setItem(SPACE_KEY,state.space);}catch(_){}state.view='classes';state.data=null;render();}
+    };
+  }
+
+  /* ----- Équipe de l'espace : l'administrateur d'espace ajoute ou retire ses enseignants ----- */
+  async function viewTeam(v,d){
+    v.innerHTML='<div class="v33-skel"><i></i><i></i></div>';
+    let dir;try{dir=await q(client().rpc('v43_teacher_directory'));}catch(e){v.innerHTML=`<p class="v33-muted">Chargement impossible : ${esc(e.message)}</p>`;return;}
+    const nm=new Map(dir.map(p=>[p.id,p.full_name]));
+    const ms=[...d.spaceMembers].sort((a,b)=>(a.role===b.role?0:a.role==='admin'?-1:1)||String(nm.get(a.profile_id)).localeCompare(String(nm.get(b.profile_id)),'fr'));
+    const out=dir.filter(p=>!ms.some(m=>m.profile_id===p.id));
+    v.innerHTML=`<p class="v33-lead"><i class="fas fa-circle-info"></i> Les enseignants de l'équipe apparaissent dans l'onglet Enseignants pour être placés sur les postes, puis dans le planning et l'appel S2.</p>
+      <section class="v33-card"><h4 class="v33-h">Équipe de l'espace</h4>
+      ${ms.map(m=>`<div class="v33-item"><div><b>${esc(nm.get(m.profile_id)||'—')}</b> <span class="v33-muted">${m.role==='admin'?'Administrateur':'Enseignant'}</span></div>${m.role==='teacher'?`<button type="button" class="btn v33-btn ghost sm" data-rmt="${m.profile_id}">Retirer</button>`:''}</div>`).join('')}
+      ${out.length?`<div class="v33-row"><select data-addt aria-label="Enseignant à ajouter"><option value="">— Ajouter un enseignant —</option>${out.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select><button type="button" class="btn btn-primary v33-btn" data-addteam>Ajouter</button></div>`:''}
+      <p class="v33-muted">Seul le super administrateur nomme ou retire un administrateur d'espace.</p></section>`;
+    const call=async(label,fn)=>{state.busy++;try{await fn();toast(label);}catch(e){toast('Échec : '+(e.message||e),'err');}finally{state.busy--;}state.data=null;await load(true).catch(()=>{});render();};
+    v.onclick=e=>{
+      const rm=e.target.closest('[data-rmt]');if(rm&&confirm('Retirer cet enseignant de l\'équipe ?'))return call('Retiré de l\'équipe',()=>q(client().rpc('v43_set_member',{p_space:state.space,p_profile:rm.dataset.rmt,p_role:null})));
+      if(e.target.closest('[data-addteam]')){const pid=v.querySelector('[data-addt]').value;if(!pid){toast('Choisissez un enseignant','err');return;}
+        return call('Ajouté à l\'équipe',()=>q(client().rpc('v43_set_member',{p_space:state.space,p_profile:pid,p_role:'teacher'})));}
     };
   }
 

@@ -122,6 +122,7 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             val tabs = buildList {
                 if (sup) add("espaces" to "Espaces")
                 if (s != null && !def) add("classes" to "Classes & étudiants")
+                if (s != null && !def && (sup || s.myRoles[s.space] == "admin")) add("equipe" to "Équipe")
                 addAll(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "manips" to "Manipulations", "planning" to "Générer & PDF", "historique" to "Historique"))
             }
             if (tabs.none { it.first == tab }) tab = "dates"
@@ -157,6 +158,7 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             "historique" -> item { HistoryPanel(viewModel) }
             "espaces" -> item { SpacesPanel(viewModel) { id -> viewModel.s2.space = id; tab = "classes"; snap = null; run(null, false) { null } } }
             "classes" -> item { ClassesPanel(s, ::run, viewModel) }
+            "equipe" -> item { TeamPanel(s.space, viewModel) { snap = null; run(null, false) { null } } }
             else -> {
                 item {
                     SharePanel(s) { key, mode ->
@@ -875,6 +877,45 @@ private fun SpacesPanel(viewModel: MainViewModel, open: (String) -> Unit) {
             }
         }
         Text("Pour créer un compte enseignant : Plus → Comptes enseignants, puis ajoutez-le ici à son espace.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+/* ---------------- Équipe de l'espace : l'administrateur d'espace ajoute ou retire ses enseignants ---------------- */
+@Composable
+private fun TeamPanel(space: String, viewModel: MainViewModel, changed: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var data by remember { mutableStateOf<Pair<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.SpaceMember>, List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Teacher>>?>(null) }
+    var msg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(space, reload) {
+        data = runCatching { viewModel.s2.allMembers().filter { it.spaceId == space } to viewModel.s2.directory() }.getOrElse { msg = true to (it.message ?: "Chargement impossible."); null }
+    }
+    fun act(ok: String, block: suspend () -> Unit) = scope.launch {
+        try { block(); msg = false to ok; reload++; changed() } catch (e: CancellationException) { throw e } catch (e: Exception) { msg = true to (e.message ?: "Échec.") }
+    }
+    Panel("Équipe de l’espace", "Les enseignants de l’équipe apparaissent dans « Enseignants » pour être placés sur les postes, puis dans le planning et l’appel S2. Seul le super administrateur nomme un administrateur d’espace.") {
+        msg?.let { (e, m) -> Text(m, color = if (e) Uphf.Bad else Uphf.Teal, fontWeight = FontWeight.SemiBold) }
+        val d = data
+        if (d == null) CircularProgressIndicator(color = Uphf.Teal) else {
+            val nameOf = { id: String -> d.second.firstOrNull { it.id == id }?.name ?: "—" }
+            d.first.sortedWith(compareBy({ if (it.role == "admin") 0 else 1 }, { nameOf(it.profileId) })).forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(nameOf(m.profileId), color = Uphf.Text, modifier = Modifier.weight(1f))
+                    Text(if (m.role == "admin") "Administrateur" else "Enseignant", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+                    if (m.role == "teacher") TextButton(onClick = { act("Retiré de l’équipe.") { viewModel.s2.setMember(space, m.profileId, null) } }) { Text("Retirer", color = Uphf.Bad) }
+                }
+            }
+            val out = d.second.filter { t -> d.first.none { it.profileId == t.id } }
+            if (out.isNotEmpty()) {
+                var openMenu by remember { mutableStateOf(false) }
+                Box {
+                    OutlinedButton(onClick = { openMenu = true }, shape = RoundedCornerShape(50)) { Text("Ajouter un enseignant") }
+                    DropdownMenu(openMenu, { openMenu = false }) {
+                        out.forEach { t -> DropdownMenuItem(text = { Text(t.name) }, onClick = { openMenu = false; act("Ajouté à l’équipe.") { viewModel.s2.setMember(space, t.id, "teacher") } }) }
+                    }
+                }
+            }
+        }
     }
 }
 
