@@ -255,7 +255,7 @@ class OnlineApiClient(
 
     /** Planning du semestre 2 (tables v33_s2_*), lecture seule. */
     suspend fun s2Plan(session: AuthSession): List<PlanSession> = runCatching {
-        getPaged(session, "v33_s2_sessions", "id,class_name,session_date,start_time,end_time,occurrence,locked,v33_s2_slots(id,locked,group_no,manipulation_code,teacher_id,room)", emptyMap(), "session_date")
+        getPaged(session, "v33_s2_sessions", "id,space_id,class_name,session_date,start_time,end_time,occurrence,locked,v33_s2_slots(id,locked,group_no,manipulation_code,teacher_id,room)", emptyMap(), "session_date")
             .map { element ->
                 val row = element.jsonObject
                 PlanSession(
@@ -266,6 +266,7 @@ class OnlineApiClient(
                     endTime = row.requiredString("end_time").take(5),
                     occurrence = row.int("occurrence") ?: 1,
                     locked = row.boolean("locked") ?: false,
+                    spaceId = row.string("space_id") ?: "00000000-0000-4000-8000-000000000001",
                     slots = (row["v33_s2_slots"] as? JsonArray).orEmpty().map { slot ->
                         val o = slot.jsonObject
                         PlanSlot(o.string("id") ?: "", o.boolean("locked") ?: false, o.int("group_no") ?: 0, o.string("manipulation_code") ?: "", o.string("teacher_id"), o.string("room"))
@@ -322,10 +323,20 @@ class OnlineApiClient(
     }.getOrDefault(emptyMap())
 
     /** Titres des manipulations du S2 (M1 → nom). */
+    /** Espaces S2 lisibles (id → nom) et ceux dont l'utilisateur est membre. */
+    suspend fun s2Spaces(session: AuthSession): Pair<List<Pair<String, String>>, Set<String>> = runCatching {
+        val spaces = getPaged(session, "spaces", "id,name,created_at", emptyMap(), "created_at").map { it.jsonObject.let { o -> o.requiredString("id") to (o.string("name") ?: "—") } }
+        val mine = getPaged(session, "space_members", "space_id", mapOf("profile_id" to "eq.${session.userId}"), "space_id").mapNotNull { it.jsonObject.string("space_id") }.toSet()
+        spaces to mine
+    }.getOrDefault(emptyList<Pair<String, String>>() to emptySet())
+
     suspend fun manipulationTitles(session: AuthSession): Map<String, String> = runCatching {
-        getPaged(session, "v33_s2_manipulations", "code,title", emptyMap(), "code").mapNotNull { element ->
+        // Clé « code » = MPI1 · PC1 (comme avant) ; clé « espace|code » pour chaque espace.
+        getPaged(session, "v33_s2_manipulations", "space_id,code,title", emptyMap(), "code").flatMap { element ->
             val row = element.jsonObject
-            row.string("title")?.let { row.requiredString("code") to it }
+            val title = row.string("title") ?: return@flatMap emptyList()
+            val code = row.requiredString("code"); val sp = row.string("space_id") ?: "00000000-0000-4000-8000-000000000001"
+            listOfNotNull("$sp|$code" to title, if (sp == "00000000-0000-4000-8000-000000000001") code to title else null)
         }.toMap()
     }.getOrDefault(emptyMap())
 

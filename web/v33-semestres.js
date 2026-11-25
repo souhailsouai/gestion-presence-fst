@@ -11,8 +11,11 @@
   const SPACE_KEY='fst_s2_space';
   /* Droits dans l'espace S2 choisi : le super administrateur (mode administrateur) gère tout ;
      un enseignant nommé administrateur d'un espace gère cet espace seulement. */
-  const isSuper=()=>{const t=teacher();return !!(t&&t.isAdmin&&t.activeMode==='admin');};
-  const isAdmin=()=>isSuper()||state.myRoles.get(state.space)==='admin';
+  const adminMode=()=>{const t=teacher();return !!(t&&t.isAdmin&&t.activeMode==='admin');};
+  const isSuper=()=>adminMode()&&state.amSuper===true;
+  const OTHERS_KEY='fst_s2_autres';
+  const isMember=()=>isSuper()||(state.mySpaces||[]).some(x=>x.id===state.space);
+  const isAdmin=()=>isSuper()||(adminMode()&&state.space===DEFAULT_SPACE)||state.myRoles.get(state.space)==='admin';
   const isDefaultSpace=()=>state.space===DEFAULT_SPACE;
   const classesOf=d=>d.slots.filter(x=>x.active!==false).map(x=>x.class_name).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -68,8 +71,14 @@
     // Espaces lisibles et rôles de l'utilisateur
     const uid=teacher()?.id;
     const [spaces,mine]=await Promise.all([q(c.from('spaces').select('id,name').order('created_at')),uid?q(c.from('space_members').select('space_id,role').eq('profile_id',uid)):Promise.resolve([])]);
+    if(state.amSuper===undefined)state.amSuper=await q(c.rpc('v45_am_super_admin')).then(v=>v===true).catch(()=>false);
     state.spaces=spaces;state.myRoles=new Map(mine.map(m=>[m.space_id,m.role]));
-    if(!spaces.some(x=>x.id===state.space))state.space=spaces[0]?.id||DEFAULT_SPACE;
+    /* Mes espaces par défaut ; les autres (planning seul, lecture) au choix « Autres espaces ». */
+    const myIds=new Set(mine.map(m=>m.space_id));if(teacher()?.isAdmin||!myIds.size)myIds.add(DEFAULT_SPACE);
+    state.mySpaces=spaces.filter(x=>myIds.has(x.id));if(!state.mySpaces.length)state.mySpaces=spaces.slice(0,1);
+    try{state.showOthers=root.localStorage.getItem(OTHERS_KEY)==='1';}catch(_){}
+    const allowed=state.showOthers?spaces:state.mySpaces;
+    if(!allowed.some(x=>x.id===state.space))state.space=allowed[0]?.id||DEFAULT_SPACE;
     const SP=state.space,def=SP===DEFAULT_SPACE;
     const [settings,manips,slots,stations,members,excluded,sessions,sslots,versions,profiles,students,audit,spaceMembers,spaceClasses]=await Promise.all([
       q(c.from('v33_s2_settings').select('*').eq('space_id',SP)),q(c.from('v33_s2_manipulations').select('*').eq('space_id',SP).eq('active',true).order('code')),
@@ -136,16 +145,22 @@
     if(!state.data)out.innerHTML='<div class="v33-skel"><i></i><i></i><i></i></div>';
     try{await load(false);}catch(e){out.innerHTML=`<div class="v33-empty"><i class="fas fa-plug-circle-exclamation"></i><p>Impossible de charger le S2 : ${esc(e.message)}</p></div>`;return;}
     const d=state.data,admin=isAdmin();
-    const visible=(admin?VIEWS:VIEWS.filter(v=>['planning','groupes','enseignants','manips','dates','classes'].includes(v[0])))
+    const visible=(admin?VIEWS:VIEWS.filter(v=>(isMember()?['planning','groupes','enseignants','manips','dates','classes']:['planning','enseignants','manips','dates']).includes(v[0])))
       .filter(v=>(v[0]!=='espaces'||isSuper())&&(v[0]!=='classes'||!isDefaultSpace())&&(v[0]!=='equipe'||(admin&&!isDefaultSpace())));
     if(!visible.some(v=>v[0]===state.view))state.view='planning';
     const spaceName=state.spaces.find(x=>x.id===state.space)?.name||'MPI1 · PC1';
-    const spaceChips=state.spaces.length>1?`<div class="v33-spaces">${chips(state.spaces.map(x=>[x.id,x.name,x.id===DEFAULT_SPACE?'MPI1 · PC1':(state.myRoles.get(x.id)==='admin'||isSuper()?'administration':'lecture')]),state.space,'space','Espace')}</div>`:'';
+    const mineIds=new Set((state.mySpaces||[]).map(x=>x.id));
+    const shown=state.showOthers?state.spaces:state.spaces.filter(x=>mineIds.has(x.id));
+    const others=state.spaces.length>shown.length||state.showOthers&&state.spaces.length>mineIds.size;
+    const spaceChips=shown.length>1||others?`<div class="v33-spaces">${shown.length>1||state.showOthers?chips(shown.map(x=>[x.id,x.name,!mineIds.has(x.id)&&!isSuper()?'autre espace · planning seul':x.id===DEFAULT_SPACE?'MPI1 · PC1':(state.myRoles.get(x.id)==='admin'||isSuper()?'administration':'mon espace')]),state.space,'space','Espace'):''}${others?`<button type="button" class="btn v33-btn ghost sm" data-others aria-pressed="${!!state.showOthers}"><i class="fas ${state.showOthers?'fa-eye-slash':'fa-eye'}"></i> ${state.showOthers?'Mes espaces seulement':'Autres espaces'}</button>`:''}</div>`:'';
     out.innerHTML=`${spaceChips}<div class="v33-hero"><div><span class="v33-tag">Semestre 2 · ${esc(spaceName)}</span><h3>Planning des TP</h3><p>À partir du <b>${C().fmt(d.settings.start_date)}</b>${d.settings.end_date?' jusqu\'au <b>'+C().fmt(d.settings.end_date)+'</b>':''}${admin?'':' · lecture seule'}</p></div>
         <div class="v33-hero-stats" id="v33-herostats"></div></div>
       <nav class="v33-tabs" role="tablist">${visible.map(([k,l,i])=>`<button type="button" role="tab" data-view="${k}" aria-selected="${k===state.view}"><i class="fas ${i}"></i><span>${l}</span></button>`).join('')}</nav>
       <div id="v33-view" class="v33-view"></div>`;
-    out.querySelector('.v33-spaces')?.addEventListener('click',e=>{const b=e.target.closest('[data-space]');if(!b||b.dataset.space===state.space)return;
+    out.querySelector('.v33-spaces')?.addEventListener('click',e=>{
+      if(e.target.closest('[data-others]')){state.showOthers=!state.showOthers;try{root.localStorage.setItem(OTHERS_KEY,state.showOthers?'1':'0');}catch(_){}
+        if(!state.showOthers&&!mineIds.has(state.space)){state.space=state.mySpaces[0]?.id||DEFAULT_SPACE;state.data=null;state.planClass=null;state.groupClass=null;}render();return;}
+      const b=e.target.closest('[data-space]');if(!b||b.dataset.space===state.space)return;
       state.space=b.dataset.space;try{root.localStorage.setItem(SPACE_KEY,state.space);}catch(_){}state.data=null;state.planClass=null;state.groupClass=null;render();});
     out.querySelector('.v33-tabs').onclick=e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;out.querySelectorAll('.v33-tabs [data-view]').forEach(x=>x.setAttribute('aria-selected',String(x===b)));renderView();};
     renderView();

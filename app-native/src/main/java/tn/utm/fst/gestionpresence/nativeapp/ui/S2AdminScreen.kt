@@ -93,6 +93,7 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var tab by rememberSaveable { mutableStateOf("dates") }
+    var othersOn by rememberSaveable { mutableStateOf(false) }
 
     fun run(success: String?, reloadPlan: Boolean, action: suspend () -> String?) {
         scope.launch {
@@ -111,22 +112,33 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
 
     val s = snap
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        val sup = state.isAdmin
+        val sup = s?.isSuper == true
+        // Administrateur de l'espace affiché : super administrateur, administrateur de l'application pour MPI1 · PC1, ou administrateur de l'espace.
+        val canAdmin = s != null && (sup || (state.isAdmin && s.space == tn.utm.fst.gestionpresence.nativeapp.feature.s2.DEFAULT_SPACE) || s.myRoles[s.space] == "admin")
         val def = s?.space == tn.utm.fst.gestionpresence.nativeapp.feature.s2.DEFAULT_SPACE
         if (s != null && s.spaces.size > 1) item {
+            // Mes espaces par défaut ; « Autres espaces » au choix (lecture seule).
+            val mine = s.spaces.filter { it.id in s.myRoles || sup || (state.isAdmin && it.id == tn.utm.fst.gestionpresence.nativeapp.feature.s2.DEFAULT_SPACE) }.map { it.id }.toSet()
+            val shown = s.spaces.filter { othersOn || it.id in mine || it.id == s.space }
             Text("Espace", color = Uphf.Muted, style = MaterialTheme.typography.labelMedium)
-            AdminTabs(s.spaces.map { it.id to it.name }, s.space) { id -> if (id != s.space) { viewModel.s2.space = id; snap = null; run(null, false) { null } } }
-            if (!sup && s.myRoles[s.space] != "admin") Text("Lecture seule : vous n’administrez pas cet espace.", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall)
+            if (shown.size > 1) AdminTabs(shown.map { it.id to (if (it.id in mine) it.name else "${it.name} · lecture") }, s.space) { id -> if (id != s.space) { viewModel.s2.space = id; snap = null; run(null, false) { null } } }
+            if (s.spaces.any { it.id !in mine }) TextButton(onClick = {
+                othersOn = !othersOn
+                if (!othersOn && s.space !in mine) mine.firstOrNull()?.let { id -> viewModel.s2.space = id; snap = null; run(null, false) { null } }
+            }) { Text(if (othersOn) "Mes espaces seulement" else "Autres espaces") }
+            if (!canAdmin) Text("Lecture seule : vous n’administrez pas cet espace.", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall)
         }
         item {
             val tabs = buildList {
                 if (sup) add("espaces" to "Espaces")
                 if (s != null && !def) add("classes" to "Classes & étudiants")
-                if (s != null && !def && (sup || s.myRoles[s.space] == "admin")) add("equipe" to "Équipe")
+                if (s != null && !def && canAdmin) add("equipe" to "Équipe")
                 addAll(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "manips" to "Manipulations", "planning" to "Générer & PDF", "historique" to "Historique"))
             }
-            if (tabs.none { it.first == tab }) tab = "dates"
-            AdminTabs(tabs, tab) { tab = it }
+            // Espace consulté sans en être administrateur : planning et PDF, manipulations (lecture).
+            val shownTabs = if (canAdmin) tabs else tabs.filter { it.first in setOf("planning", "manips", "postes") }
+            if (shownTabs.none { it.first == tab }) tab = shownTabs.first().first
+            AdminTabs(shownTabs, tab) { tab = it }
         }
         notice?.let { (err, msg) ->
             item {

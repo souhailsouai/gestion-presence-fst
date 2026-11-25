@@ -758,7 +758,7 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
                 InfoCard(accent = Uphf.Ochre) {
                     Text("${dayName(p.date)} ${fmt(p.date)} · ${p.startTime}–${p.endTime}", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
                     Text("${p.className} · G${slot.groupNo}", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
-                    Text("${slot.manipulation}${data.manipulationTitles[slot.manipulation]?.let { " — $it" } ?: ""}${slot.room?.let { " · Salle $it" } ?: ""}", color = Uphf.Teal, fontWeight = FontWeight.SemiBold)
+                    Text("${slot.manipulation}${data.manipTitle(p.spaceId, slot.manipulation)?.let { " — $it" } ?: ""}${slot.room?.let { " · Salle $it" } ?: ""}", color = Uphf.Teal, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -831,7 +831,7 @@ private fun RepositoryData.pendingS2(me: String?, all: Boolean, fromDate: String
     val existing = sessions.map { "${className(it.classId)}|${it.sessionDate}" }.toSet()
     return plan.flatMap { p -> p.slots.map { PendingSlot(p, it, "${p.className}-G${it.groupNo}", s2 = true) } }
         .filter { it.slot.id.isNotBlank() && "${it.groupName}|${it.plan.date}" !in existing }
-        .filter { all || it.slot.teacherId == me }
+        .filter { if (all) it.plan.spaceId in mySpaces else it.slot.teacherId == me }
         .filter { it.plan.date >= fromDate }
         .sortedWith(compareBy({ it.plan.date }, { it.groupName }))
 }
@@ -1134,23 +1134,35 @@ private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
     var cls by rememberSaveable(data.classes.size) { mutableStateOf(data.classNames().firstOrNull() ?: "MPI1-A") }
     var month by rememberSaveable(sem) { mutableStateOf("all") }
     val inMonth: (String) -> Boolean = { d -> month == "all" || d.startsWith(month) }
+    // S2 : mes espaces par défaut ; « Autres espaces » montre le planning des autres (lecture seule).
+    var others by rememberSaveable { mutableStateOf(false) }
+    val shownSpaces = data.spaces.filter { others || it.first in data.mySpaces }.ifEmpty { listOf("00000000-0000-4000-8000-000000000001" to "MPI1 · PC1") }
+    var space by rememberSaveable { mutableStateOf(data.mySpaces.firstOrNull { id -> data.spaces.any { it.first == id } } ?: "00000000-0000-4000-8000-000000000001") }
+    if (shownSpaces.none { it.first == space }) space = shownSpaces.first().first
+    val spacePlan = data.plan.filter { it.spaceId == space }
+    val s2Classes = spacePlan.map { it.className }.distinct().sortedWith(compareBy({ CLASS_ORDER.indexOf(it).let { i -> if (i < 0) 99 else i } }, { it }))
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (data.plan.isNotEmpty() || data.classes.any { classOf(it.name) in CLASS_ORDER }) Segmented(listOf("S1" to "Semestre 1", "S2" to "Semestre 2"), sem) { sem = it }
                 Segmented(listOf("class" to "Par classe", "mine" to "Mes créneaux"), mode) { mode = it }
-                val names = if (sem == "S2") CLASS_ORDER else data.classNames()
+                if (sem == "S2" && mode == "class" && (data.spaces.size > 1)) {
+                    if (shownSpaces.size > 1) ChipRow(shownSpaces.map { (id, n) -> id to (if (id in data.mySpaces) n else "$n · lecture") }, space) { space = it }
+                    if (data.spaces.any { it.first !in data.mySpaces }) TextButton(onClick = { others = !others }) { Text(if (others) "Mes espaces seulement" else "Autres espaces") }
+                }
+                val names = if (sem == "S2") s2Classes.ifEmpty { if (space == "00000000-0000-4000-8000-000000000001") CLASS_ORDER else emptyList() } else data.classNames()
+                if (sem == "S2" && mode == "class" && names.isNotEmpty() && cls !in names) cls = names.first()
                 if (mode == "class") ChipRow(names.map { it to it }, cls) { cls = it }
-                val months = (if (sem == "S2") data.plan.map { it.date } else data.sessions.filter { semesterOf(it.sessionDate) == "S1" }.map { it.sessionDate }).map { it.take(7) }.distinct().sorted()
+                val months = (if (sem == "S2") (if (mode == "class") spacePlan else data.plan).map { it.date } else data.sessions.filter { semesterOf(it.sessionDate) == "S1" }.map { it.sessionDate }).map { it.take(7) }.distinct().sorted()
                 if (months.size > 1) ChipRow(listOf("all" to "Tout") + months.map { it to monthName(it) }, month) { month = it }
             }
         }
         if (sem == "S2") {
-            if (data.plan.isEmpty()) {
-                item { EmptyState("Le planning du S2 n’est pas encore généré.\nIl se prépare sur le site (Semestres → S2).", Icons.Default.CalendarMonth) }
+            if (data.plan.isEmpty() || (mode == "class" && spacePlan.isEmpty())) {
+                item { EmptyState("Le planning du S2 de cet espace n’est pas encore généré.\nIl se prépare dans « Gestion du S2 ».", Icons.Default.CalendarMonth) }
             } else if (mode == "class") {
-                val list = data.plan.filter { it.className == cls && inMonth(it.date) }
-                items(list, key = { it.id }) { p -> PlanCard(p, data, me, if (state.isAdmin) viewModel else null) }
+                val list = spacePlan.filter { it.className == cls && inMonth(it.date) }
+                items(list, key = { it.id }) { p -> PlanCard(p, data, me, if (state.isAdmin && p.spaceId == "00000000-0000-4000-8000-000000000001") viewModel else null) }
                 if (list.isEmpty()) item { EmptyState("Aucune séance S2 pour $cls.") }
             } else {
                 val mine = data.plan.filter { inMonth(it.date) }.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }
@@ -1158,7 +1170,7 @@ private fun PlanningScreen(state: MainUiState, viewModel: MainViewModel) {
                     InfoCard(accent = Uphf.Teal) {
                         Text("${dayName(p.date)} ${fmt(p.date)} · ${p.startTime}–${p.endTime}", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
                         Text("${p.className} · G${slot.groupNo}", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
-                        Text("${slot.manipulation}${data.manipulationTitles[slot.manipulation]?.let { " — $it" } ?: ""}${slot.room?.let { " · Salle $it" } ?: ""}", color = Uphf.Teal, fontWeight = FontWeight.SemiBold)
+                        Text("${slot.manipulation}${data.manipTitle(p.spaceId, slot.manipulation)?.let { " — $it" } ?: ""}${slot.room?.let { " · Salle $it" } ?: ""}", color = Uphf.Teal, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 if (mine.isEmpty()) item { EmptyState("Aucun créneau S2 à votre nom.") }
@@ -1315,7 +1327,7 @@ private fun SlotDialog(p: PlanSession, slot: tn.utm.fst.gestionpresence.nativeap
     var teacher by remember { mutableStateOf(slot.teacherId) }
     var room by remember { mutableStateOf(slot.room.orEmpty()) }
     var open by remember { mutableStateOf(false) }
-    val codes = (data.manipulationTitles.keys + p.slots.map { it.manipulation }).distinct().sorted()
+    val codes = (data.manipulationTitles.keys.filter { it.startsWith(p.spaceId + "|") }.map { it.substringAfter('|') } + p.slots.map { it.manipulation }).distinct().sorted()
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${p.className} · ${fmt(p.date)} · G${slot.groupNo}") },
