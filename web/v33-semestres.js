@@ -7,15 +7,22 @@
   const C=()=>root.V33S2Core;
   const client=()=>typeof supabaseClient!=='undefined'?supabaseClient:root.supabaseClient;
   const teacher=()=>typeof currentTeacher!=='undefined'?currentTeacher:root.currentTeacher;
-  const isAdmin=()=>{const t=teacher();return !!(t&&t.isAdmin&&t.activeMode==='admin');};
+  const DEFAULT_SPACE='00000000-0000-4000-8000-000000000001';
+  const SPACE_KEY='fst_s2_space';
+  /* Droits dans l'espace S2 choisi : le super administrateur (mode administrateur) gère tout ;
+     un enseignant nommé administrateur d'un espace gère cet espace seulement. */
+  const isSuper=()=>{const t=teacher();return !!(t&&t.isAdmin&&t.activeMode==='admin');};
+  const isAdmin=()=>isSuper()||state.myRoles.get(state.space)==='admin';
+  const isDefaultSpace=()=>state.space===DEFAULT_SPACE;
+  const classesOf=d=>d.slots.filter(x=>x.active!==false).map(x=>x.class_name).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm=v=>String(v??'').trim().replace(/\s+/g,' ');
   const KEY='fst_semester';
   const S1_FROM='2026-09-01',S1_TO='2026-12-31';
   const CLASSES=['MPI1-A','MPI1-B','MPI1-C','MPI1-D','MPI1-E','PC1-A'];
   const KIND={ferie:'Jour férié',vacances:'Vacances',ds:'Semaine des DS',examen:'Examens',autre:'Autre'};
-  const VIEWS=[['planning','Planning','fa-calendar-days'],['groupes','Groupes','fa-people-group'],['enseignants','Enseignants','fa-chalkboard-user'],['manips','Manipulations','fa-flask'],['dates','Dates exclues','fa-calendar-xmark'],['parametres','Paramètres','fa-sliders'],['versions','Versions','fa-clock-rotate-left']];
-  const state={sem:'S1',view:'planning',planView:'classe',planClass:'MPI1-A',planTeacher:'',planMonth:'all',groupClass:'MPI1-A',teacherDay:null,data:null,hash:'',busy:0,timer:null};
+  const VIEWS=[['espaces','Espaces','fa-building-user'],['classes','Classes & étudiants','fa-user-graduate'],['planning','Planning','fa-calendar-days'],['groupes','Groupes','fa-people-group'],['enseignants','Enseignants','fa-chalkboard-user'],['manips','Manipulations','fa-flask'],['dates','Dates exclues','fa-calendar-xmark'],['parametres','Paramètres','fa-sliders'],['versions','Versions','fa-clock-rotate-left']];
+  const state={space:(()=>{try{return root.localStorage.getItem(SPACE_KEY)||DEFAULT_SPACE;}catch(_){return DEFAULT_SPACE;}})(),spaces:[],myRoles:new Map(),sem:'S1',view:'planning',planView:'classe',planClass:'MPI1-A',planTeacher:'',planMonth:'all',groupClass:'MPI1-A',teacherDay:null,data:null,hash:'',busy:0,timer:null};
 
   /* ---------- Sélecteur de semestre ---------- */
   function setSemester(s){
@@ -58,22 +65,36 @@
   async function q(p){const {data,error}=await p;if(error)throw error;return data||[];}
   async function fetchAll(){
     const c=client();if(!c)throw new Error('Connexion indisponible');
-    const [settings,manips,slots,stations,members,excluded,sessions,sslots,versions,profiles,students,audit]=await Promise.all([
-      q(c.from('v33_s2_settings').select('*')),q(c.from('v33_s2_manipulations').select('*').eq('active',true).order('code')),
-      q(c.from('v33_s2_class_slots').select('*').order('weekday').order('pair_order')),q(c.from('v33_s2_stations').select('*')),
-      q(c.from('v33_s2_group_members').select('*')),q(c.from('v33_s2_excluded_dates').select('*').order('starts_on')),
-      q(c.from('v33_s2_sessions').select('*').order('session_date')),q(c.from('v33_s2_slots').select('*')),
-      q(c.from('v33_s2_versions').select('id,label,created_at').order('created_at',{ascending:false})),
+    // Espaces lisibles et rôles de l'utilisateur
+    const uid=teacher()?.id;
+    const [spaces,mine]=await Promise.all([q(c.from('spaces').select('id,name').order('created_at')),uid?q(c.from('space_members').select('space_id,role').eq('profile_id',uid)):Promise.resolve([])]);
+    state.spaces=spaces;state.myRoles=new Map(mine.map(m=>[m.space_id,m.role]));
+    if(!spaces.some(x=>x.id===state.space))state.space=spaces[0]?.id||DEFAULT_SPACE;
+    const SP=state.space,def=SP===DEFAULT_SPACE;
+    const [settings,manips,slots,stations,members,excluded,sessions,sslots,versions,profiles,students,audit,spaceMembers,spaceClasses]=await Promise.all([
+      q(c.from('v33_s2_settings').select('*').eq('space_id',SP)),q(c.from('v33_s2_manipulations').select('*').eq('space_id',SP).eq('active',true).order('code')),
+      q(c.from('v33_s2_class_slots').select('*').eq('space_id',SP).order('weekday').order('pair_order')),q(c.from('v33_s2_stations').select('*').eq('space_id',SP)),
+      q(c.from('v33_s2_group_members').select('*').eq('space_id',SP)),q(c.from('v33_s2_excluded_dates').select('*').eq('space_id',SP).order('starts_on')),
+      q(c.from('v33_s2_sessions').select('*').eq('space_id',SP).order('session_date')),q(c.from('v33_s2_slots').select('*').eq('space_id',SP)),
+      q(c.from('v33_s2_versions').select('id,label,created_at').eq('space_id',SP).order('created_at',{ascending:false})),
       q(c.from('profiles').select('id,full_name,role')),
-      q(c.from('students').select('id,last_name,first_name,class_id,deleted_at,classes(name)').is('deleted_at',null)),
-      q(c.from('v33_s2_audit').select('*').order('created_at',{ascending:false}).limit(30)),
+      def?q(c.from('students').select('id,last_name,first_name,class_id,deleted_at,classes(name)').is('deleted_at',null))
+         :q(c.from('students').select('id,last_name,first_name,class_id,deleted_at,classes!inner(name,space_id)').is('deleted_at',null).eq('classes.space_id',SP)),
+      q(c.from('v33_s2_audit').select('*').eq('space_id',SP).order('created_at',{ascending:false}).limit(30)),
+      q(c.from('space_members').select('profile_id,role').eq('space_id',SP)).catch(()=>[]),
+      def?Promise.resolve([]):q(c.from('classes').select('id,name').eq('space_id',SP).is('deleted_at',null).order('name')),
     ]);
     const bySession=new Map();for(const g of sslots){if(!bySession.has(g.session_id))bySession.set(g.session_id,[]);bySession.get(g.session_id).push(g);}
     for(const s of sessions){s.start_time=String(s.start_time).slice(0,5);s.end_time=String(s.end_time).slice(0,5);s.slots=(bySession.get(s.id)||[]).sort((a,b)=>a.group_no-b.group_no);}
     const st=settings[0]||{start_date:'2027-01-11',group_count:5,manip_count:5,academic_year:'2026/2027'};
     const names=new Map(profiles.map(p=>[p.id,p.full_name||'—']));
-    const studentRows=students.map(s=>{const cls=s.classes?.name||'';const m=/^(.*)-G(\d+)$/.exec(cls);return {id:s.id,name:norm((s.last_name||'')+' '+(s.first_name||'')),class_id:s.class_id,class_name:m?m[1]:cls,group_no:m?Number(m[2]):null};}).filter(s=>CLASSES.includes(s.class_name));
-    return {settings:st,manips,slots,stations,members,excluded,sessions,versions,profiles,names,students:studentRows,studentById:new Map(studentRows.map(s=>[s.id,s])),audit};
+    const own=new Set(slots.map(x=>x.class_name));
+    const studentRows=students.map(s=>{const cls=s.classes?.name||'';const m=def?/^(.*)-G(\d+)$/.exec(cls):null;return {id:s.id,last_name:s.last_name,first_name:s.first_name,name:norm((s.last_name||'')+' '+(s.first_name||'')),class_id:s.class_id,class_name:m?m[1]:cls,group_no:m?Number(m[2]):null};})
+      .filter(s=>def?CLASSES.includes(s.class_name):own.has(s.class_name)||spaceClasses.some(k=>k.id===s.class_id));
+    // Enseignants proposés dans l'espace : ses membres (tous les profils pour MPI1 · PC1, comme avant)
+    const memberIds=new Set(spaceMembers.map(m=>m.profile_id));
+    const staff=def||!memberIds.size?profiles:profiles.filter(p=>memberIds.has(p.id));
+    return {space:SP,settings:st,manips,slots,stations,members,excluded,sessions,versions,profiles:staff,allProfiles:profiles,names,students:studentRows,studentById:new Map(studentRows.map(s=>[s.id,s])),audit,spaceMembers,spaceClasses};
   }
   const hashOf=d=>JSON.stringify([d.settings,d.manips,d.slots,d.stations,d.members,d.excluded,d.sessions,d.versions.map(v=>v.id)]);
   async function load(force){
@@ -99,7 +120,7 @@
     catch(e){console.error(e);toast('Échec : '+(e.message||e),'err');try{await load(true);}catch(_){}renderView();}
     finally{state.busy--;}
   }
-  async function audit(action,detail){try{await client().from('v33_s2_audit').insert({action,detail});}catch(_){}}
+  async function audit(action,detail){try{await client().from('v33_s2_audit').insert({space_id:state.space,action,detail});}catch(_){}}
   const tname=id=>id?(state.data?.names.get(id)||'—'):'—';
   const sname=id=>state.data?.studentById.get(id)?.name||'?';
   const short=n=>String(n||'').replace(/^Dr\.\s*/,'');
@@ -111,12 +132,17 @@
     if(!state.data)out.innerHTML='<div class="v33-skel"><i></i><i></i><i></i></div>';
     try{await load(false);}catch(e){out.innerHTML=`<div class="v33-empty"><i class="fas fa-plug-circle-exclamation"></i><p>Impossible de charger le S2 : ${esc(e.message)}</p></div>`;return;}
     const d=state.data,admin=isAdmin();
-    const visible=admin?VIEWS:VIEWS.filter(v=>['planning','groupes','enseignants','manips','dates'].includes(v[0]));
+    const visible=(admin?VIEWS:VIEWS.filter(v=>['planning','groupes','enseignants','manips','dates','classes'].includes(v[0])))
+      .filter(v=>(v[0]!=='espaces'||isSuper())&&(v[0]!=='classes'||!isDefaultSpace()));
     if(!visible.some(v=>v[0]===state.view))state.view='planning';
-    out.innerHTML=`<div class="v33-hero"><div><span class="v33-tag">Semestre 2</span><h3>Planning des TP</h3><p>À partir du <b>${C().fmt(d.settings.start_date)}</b>${d.settings.end_date?' jusqu\'au <b>'+C().fmt(d.settings.end_date)+'</b>':''}${admin?'':' · lecture seule'}</p></div>
+    const spaceName=state.spaces.find(x=>x.id===state.space)?.name||'MPI1 · PC1';
+    const spaceChips=state.spaces.length>1?`<div class="v33-spaces">${chips(state.spaces.map(x=>[x.id,x.name,x.id===DEFAULT_SPACE?'MPI1 · PC1':(state.myRoles.get(x.id)==='admin'||isSuper()?'administration':'lecture')]),state.space,'space','Espace')}</div>`:'';
+    out.innerHTML=`${spaceChips}<div class="v33-hero"><div><span class="v33-tag">Semestre 2 · ${esc(spaceName)}</span><h3>Planning des TP</h3><p>À partir du <b>${C().fmt(d.settings.start_date)}</b>${d.settings.end_date?' jusqu\'au <b>'+C().fmt(d.settings.end_date)+'</b>':''}${admin?'':' · lecture seule'}</p></div>
         <div class="v33-hero-stats" id="v33-herostats"></div></div>
       <nav class="v33-tabs" role="tablist">${visible.map(([k,l,i])=>`<button type="button" role="tab" data-view="${k}" aria-selected="${k===state.view}"><i class="fas ${i}"></i><span>${l}</span></button>`).join('')}</nav>
       <div id="v33-view" class="v33-view"></div>`;
+    out.querySelector('.v33-spaces')?.addEventListener('click',e=>{const b=e.target.closest('[data-space]');if(!b||b.dataset.space===state.space)return;
+      state.space=b.dataset.space;try{root.localStorage.setItem(SPACE_KEY,state.space);}catch(_){}state.data=null;state.planClass=null;state.groupClass=null;render();});
     out.querySelector('.v33-tabs').onclick=e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;out.querySelectorAll('.v33-tabs [data-view]').forEach(x=>x.setAttribute('aria-selected',String(x===b)));renderView();};
     renderView();
   }
@@ -127,8 +153,9 @@
   function renderView(){
     const v=document.getElementById('v33-view');if(!v||!state.data)return;
     const d=state.data,admin=isAdmin();
+    const cl=classesOf(d);if(!cl.includes(state.planClass))state.planClass=cl[0]||'';if(!cl.includes(state.groupClass))state.groupClass=cl[0]||'';
     v.onclick=null;v.onchange=null;v.onsubmit=null;v.ondragstart=null;v.ondragover=null;v.ondrop=null;v.ondragend=null;
-    ({planning:viewPlanning,groupes:viewGroups,enseignants:viewTeachers,manips:viewManips,dates:viewDates,parametres:viewSettings,versions:viewVersions})[state.view](v,d,admin);
+    ({espaces:viewSpaces,classes:viewClasses,planning:viewPlanning,groupes:viewGroups,enseignants:viewTeachers,manips:viewManips,dates:viewDates,parametres:viewSettings,versions:viewVersions})[state.view](v,d,admin);
     heroStats(d);
     v.classList.remove('v33-fade');void v.offsetWidth;v.classList.add('v33-fade');
   }
@@ -165,7 +192,7 @@
         <div class="v33-grow"></div>${status}
         <button type="button" class="btn v33-btn ghost" data-act="pdf"><i class="fas fa-file-pdf"></i> PDF</button><button type="button" class="btn v33-btn ghost" data-act="pdfall"><i class="fas fa-file-pdf"></i> Toutes</button><button type="button" class="btn v33-btn ghost" data-act="book" title="Cahier de présence du jour de la classe choisie : page de garde puis une page par groupe"><i class="fas fa-book"></i> Cahier</button><button type="button" class="btn v33-btn ghost" data-act="bookall"><i class="fas fa-book"></i> Tous les cahiers</button></div>
         ${monthChips(d)}
-        ${state.planView==='classe'?chips(CLASSES.map(c=>[c,c,d.sessions.filter(s=>s.class_name===c).length+' séances']),state.planClass,'pc','Classe'):''}
+        ${state.planView==='classe'?chips(classesOf(d).map(c=>[c,c,d.sessions.filter(s=>s.class_name===c).length+' séances']),state.planClass,'pc','Classe'):''}
         ${state.planView==='enseignant'?chips(teachers.map(t=>[t,short(tname(t)),null]),state.planTeacher,'pt','Enseignant'):''}
         <div id="v33-issues" hidden class="v33-card">${errors.concat(warns).concat(infos).map(i=>`<p class="v33-issue ${i.level}">${esc(i.text)}</p>`).join('')||'<p class="v33-issue info">Chaque date respecte le début du S2 et les dates exclues validées, sans enseignant en double.</p>'}</div>
         <div id="v33-plan"></div>`:
@@ -194,12 +221,12 @@
   }
   async function toolbar(e,d){
     const a=e.target.closest('[data-act]').dataset.act;
-    if(a==='pdf')return exportPdf(state.planView==='classe'?[state.planClass]:CLASSES,d);
-    if(a==='pdfall')return exportPdf(CLASSES,d);
+    if(a==='pdf')return exportPdf(state.planView==='classe'?[state.planClass]:classesOf(d),d);
+    if(a==='pdfall')return exportPdf(classesOf(d),d);
     if(a==='book')return exportBook([state.planClass],d);
-    if(a==='bookall')return exportBook(CLASSES,d);
+    if(a==='bookall')return exportBook(classesOf(d),d);
     if(a==='version'){const label=prompt('Nom de la version :','Version du '+new Date().toLocaleDateString('fr-FR'));if(!label)return;
-      return mutate('Version enregistrée',null,async()=>{await q(client().rpc('v33_s2_save_version',{p_label:label.slice(0,120)}));state.data.versions=await q(client().from('v33_s2_versions').select('id,label,created_at').order('created_at',{ascending:false}));});}
+      return mutate('Version enregistrée',null,async()=>{await q(client().rpc('v33_s2_save_version',{p_label:label.slice(0,120),p_space:state.space}));state.data.versions=await q(client().from('v33_s2_versions').select('id,label,created_at').order('created_at',{ascending:false}));});}
     if(a==='gen'||a==='regen'){
       const from=a==='gen'?d.settings.start_date:(document.getElementById('v33-from').value||d.settings.start_date);
       const kept=d.sessions.filter(s=>s.locked||s.session_date<from);
@@ -208,8 +235,8 @@
       const replaced=d.sessions.filter(s=>!s.locked&&s.session_date>=from).length;
       if(!confirm(`${sessions.length} séance(s) à partir du ${C().fmt(from)}.${replaced?`\n${replaced} séance(s) non verrouillée(s) remplacée(s).`:''}${kept.length?`\n${kept.length} séance(s) conservée(s).`:''}${warnings.length?'\n\n'+warnings.join('\n'):''}\n\nUne sauvegarde est faite avant. Continuer ?`))return;
       state.busy++;
-      try{if(d.sessions.length)await q(client().rpc('v33_s2_save_version',{p_label:'Sauvegarde automatique avant recalcul du '+C().fmt(from)}));
-        await q(client().rpc('v33_s2_replace_plan',{p_from:from,p_sessions:sessions,p_reason:a==='gen'?'génération':'recalcul ciblé'}));
+      try{if(d.sessions.length)await q(client().rpc('v33_s2_save_version',{p_label:'Sauvegarde automatique avant recalcul du '+C().fmt(from),p_space:state.space}));
+        await q(client().rpc('v33_s2_replace_plan',{p_from:from,p_sessions:sessions,p_reason:a==='gen'?'génération':'recalcul ciblé',p_space:state.space}));
         await load(true);toast(`Planning enregistré : ${sessions.length} séance(s)`);}catch(err){toast('Échec : '+err.message,'err');}
       finally{state.busy--;}
       renderView();
@@ -249,9 +276,9 @@
     if(d.sessions.length&&!confirm(`${n} : ${mode==='bloc'?'toutes les séances de '+p.list[0].class_name+' puis celles de '+p.list.slice(1).map(c=>c.class_name).join(', ')+' (comme au S1)':'une semaine chacune'}.\n\nLe planning sera recalculé à partir du ${C().fmt(d.settings.start_date)} (sauvegarde faite avant). Continuer ?`))return;
     state.busy++;
     try{
-      await q(client().from('v33_s2_class_slots').update({mode,updated_at:new Date().toISOString()}).eq('pair_key',key).select('class_name'));
+      await q(client().from('v33_s2_class_slots').update({mode,updated_at:new Date().toISOString()}).eq('space_id',state.space).eq('pair_key',key).select('class_name'));
       audit('class_slots',{pair:key,mode});
-      if(d.sessions.length){const r=await q(client().rpc('v37_s2_auto_replan',{p_from:d.settings.start_date,p_reason:'partage '+key+' : '+mode,p_force:false}));
+      if(d.sessions.length){const r=await q(client().rpc('v37_s2_auto_replan',{p_from:d.settings.start_date,p_reason:'partage '+key+' : '+mode,p_force:false,p_space:state.space}));
         await load(true);toast(`Partage enregistré — ${r?.inserted??''} séance(s) replanifiée(s)`);}
       else{await load(true);toast('Partage enregistré');}
     }catch(err){toast('Échec : '+err.message,'err');}finally{state.busy--;}
@@ -438,7 +465,7 @@
     const ms=d.members.filter(m=>m.class_name===cls),act=ms.filter(m=>m.status==='actif'),exc=ms.filter(m=>m.status==='exclu');
     const sizes=Array.from({length:G},(_,i)=>act.filter(m=>m.group_no===i+1).length);
     const gap=Math.max(...sizes)-Math.min(...sizes);
-    v.innerHTML=`${chips(CLASSES.map(c=>[c,c,d.members.filter(m=>m.class_name===c&&m.status==='actif').length+' présents']),cls,'gc','Classe')}
+    v.innerHTML=`${chips(classesOf(d).map(c=>[c,c,d.members.filter(m=>m.class_name===c&&m.status==='actif').length+' présents']),cls,'gc','Classe')}
       <section class="v33-card v33-summary">
         <div class="v33-balance ${gap<=1?'ok':'warn'}"><i class="fas ${gap<=1?'fa-scale-balanced':'fa-triangle-exclamation'}"></i><div><b>${gap<=1?'Groupes équilibrés':'Écart de '+gap+' étudiants'}</b><small>${act.length} présent(s) répartis · ${exc.length} mis de côté</small></div></div>
         <div class="v33-sizes">${sizes.map((n,i)=>`<div><span>G${i+1}</span><b>${n}</b></div>`).join('')}</div>
@@ -485,9 +512,14 @@
       async()=>{for(const mv of moves)await q(client().from('v33_s2_group_members').update({group_no:mv.to,updated_at:new Date().toISOString()}).eq('student_id',mv.student_id).select('student_id'));audit('balance',{class:cls,moves});});
   }
   function addNew(d){
-    const known=new Set(d.members.map(m=>m.student_id));const add=d.students.filter(s=>!known.has(s.id)&&s.group_no);
+    const known=new Set(d.members.map(m=>m.student_id));
+    // MPI1 · PC1 : le groupe vient du S1 ; autres espaces : le plus petit groupe de la classe
+    const add=d.students.filter(s=>!known.has(s.id)&&(s.group_no||!isDefaultSpace())).map(s=>{
+      if(s.group_no)return s;const G=d.settings.group_count;const cnt=Array.from({length:G},(_,i)=>d.members.filter(m=>m.class_name===s.class_name&&m.status==='actif'&&m.group_no===i+1).length);
+      const g=cnt.indexOf(Math.min(...cnt))+1;d.members.push({student_id:s.id,class_name:s.class_name,group_no:g,status:'actif'});return Object.assign({},s,{group_no:g});});
+    d.members=d.members.filter(m=>m.space_id!==undefined||known.has(m.student_id));
     if(!add.length){toast('Aucun nouvel étudiant');return;}
-    const rows=add.map(s=>({student_id:s.id,class_name:s.class_name,group_no:s.group_no,s1_class_id:s.class_id,status:'actif',reason:null,locked:false}));
+    const rows=add.map(s=>({space_id:state.space,student_id:s.id,class_name:s.class_name,group_no:s.group_no,s1_class_id:s.class_id,status:'actif',reason:null,locked:false}));
     mutate(add.length+' étudiant(s) ajouté(s)',()=>d.members.push(...rows),async()=>{await q(client().from('v33_s2_group_members').insert(rows).select('student_id'));audit('add_students',{n:rows.length});});
   }
   async function allS1Attendance(){
@@ -499,10 +531,11 @@
   async function initGroups(d){
     state.busy++;
     try{
-      const att=await allS1Attendance();
+      const att=isDefaultSpace()?await allS1Attendance():[];
+      if(!isDefaultSpace()){const by=new Map();for(const s of d.students.slice().sort((a,b)=>a.name.localeCompare(b.name,'fr'))){const n=by.get(s.class_name)||0;by.set(s.class_name,n+1);s.group_no=(n%d.settings.group_count)+1;}}
       const seen=new Map();for(const a of att){const s=seen.get(a.student_id)||{n:0,p:0};s.n++;if(a.status!=='absent')s.p++;seen.set(a.student_id,s);}
       let rows=d.students.filter(s=>s.group_no).map(s=>{const k=seen.get(s.id);const always=k&&k.n>=1&&k.p===0;
-        return {student_id:s.id,class_name:s.class_name,group_no:s.group_no,s1_class_id:s.class_id,status:always?'exclu':'actif',reason:always?`Toujours absent au S1 (${k.n} séance${k.n>1?'s':''}) — réintégrable`:null,locked:false,name:s.name};});
+        return {space_id:state.space,student_id:s.id,class_name:s.class_name,group_no:s.group_no,s1_class_id:s.class_id,status:always?'exclu':'actif',reason:always?`Toujours absent au S1 (${k.n} séance${k.n>1?'s':''}) — réintégrable`:null,locked:false,name:s.name};});
       const {members}=C().balanceGroups(rows,d.settings.group_count);
       rows=members.map(({name,...r})=>r);
       await q(client().from('v33_s2_group_members').insert(rows).select('student_id'));
@@ -541,7 +574,7 @@
         rows.push({weekday:w,manipulation_code:m.code,teacher_id:who[0]?.t||null,room:old.room||null,updated_at:new Date().toISOString()});}
     }
     if(errs.length){toast('Une manipulation ne peut avoir qu\'un enseignant par jour : '+errs.join(' · '),'err');return;}
-    return mutate('Intervenants enregistrés. Pensez à recalculer le planning.',()=>{d.stations=d.stations.filter(s=>!days.includes(s.weekday)).concat(rows);},async()=>{await q(client().from('v33_s2_stations').upsert(rows,{onConflict:'weekday,manipulation_code'}).select('weekday'));audit('stations',{recap:true});});
+    return mutate('Intervenants enregistrés. Pensez à recalculer le planning.',()=>{d.stations=d.stations.filter(s=>!days.includes(s.weekday)).concat(rows);},async()=>{await q(client().from('v33_s2_stations').upsert(rows.map(r=>Object.assign({space_id:state.space},r)),{onConflict:'space_id,weekday,manipulation_code'}).select('weekday'));audit('stations',{recap:true});});
   }
   function viewTeachers(v,d,admin){
     const days=[...new Set(d.slots.filter(s=>s.active).map(s=>s.weekday))].sort();
@@ -561,7 +594,7 @@
       if(e.target.closest('[data-save]')){
         const rows=d.manips.map(m=>({weekday:w,manipulation_code:m.code,teacher_id:v.querySelector(`select[data-c="${m.code}"]`).value||null,room:v.querySelector(`input[data-r="${m.code}"]`).value.trim()||null,updated_at:new Date().toISOString()}));
         const ids=rows.map(r=>r.teacher_id).filter(Boolean);if(new Set(ids).size!==ids.length&&!confirm('Un même enseignant est sur deux manipulations le même jour. Continuer ?'))return;
-        return mutate(`Enseignants du ${C().DAY_LABEL[w].toLowerCase()} enregistrés`,()=>{d.stations=d.stations.filter(s=>s.weekday!==w).concat(rows);},async()=>{await q(client().from('v33_s2_stations').upsert(rows,{onConflict:'weekday,manipulation_code'}).select('weekday'));audit('stations',{weekday:w});});
+        return mutate(`Enseignants du ${C().DAY_LABEL[w].toLowerCase()} enregistrés`,()=>{d.stations=d.stations.filter(s=>s.weekday!==w).concat(rows);},async()=>{await q(client().from('v33_s2_stations').upsert(rows.map(r=>Object.assign({space_id:state.space},r)),{onConflict:'space_id,weekday,manipulation_code'}).select('weekday'));audit('stations',{weekday:w});});
       }
       if(e.target.closest('[data-s1]')){
         try{const rows=await q(client().from('sessions').select('session_date,teacher_id,classes(name)').gte('session_date',S1_FROM).lte('session_date','2026-11-22').is('deleted_at',null));
@@ -579,7 +612,7 @@
       ${admin?'<div class="v33-row v33-sticky"><button type="button" class="btn btn-primary v33-btn" data-save><i class="fas fa-floppy-disk"></i> Enregistrer</button></div>':''}`;
     v.onclick=e=>{if(!e.target.closest('[data-save]'))return;
       const rows=d.manips.map(m=>({code:m.code,title:v.querySelector(`[data-t="${m.code}"]`).value.trim()||null,room:v.querySelector(`[data-r="${m.code}"]`).value.trim()||null,active:v.querySelector(`[data-a="${m.code}"]`).checked,updated_at:new Date().toISOString()}));
-      mutate('Manipulations enregistrées',()=>{d.manips=rows;},async()=>{await q(client().from('v33_s2_manipulations').upsert(rows,{onConflict:'code'}).select('code'));audit('manips',{});});};
+      mutate('Manipulations enregistrées',()=>{d.manips=rows;},async()=>{await q(client().from('v33_s2_manipulations').upsert(rows.map(r=>Object.assign({space_id:state.space},r)),{onConflict:'space_id,code'}).select('code'));audit('manips',{});});};
   }
 
   /* ----- Dates exclues ----- */
@@ -594,7 +627,7 @@
     if(!admin)return;
     v.onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const a=f.get('a'),b=f.get('b')||a;if(b<a){toast('La fin précède le début','err');return;}
       const row={starts_on:a,ends_on:b,label:String(f.get('l')).trim(),kind:f.get('k'),source:'manuel',validated:true};const tmp=Object.assign({id:'tmp'+Date.now()},row);
-      mutate('Date exclue ajoutée',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',row);await afterExcluded();});};
+      mutate('Date exclue ajoutée',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(Object.assign({space_id:state.space},row)).select('id'));tmp.id=ins.id;audit('add_excluded',row);await afterExcluded();});};
     v.onclick=e=>{const wk=e.target.closest('[data-week]');if(wk){toggleWeek(d,wk.dataset.week);return;}
       const va=e.target.closest('[data-val]'),de=e.target.closest('[data-del]');
       if(va){const x=d.excluded.find(y=>y.id===va.dataset.val);const nv=!x.validated;mutate(nv?'Date validée':'Validation retirée',()=>{x.validated=nv;},async()=>{await q(client().from('v33_s2_excluded_dates').update({validated:nv}).eq('id',x.id).select('id'));audit('validate_excluded',{id:x.id,validated:nv});await afterExcluded();});}
@@ -636,7 +669,7 @@
     if(label===null)return;const l=label.trim()||'Semaine exclue';
     const k=/vacance|cong/i.test(l)?'vacances':/\bds\b|devoir/i.test(l)?'ds':/examen/i.test(l)?'examen':/f[ée]ri/i.test(l)?'ferie':'autre';
     const row={starts_on:w.mon,ends_on:w.sat,label:l.slice(0,160),kind:k,source:'manuel',validated:true};const tmp=Object.assign({id:'tmp'+Date.now()},row);
-    mutate('Semaine exclue',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(row).select('id'));tmp.id=ins.id;audit('add_excluded',Object.assign({week:true},row));await afterExcluded();});
+    mutate('Semaine exclue',()=>{d.excluded.push(tmp);d.excluded.sort((x,y)=>x.starts_on.localeCompare(y.starts_on));},async()=>{const [ins]=await q(client().from('v33_s2_excluded_dates').insert(Object.assign({space_id:state.space},row)).select('id'));tmp.id=ins.id;audit('add_excluded',Object.assign({week:true},row));await afterExcluded();});
   }
   function dateItem(x,admin){
     return `<div class="v33-item ${x.validated?'':'prop'}"><div class="v33-date"><b>${C().fmt(x.starts_on).slice(0,5)}</b><small>${x.ends_on!==x.starts_on?'→ '+C().fmt(x.ends_on).slice(0,5):C().fmt(x.starts_on).slice(6)}</small></div><div><b>${esc(x.label)}</b><small>${KIND[x.kind]||x.kind} · ${x.source==='calendrier'?'importée du calendrier':'saisie'}</small></div>
@@ -657,7 +690,7 @@
     const uniq=[...new Map(props.map(p=>[p.starts_on+p.ends_on+p.label,p])).values()];
     if(!uniq.length){toast('Aucune date du S2 reconnue dans ce fichier','err');return;}
     if(!confirm(`${uniq.length} proposition(s) trouvée(s) dans « ${file.name} ». Elles seront ajoutées « à valider ». Continuer ?`))return;
-    state.busy++;try{await q(client().from('v33_s2_excluded_dates').insert(uniq).select('id'));await audit('import_calendar',{file:file.name,n:uniq.length});await load(true);toast(uniq.length+' proposition(s) importée(s) — à valider');}catch(e){toast(e.message,'err');}finally{state.busy--;}
+    state.busy++;try{await q(client().from('v33_s2_excluded_dates').insert(uniq.map(r=>Object.assign({space_id:state.space},r))).select('id'));await audit('import_calendar',{file:file.name,n:uniq.length});await load(true);toast(uniq.length+' proposition(s) importée(s) — à valider');}catch(e){toast(e.message,'err');}finally{state.busy--;}
     renderView();
   }
 
@@ -670,11 +703,92 @@
       <div class="v33-row"><button type="button" class="btn btn-primary v33-btn" data-slots>Enregistrer les créneaux</button></div></section>`;
     v.onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const start=f.get('start');if(start<'2027-01-11'){toast('Le S2 ne peut pas commencer avant le 11/01/2027','err');return;}
       const patch={start_date:start,end_date:f.get('end')||null,group_count:Number(f.get('g')),manip_count:Number(f.get('m')),updated_at:new Date().toISOString()};
-      mutate('Paramètres enregistrés',()=>Object.assign(d.settings,patch),async()=>{await q(client().from('v33_s2_settings').update(patch).eq('id',1).select('id'));audit('settings',patch);});};
+      mutate('Paramètres enregistrés',()=>Object.assign(d.settings,patch),async()=>{await q(client().from('v33_s2_settings').update(patch).eq('space_id',state.space).select('id'));audit('settings',patch);});};
     v.onclick=e=>{if(!e.target.closest('[data-slots]'))return;
       const rows=[...v.querySelectorAll('.v33-slot')].map(tr=>({class_name:tr.dataset.c,weekday:Number(tr.querySelector('[name=w]').value),start_time:tr.querySelector('[name=st]').value,end_time:tr.querySelector('[name=et]').value,pair_key:tr.querySelector('[name=p]').value.trim()||tr.dataset.c,pair_order:Number(tr.querySelector('[name=o]').value)||1,mode:tr.querySelector('[name=mo]').value,active:tr.querySelector('[name=a]').checked,updated_at:new Date().toISOString()}));
       if(rows.some(r=>r.end_time<=r.start_time)){toast('Une heure de fin précède le début','err');return;}
-      mutate('Créneaux enregistrés',()=>{d.slots=rows.map(r=>Object.assign({},r,{start_time:r.start_time+':00',end_time:r.end_time+':00'}));},async()=>{await q(client().from('v33_s2_class_slots').upsert(rows,{onConflict:'class_name'}).select('class_name'));audit('class_slots',{});});};
+      mutate('Créneaux enregistrés',()=>{d.slots=rows.map(r=>Object.assign({},r,{start_time:r.start_time+':00',end_time:r.end_time+':00'}));},async()=>{await q(client().from('v33_s2_class_slots').upsert(rows.map(r=>Object.assign({space_id:state.space},r)),{onConflict:'class_name'}).select('class_name'));audit('class_slots',{});});};
+  }
+
+  /* ----- Espaces (super administrateur) ----- */
+  async function viewSpaces(v){
+    v.innerHTML='<div class="v33-skel"><i></i><i></i></div>';
+    let spaces,members,dir;
+    try{[spaces,members,dir]=await Promise.all([q(client().from('spaces').select('id,name,created_at').order('created_at')),q(client().from('space_members').select('space_id,profile_id,role')),q(client().rpc('v43_teacher_directory'))]);}
+    catch(e){v.innerHTML=`<p class="v33-muted">Chargement impossible : ${esc(e.message)}</p>`;return;}
+    const nm=new Map(dir.map(p=>[p.id,p.full_name]));
+    v.innerHTML=`<p class="v33-lead"><i class="fas fa-circle-info"></i> Chaque espace a ses classes, ses étudiants, ses réglages et son planning S2. Vous seul nommez ou retirez les administrateurs d'espace ; un administrateur d'espace gère les enseignants et les étudiants de son espace, sans voir ni modifier MPI1 · PC1.</p>
+      <section class="v33-card"><h4 class="v33-h">Nouvel espace</h4><form class="v33-row" data-new><input name="n" required minlength="2" maxlength="60" placeholder="Nom (ex. LPC1, MPI2…)" aria-label="Nom de l'espace"><button class="btn btn-primary v33-btn">Créer l'espace</button></form></section>
+      ${spaces.map(sp=>{const ms=members.filter(m=>m.space_id===sp.id).sort((a,b)=>(a.role===b.role?0:a.role==='admin'?-1:1)||String(nm.get(a.profile_id)).localeCompare(String(nm.get(b.profile_id))));
+        const out=dir.filter(p=>!ms.some(m=>m.profile_id===p.id));
+        return `<section class="v33-card" data-sp="${sp.id}"><div class="v33-row"><h4 class="v33-h" style="margin:0">${esc(sp.name)}</h4><span class="v33-muted">${ms.filter(m=>m.role==='admin').length} admin · ${ms.filter(m=>m.role==='teacher').length} enseignant(s)</span><div class="v33-grow"></div>
+          ${sp.id===DEFAULT_SPACE?'':`<button type="button" class="btn v33-btn ghost sm" data-ren="${sp.id}">Renommer</button><button type="button" class="btn v33-btn ghost sm" data-delsp="${sp.id}">Supprimer</button>`}<button type="button" class="btn v33-btn ghost sm" data-open="${sp.id}">Ouvrir</button></div>
+          ${ms.map(m=>`<div class="v33-item"><div><b>${esc(nm.get(m.profile_id)||'—')}</b></div><select data-role="${m.profile_id}" aria-label="Rôle"><option value="admin" ${m.role==='admin'?'selected':''}>Administrateur</option><option value="teacher" ${m.role==='teacher'?'selected':''}>Enseignant</option></select><button type="button" class="btn v33-btn ghost sm" data-rm="${m.profile_id}">Retirer</button></div>`).join('')}
+          ${out.length?`<div class="v33-row"><select data-addp aria-label="Enseignant à ajouter"><option value="">— Ajouter un enseignant —</option>${out.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select><select data-addr aria-label="Rôle"><option value="teacher">Enseignant</option><option value="admin">Administrateur</option></select><button type="button" class="btn v33-btn sm" data-add>Ajouter</button></div>`:''}</section>`;}).join('')}
+      <p class="v33-muted">Pour créer un compte enseignant : onglet Administration → Enseignants, puis ajoutez-le ici à son espace.</p>`;
+    const call=async(label,fn)=>{state.busy++;try{await fn();toast(label);}catch(e){toast('Échec : '+(e.message||e),'err');}finally{state.busy--;}state.data=null;await load(true).catch(()=>{});render();};
+    v.onsubmit=e=>{const f=e.target.closest('[data-new]');if(!f)return;e.preventDefault();const n=new FormData(f).get('n').trim();
+      call('Espace créé',async()=>{const id=await q(client().rpc('v43_create_space',{p_name:n}));state.space=id;try{root.localStorage.setItem(SPACE_KEY,id);}catch(_){}});};
+    v.onchange=e=>{const r=e.target.closest('[data-role]');if(!r)return;const sp=r.closest('[data-sp]').dataset.sp;
+      call('Rôle modifié',()=>q(client().rpc('v43_set_member',{p_space:sp,p_profile:r.dataset.role,p_role:r.value})));};
+    v.onclick=e=>{const sec=e.target.closest('[data-sp]');const sp=sec?.dataset.sp;
+      const rm=e.target.closest('[data-rm]');if(rm&&confirm('Retirer cet enseignant de l\'espace ?'))return call('Retiré de l\'espace',()=>q(client().rpc('v43_set_member',{p_space:sp,p_profile:rm.dataset.rm,p_role:null})));
+      if(e.target.closest('[data-add]')){const pid=sec.querySelector('[data-addp]').value;if(!pid){toast('Choisissez un enseignant','err');return;}
+        return call('Ajouté à l\'espace',()=>q(client().rpc('v43_set_member',{p_space:sp,p_profile:pid,p_role:sec.querySelector('[data-addr]').value})));}
+      const ren=e.target.closest('[data-ren]');if(ren){const n=prompt('Nouveau nom de l\'espace :');if(n&&n.trim().length>=2)return call('Espace renommé',()=>q(client().rpc('v43_rename_space',{p_space:sp,p_name:n.trim()})));return;}
+      const del=e.target.closest('[data-delsp]');if(del&&confirm('Supprimer cet espace ? (possible seulement s\'il n\'a plus de classe)'))return call('Espace supprimé',async()=>{await q(client().rpc('v43_delete_space',{p_space:sp}));state.space=DEFAULT_SPACE;});
+      const op=e.target.closest('[data-open]');if(op){state.space=op.dataset.open;try{root.localStorage.setItem(SPACE_KEY,state.space);}catch(_){}state.view='classes';state.data=null;render();}
+    };
+  }
+
+  /* ----- Classes & étudiants (espaces autres que MPI1 · PC1) ----- */
+  function viewClasses(v,d,admin){
+    const uid=teacher()?.id;
+    const cls=d.spaceClasses.length?d.spaceClasses:classesOf(d).map(n=>({id:null,name:n}));
+    const sel=state.classesSel&&cls.some(c=>c.name===state.classesSel)?state.classesSel:cls[0]?.name;
+    const cur=cls.find(c=>c.name===sel);const slot=d.slots.find(x=>x.class_name===sel);
+    const studs=d.students.filter(s=>cur&&(s.class_id===cur.id||s.class_name===sel)).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
+    const pairOpts=d.slots.map(x=>`<option value="${esc(x.pair_key)}">${esc(x.class_name)} (${C().DAY_LABEL[x.weekday]})</option>`).join('');
+    v.innerHTML=`${admin?`<section class="v33-card"><h4 class="v33-h">Nouvelle classe</h4><form class="v33-form" data-newc>
+        <label>Nom<input name="n" required maxlength="30" placeholder="ex. LPC1-A"></label>
+        <label>Jour<select name="w">${[1,2,3,4,5,6].map(w=>`<option value="${w}">${C().DAY_LABEL[w]}</option>`).join('')}</select></label>
+        <label>Début<input type="time" name="st" value="14:00" required></label><label>Fin<input type="time" name="et" value="17:00" required></label>
+        <label>Partage le jour avec<select name="p"><option value="">— aucune classe —</option>${pairOpts}</select></label>
+        <button class="btn btn-primary v33-btn">Créer la classe</button></form>
+        <p class="v33-muted">Deux classes qui partagent un jour alternent ou se suivent, comme au S1 (choix dans l'onglet Planning).</p></section>`:''}
+      ${cls.length?chips(cls.map(c=>[c.name,c.name,d.students.filter(s=>s.class_id===c.id||s.class_name===c.name).length+' étudiant(s)']),sel,'cs','Classe'):'<p class="v33-muted">Aucune classe pour l\'instant.</p>'}
+      ${cur?`<section class="v33-card"><div class="v33-row"><h4 class="v33-h" style="margin:0">${esc(sel)}</h4><span class="v33-muted">${slot?`${C().DAY_LABEL[slot.weekday]} ${slot.start_time.slice(0,5)}–${slot.end_time.slice(0,5)}`:'sans créneau'}</span><div class="v33-grow"></div>${admin&&cur.id?`<button type="button" class="btn v33-btn ghost sm" data-delc="${cur.id}">Supprimer la classe</button>`:''}</div>
+        ${admin&&cur.id?`<form class="v33-row" data-adds><input name="ln" required maxlength="60" placeholder="Nom"><input name="fn" maxlength="60" placeholder="Prénom"><button class="btn v33-btn">Ajouter</button></form>
+        <details><summary>Coller une liste (un étudiant par ligne : NOM Prénom, ou NOM;Prénom)</summary><textarea data-paste rows="6" style="width:100%"></textarea><button type="button" class="btn v33-btn" data-pastego>Ajouter la liste</button></details>`:''}
+        <ol class="v33-studs">${studs.map(s=>`<li>${esc(s.name)}${admin?` <button type="button" class="btn v33-btn ghost sm" data-dels="${s.id}" aria-label="Retirer ${esc(s.name)}">Retirer</button>`:''}</li>`).join('')||'<p class="v33-muted">Aucun étudiant.</p>'}</ol>
+        ${admin&&studs.length?'<p class="v33-muted">Ensuite : onglet Groupes → « Préparer les groupes » (ou « Nouveaux » pour les étudiants ajoutés après).</p>':''}</section>`:''}`;
+    const call=async(label,fn)=>{state.busy++;try{await fn();toast(label);}catch(e){toast('Échec : '+(e.message||e),'err');}finally{state.busy--;}await load(true).catch(()=>{});renderView();};
+    const addStudents=list=>call(list.length+' étudiant(s) ajouté(s)',()=>q(client().from('students').insert(list.map(([ln,fn])=>({teacher_id:uid,class_id:cur.id,last_name:ln.toUpperCase(),first_name:fn||''}))).select('id')));
+    v.onclick=e=>{
+      const cs=e.target.closest('[data-cs]');if(cs){state.classesSel=cs.dataset.cs;return renderView();}
+      if(!admin)return;
+      const ds=e.target.closest('[data-dels]');if(ds&&confirm('Retirer cet étudiant ?'))return call('Étudiant retiré',async()=>{await q(client().from('students').update({deleted_at:new Date().toISOString()}).eq('id',ds.dataset.dels).select('id'));await q(client().from('v33_s2_group_members').delete().eq('student_id',ds.dataset.dels).select('student_id'));});
+      if(e.target.closest('[data-pastego]')){const lines=v.querySelector('[data-paste]').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+        const list=lines.map(l=>l.includes(';')?l.split(';').map(x=>x.trim()):(()=>{const w=l.split(/\s+/);const up=w.filter(x=>x===x.toUpperCase()&&/[A-ZÀ-Ý]/.test(x));const ln=up.length&&up.length<w.length?up.join(' '):w[0];return [ln,w.filter(x=>!ln.split(' ').includes(x)).join(' ')];})());
+        if(!list.length){toast('Liste vide','err');return;}if(!confirm(`Ajouter ${list.length} étudiant(s) à ${sel} ?`))return;return addStudents(list);}
+      const dc=e.target.closest('[data-delc]');if(dc){if(!confirm(`Supprimer la classe ${sel}, son créneau et ses groupes S2 ? (ses étudiants sont retirés)`))return;
+        return call('Classe supprimée',async()=>{await q(client().from('v33_s2_group_members').delete().eq('space_id',state.space).eq('class_name',sel).select('student_id'));
+          await q(client().from('v33_s2_class_slots').delete().eq('class_name',sel).eq('space_id',state.space).select('class_name'));
+          await q(client().from('students').update({deleted_at:new Date().toISOString()}).eq('class_id',dc.dataset.delc).select('id'));
+          await q(client().from('classes').update({deleted_at:new Date().toISOString()}).eq('id',dc.dataset.delc).select('id'));audit('delete_class',{name:sel});});}
+    };
+    v.onsubmit=e=>{e.preventDefault();
+      const fs=e.target.closest('[data-adds]');if(fs){const f=new FormData(fs);return addStudents([[String(f.get('ln')).trim(),String(f.get('fn')||'').trim()]]);}
+      const fc=e.target.closest('[data-newc]');if(!fc)return;const f=new FormData(fc);const name=String(f.get('n')).trim().toUpperCase();
+      if(!/^[A-Z0-9][A-Z0-9 ._-]{1,29}$/.test(name)){toast('Nom de classe : lettres, chiffres, tiret','err');return;}
+      if(d.slots.some(x=>x.class_name===name)){toast('Cette classe existe déjà','err');return;}
+      const st=f.get('st'),et=f.get('et');if(et<=st){toast('L\'heure de fin précède le début','err');return;}
+      const pk=f.get('p');const partner=d.slots.find(x=>x.pair_key===pk);
+      call('Classe créée',async()=>{
+        await q(client().from('classes').insert({teacher_id:uid,name,module:'TP Physique S2',space_id:state.space}).select('id'));
+        await q(client().from('v33_s2_class_slots').insert({space_id:state.space,class_name:name,weekday:partner?partner.weekday:Number(f.get('w')),start_time:st,end_time:et,pair_key:pk||name,pair_order:partner?Math.max(...d.slots.filter(x=>x.pair_key===pk).map(x=>x.pair_order))+1:1,mode:partner?partner.mode:'alternance',active:true}).select('class_name'));
+        audit('create_class',{name});state.classesSel=name;});
+    };
   }
 
   /* ----- Versions et historique ----- */
@@ -683,7 +797,7 @@
     v.innerHTML=`<div class="v33-cols2"><section class="v33-card"><h4 class="v33-h">Versions du planning</h4>${d.versions.map(x=>`<div class="v33-item"><div><b>${esc(x.label)}</b><small>${new Date(x.created_at).toLocaleString('fr-FR')}</small></div><button type="button" class="btn v33-btn ghost sm" data-rs="${x.id}">Restaurer</button></div>`).join('')||'<p class="v33-muted">Aucune version.</p>'}</section>
       <section class="v33-card"><h4 class="v33-h">Historique</h4>${d.audit.map(a=>`<div class="v33-item"><div><b>${esc(ACTION[a.action]||a.action)}</b><small>${new Date(a.created_at).toLocaleString('fr-FR')} · ${esc(short(tname(a.actor)))}</small></div></div>`).join('')||'<p class="v33-muted">Rien pour l\'instant.</p>'}</section></div>`;
     v.onclick=async e=>{const b=e.target.closest('[data-rs]');if(!b||!confirm('Restaurer cette version ? Le planning actuel est d\'abord sauvegardé.'))return;
-      state.busy++;try{await q(client().rpc('v33_s2_save_version',{p_label:'Sauvegarde automatique avant restauration'}));await q(client().rpc('v33_s2_restore_version',{p_id:b.dataset.rs}));await load(true);toast('Version restaurée');}catch(err){toast(err.message,'err');}finally{state.busy--;}renderView();};
+      state.busy++;try{await q(client().rpc('v33_s2_save_version',{p_label:'Sauvegarde automatique avant restauration',p_space:state.space}));await q(client().rpc('v33_s2_restore_version',{p_id:b.dataset.rs}));await load(true);toast('Version restaurée');}catch(err){toast(err.message,'err');}finally{state.busy--;}renderView();};
   }
 
   function init(){

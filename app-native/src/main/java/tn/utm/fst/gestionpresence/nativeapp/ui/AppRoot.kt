@@ -1732,8 +1732,12 @@ private fun Legend(color: Color, label: String, value: Int) {
 
 @Composable
 private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
+    // Enseignant nommé administrateur d'un espace S2 : accès à la gestion du S2 de son espace.
+    var spaceAdmin by remember { mutableStateOf(false) }
+    LaunchedEffect(state.online, state.isAdmin) { spaceAdmin = !state.isAdmin && state.online && runCatching { viewModel.s2.isSpaceAdmin() }.getOrDefault(false) }
     val entries = buildList {
         if (state.isAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 (dates, créneaux, planning)", Icons.Default.CalendarMonth))
+        else if (spaceAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 de mon espace", Icons.Default.CalendarMonth))
         add(Triple(AppScreen.STATS, "Statistiques", Icons.Default.BarChart))
         add(Triple(AppScreen.REPORT_PDF, "Rapport de présence (PDF)", Icons.Default.Assessment))
         add(Triple(AppScreen.EXPORT, "Exports (Excel, sauvegardes)", Icons.Default.Assessment))

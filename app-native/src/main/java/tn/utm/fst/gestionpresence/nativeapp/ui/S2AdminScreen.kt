@@ -61,6 +61,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -109,8 +111,21 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
 
     val s = snap
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        val sup = state.isAdmin
+        val def = s?.space == tn.utm.fst.gestionpresence.nativeapp.feature.s2.DEFAULT_SPACE
+        if (s != null && s.spaces.size > 1) item {
+            Text("Espace", color = Uphf.Muted, style = MaterialTheme.typography.labelMedium)
+            AdminTabs(s.spaces.map { it.id to it.name }, s.space) { id -> if (id != s.space) { viewModel.s2.space = id; snap = null; run(null, false) { null } } }
+            if (!sup && s.myRoles[s.space] != "admin") Text("Lecture seule : vous n’administrez pas cet espace.", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall)
+        }
         item {
-            AdminTabs(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "manips" to "Manipulations", "planning" to "Générer & PDF", "historique" to "Historique"), tab) { tab = it }
+            val tabs = buildList {
+                if (sup) add("espaces" to "Espaces")
+                if (s != null && !def) add("classes" to "Classes & étudiants")
+                addAll(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "manips" to "Manipulations", "planning" to "Générer & PDF", "historique" to "Historique"))
+            }
+            if (tabs.none { it.first == tab }) tab = "dates"
+            AdminTabs(tabs, tab) { tab = it }
         }
         notice?.let { (err, msg) ->
             item {
@@ -140,6 +155,8 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             }
             "manips" -> item { ManipsEditor(s) { rows -> run("Manipulations enregistrées : les PDF et les cahiers reprennent les nouveaux intitulés.", false) { viewModel.s2.saveManips(rows); null } } }
             "historique" -> item { HistoryPanel(viewModel) }
+            "espaces" -> item { SpacesPanel(viewModel) { id -> viewModel.s2.space = id; tab = "classes"; snap = null; run(null, false) { null } } }
+            "classes" -> item { ClassesPanel(s, ::run, viewModel) }
             else -> {
                 item {
                     SharePanel(s) { key, mode ->
@@ -594,7 +611,8 @@ private fun ImportCalendarButton(run: (String?, Boolean, suspend () -> String?) 
 
 /* ---------------- Groupes du S2 ---------------- */
 
-private val S2_CLASSES = listOf("MPI1-A", "MPI1-B", "MPI1-C", "MPI1-D", "MPI1-E", "PC1-A")
+/** Classes S2 de l'espace affiché (créneaux actifs). */
+private fun s2Classes(s: S2Snapshot) = s.slots.filter { it.active }.map { it.className }.sorted()
 
 private fun androidx.compose.foundation.lazy.LazyListScope.groupsTab(
     s: S2Snapshot,
@@ -620,7 +638,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.groupsTab(
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun GroupsPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> String?) -> Unit, viewModel: MainViewModel) {
-    var cls by rememberSaveable { mutableStateOf(S2_CLASSES.first()) }
+    var cls by rememberSaveable(s.space) { mutableStateOf(s2Classes(s).firstOrNull().orEmpty()) }
+    if (cls !in s2Classes(s)) cls = s2Classes(s).firstOrNull().orEmpty()
     var edit by remember { mutableStateOf<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Member?>(null) }
     var preview by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Move>?>(null) }
     var applyAsk by remember { mutableStateOf(false) }
@@ -630,7 +649,7 @@ private fun GroupsPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
     val sizes = (1..G).map { g -> act.count { it.groupNo == g } }
     val gap = (sizes.maxOrNull() ?: 0) - (sizes.minOrNull() ?: 0)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        AdminTabs(S2_CLASSES.map { it to "$it · ${s.members.count { m -> m.className == it && m.status == "actif" }}" }, cls) { cls = it }
+        AdminTabs(s2Classes(s).map { it to "$it · ${s.members.count { m -> m.className == it && m.status == "actif" }}" }, cls) { cls = it }
         Panel(if (gap <= 1) "Groupes équilibrés" else "Écart de $gap étudiants", "${act.size} présent(s) répartis · ${exc.size} mis de côté") {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 sizes.forEachIndexed { i, n ->
@@ -761,7 +780,8 @@ private fun SharePanel(s: S2Snapshot, onChoose: (String, String) -> Unit) {
 private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainUiState, s: S2Snapshot) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val plan = state.data?.plan.orEmpty()
-    var cls by rememberSaveable { mutableStateOf(S2_CLASSES.first()) }
+    var cls by rememberSaveable(s.space) { mutableStateOf(s2Classes(s).firstOrNull().orEmpty()) }
+    if (cls !in s2Classes(s)) cls = s2Classes(s).firstOrNull().orEmpty()
     var msg by remember { mutableStateOf<String?>(null) }
     fun export(classes: List<String>) {
         val excluded = buildMap {
@@ -782,16 +802,147 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
         if (file == null) msg = "Préparez d’abord les groupes du S2 (onglet Groupes)." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
     }
     Panel("Exporter le planning en PDF", "Même modèle que le site : une page A4 paysage par jour ; les classes qui alternent sont sur la même feuille.") {
-        AdminTabs(S2_CLASSES.map { it to it }, cls) { cls = it }
+        AdminTabs(s2Classes(s).map { it to it }, cls) { cls = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { export(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("PDF $cls") }
-            OutlinedButton(onClick = { export(S2_CLASSES) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Toutes les classes") }
+            OutlinedButton(onClick = { export(s2Classes(s)) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Toutes les classes") }
         }
         Text("Cahier de présence : page de garde du jour, puis une page par groupe (modèle du cahier papier).", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { book(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("Cahier $cls") }
-            OutlinedButton(onClick = { book(S2_CLASSES) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Tous les cahiers") }
+            OutlinedButton(onClick = { book(s2Classes(s)) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Tous les cahiers") }
         }
         msg?.let { Text(it, color = Uphf.Bad) }
+    }
+}
+
+/* ---------------- Espaces (super administrateur) ---------------- */
+@Composable
+private fun SpacesPanel(viewModel: MainViewModel, open: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var data by remember { mutableStateOf<Triple<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Space>, List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.SpaceMember>, List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Teacher>>?>(null) }
+    var msg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) {
+        data = runCatching { Triple(viewModel.s2.load().spaces, viewModel.s2.allMembers(), viewModel.s2.directory()) }.getOrElse { msg = true to (it.message ?: "Chargement impossible."); null }
+    }
+    fun act(ok: String, block: suspend () -> Unit) = scope.launch {
+        try { block(); msg = false to ok; reload++ } catch (e: CancellationException) { throw e } catch (e: Exception) { msg = true to (e.message ?: "Échec.") }
+    }
+    Panel("Espaces", "Chaque espace a ses classes, ses étudiants, ses réglages et son planning S2. Vous seul nommez ou retirez les administrateurs d’espace ; un administrateur d’espace ne voit ni ne modifie MPI1 · PC1.") {
+        msg?.let { (e, m) -> Text(m, color = if (e) Uphf.Bad else Uphf.Teal, fontWeight = FontWeight.SemiBold) }
+        var name by rememberSaveable { mutableStateOf("") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(name, { name = it.take(60) }, label = { Text("Nouvel espace (ex. LPC1)") }, singleLine = true, modifier = Modifier.weight(1f))
+            Button(onClick = { val n = name; act("Espace créé.") { open(viewModel.s2.createSpace(n)) }; name = "" }, enabled = name.trim().length >= 2, shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal)) { Text("Créer") }
+        }
+        val d = data
+        if (d == null) CircularProgressIndicator(color = Uphf.Teal)
+        else d.first.forEach { sp ->
+            val ms = d.second.filter { it.spaceId == sp.id }.sortedWith(compareBy({ if (it.role == "admin") 0 else 1 }, { id -> d.third.firstOrNull { it.id == id.profileId }?.name }))
+            val nameOf = { id: String -> d.third.firstOrNull { it.id == id }?.name ?: "—" }
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Uphf.TealSoft.copy(alpha = 0.45f)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(sp.name, fontWeight = FontWeight.ExtraBold, color = Uphf.Title, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { open(sp.id) }) { Text("Ouvrir") }
+                    if (sp.id != tn.utm.fst.gestionpresence.nativeapp.feature.s2.DEFAULT_SPACE) {
+                        var del by remember { mutableStateOf(false) }
+                        TextButton(onClick = { del = true }) { Text("Supprimer", color = Uphf.Bad) }
+                        if (del) AlertDialog(onDismissRequest = { del = false }, title = { Text("Supprimer « ${sp.name} » ?") }, text = { Text("Possible seulement si l’espace n’a plus de classe.") },
+                            confirmButton = { TextButton(onClick = { del = false; act("Espace supprimé.") { viewModel.s2.deleteSpace(sp.id) } }) { Text("Supprimer", color = Uphf.Bad) } },
+                            dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Color.White)
+                    }
+                }
+                ms.forEach { m ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(nameOf(m.profileId), color = Uphf.Text, modifier = Modifier.weight(1f))
+                        FilterChip(m.role == "admin", { act(if (m.role == "admin") "Retiré des administrateurs." else "Nommé administrateur.") { viewModel.s2.setMember(sp.id, m.profileId, if (m.role == "admin") "teacher" else "admin") } },
+                            label = { Text(if (m.role == "admin") "Admin" else "Enseignant") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                        TextButton(onClick = { act("Retiré de l’espace.") { viewModel.s2.setMember(sp.id, m.profileId, null) } }) { Text("Retirer", color = Uphf.Bad) }
+                    }
+                }
+                val out = d.third.filter { t -> ms.none { it.profileId == t.id } }
+                if (out.isNotEmpty()) {
+                    var openMenu by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(onClick = { openMenu = true }, shape = RoundedCornerShape(50)) { Text("Ajouter un enseignant") }
+                        DropdownMenu(openMenu, { openMenu = false }) {
+                            out.forEach { t -> DropdownMenuItem(text = { Text(t.name) }, onClick = { openMenu = false; act("Ajouté à l’espace.") { viewModel.s2.setMember(sp.id, t.id, "teacher") } }) }
+                        }
+                    }
+                }
+            }
+        }
+        Text("Pour créer un compte enseignant : Plus → Comptes enseignants, puis ajoutez-le ici à son espace.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+/* ---------------- Classes & étudiants (espaces autres que MPI1 · PC1) ---------------- */
+@Composable
+private fun ClassesPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> String?) -> Unit, viewModel: MainViewModel) {
+    var sel by rememberSaveable(s.space) { mutableStateOf(s.spaceClasses.firstOrNull()?.name.orEmpty()) }
+    if (s.spaceClasses.none { it.name == sel }) sel = s.spaceClasses.firstOrNull()?.name.orEmpty()
+    val cur = s.spaceClasses.firstOrNull { it.name == sel }
+    Panel("Nouvelle classe", "Créez les classes de l’espace, puis ajoutez leurs étudiants. Ensuite : onglet Groupes → « Préparer les groupes ».") {
+        var name by rememberSaveable { mutableStateOf("") }
+        var day by rememberSaveable { mutableStateOf(1) }
+        var st by rememberSaveable { mutableStateOf("14:00") }
+        var et by rememberSaveable { mutableStateOf("17:00") }
+        var partner by rememberSaveable { mutableStateOf("") }
+        OutlinedTextField(name, { name = it.take(30) }, label = { Text("Nom (ex. LPC1-A)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            DAY_LABEL.entries.forEach { (k, l) -> FilterChip(day == k, { day = k }, label = { Text(l) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White)) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(st, { st = it.take(5) }, label = { Text("Début (HH:MM)") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(et, { et = it.take(5) }, label = { Text("Fin") }, singleLine = true, modifier = Modifier.weight(1f))
+        }
+        if (s.slots.isNotEmpty()) {
+            Text("Partage le jour avec :", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                FilterChip(partner.isEmpty(), { partner = "" }, label = { Text("aucune classe") })
+                s.slots.forEach { c -> FilterChip(partner == c.pairKey, { partner = c.pairKey }, label = { Text("${c.className} (${DAY_LABEL[c.weekday]})") }) }
+            }
+        }
+        Button(onClick = {
+            val n = name; val p = s.slots.firstOrNull { it.pairKey == partner && partner.isNotEmpty() }
+            run("Classe créée.", false) { viewModel.s2.createClass(n, day, st, et, p, s.slots); sel = n.trim().uppercase(); null }; name = ""
+        }, enabled = name.trim().length >= 2, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) { Text("Créer la classe") }
+    }
+    if (s.spaceClasses.isEmpty()) return
+    AdminTabs(s.spaceClasses.map { c -> c.name to "${c.name} · ${s.spaceStudents.count { it.classId == c.id }}" }, sel) { sel = it }
+    if (cur == null) return
+    val studs = s.spaceStudents.filter { it.classId == cur.id }.sortedBy { "${it.lastName} ${it.firstName}".lowercase() }
+    val slot = s.slots.firstOrNull { it.className == cur.name }
+    Panel(cur.name, slot?.let { "${DAY_LABEL[it.weekday]} ${it.start}–${it.end} · ${studs.size} étudiant(s)" } ?: "${studs.size} étudiant(s)") {
+        var ln by rememberSaveable { mutableStateOf("") }; var fn by rememberSaveable { mutableStateOf("") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(ln, { ln = it.take(60) }, label = { Text("Nom") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(fn, { fn = it.take(60) }, label = { Text("Prénom") }, singleLine = true, modifier = Modifier.weight(1f))
+        }
+        Button(onClick = { val a = ln; val b = fn; run("Étudiant ajouté.", false) { viewModel.s2.addStudents(cur.id, listOf(a to b)); null }; ln = ""; fn = "" },
+            enabled = ln.isNotBlank(), shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) { Text("Ajouter l’étudiant") }
+        var paste by rememberSaveable { mutableStateOf("") }
+        OutlinedTextField(paste, { paste = it }, label = { Text("Coller une liste (une ligne par étudiant : NOM Prénom, ou NOM;Prénom)") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+        OutlinedButton(onClick = {
+            val list = paste.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { l ->
+                if (';' in l) l.substringBefore(';').trim() to l.substringAfter(';').trim()
+                else { val w = l.split(Regex("\\s+")); val up = w.filter { x -> x == x.uppercase() && x.any(Char::isLetter) }
+                    val last = if (up.isNotEmpty() && up.size < w.size) up.joinToString(" ") else w.first(); last to w.filterNot { it in last.split(" ") }.joinToString(" ") }
+            }
+            run("${list.size} étudiant(s) ajouté(s).", false) { viewModel.s2.addStudents(cur.id, list); null }; paste = ""
+        }, enabled = paste.isNotBlank(), shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Ajouter la liste") }
+        studs.forEachIndexed { i, st ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${i + 1}. ${st.lastName} ${st.firstName}", color = Uphf.Text, modifier = Modifier.weight(1f))
+                TextButton(onClick = { run("Étudiant retiré.", false) { viewModel.s2.removeStudent(st.id); null } }) { Text("Retirer", color = Uphf.Bad) }
+            }
+        }
+        var del by remember { mutableStateOf(false) }
+        OutlinedButton(onClick = { del = true }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Supprimer la classe", color = Uphf.Bad) }
+        if (del) AlertDialog(onDismissRequest = { del = false }, title = { Text("Supprimer ${cur.name} ?") }, text = { Text("Son créneau, ses groupes S2 et ses étudiants sont retirés.") },
+            confirmButton = { TextButton(onClick = { del = false; run("Classe supprimée.", false) { viewModel.s2.deleteClass(cur); null } }) { Text("Supprimer", color = Uphf.Bad) } },
+            dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Color.White)
     }
 }
