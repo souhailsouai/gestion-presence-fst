@@ -1,6 +1,6 @@
 {
-  "version": "2.19.0",
-  "notes": "À partir du 12/12/2026, le S1 est masqué (pas supprimé) ; un administrateur l'affiche avec « Afficher le S1 (archives) » dans Administration. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.20.0",
+  "notes": "Rôles et accès : le super administrateur choisit, espace par espace, ce que chaque personne peut gérer (étudiants, planning, appel, équipe…). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3314979
+  "size": 3331363
 }

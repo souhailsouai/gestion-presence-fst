@@ -31,15 +31,16 @@
   async function fetchRows(){
     const c=root.supabaseClient,t=me();if(!c||!t)return null;
     const uid=t.id;
-    const [slots,mine,spaces]=await Promise.all([
+    const [slots,mine,spaces,perms]=await Promise.all([
       c.from('v33_s2_slots').select('id,space_id,group_no,manipulation_code,teacher_id,room,attendance_session_id,session:v33_s2_sessions!inner(session_date,start_time,end_time,class_name)').gte('session.session_date',S2_START),
       c.from('space_members').select('space_id,role').eq('profile_id',uid),
-      c.from('spaces').select('id,name')
+      c.from('spaces').select('id,name'),
+      c.from('space_permissions').select('space_id,perm').eq('profile_id',uid).eq('perm','attendance.any')
     ]);
     if(slots.error)throw slots.error;
     /* Mode administrateur : tout MPI1 · PC1 ; ailleurs, les espaces dont on est administrateur (le serveur revérifie). */
     return {rows:slots.data||[],ctx:{userId:uid,isAdmin:!!(t.isAdmin&&t.activeMode==='admin'),isSuper:false,today:today(),
-      adminSpaces:new Set((mine.data||[]).filter(m=>m.role==='admin').map(m=>m.space_id)),
+      adminSpaces:new Set([...(mine.data||[]).filter(m=>m.role==='admin').map(m=>m.space_id),...(perms.data||[]).map(p=>p.space_id)]),
       spaceNames:new Map((spaces.data||[]).map(s=>[s.id,s.name]))}};
   }
 

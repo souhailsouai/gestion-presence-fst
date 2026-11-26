@@ -16,6 +16,10 @@
   const OTHERS_KEY='fst_s2_autres';
   const isMember=()=>isSuper()||(state.mySpaces||[]).some(x=>x.id===state.space);
   const isAdmin=()=>isSuper()||(adminMode()&&state.space===DEFAULT_SPACE)||state.myRoles.get(state.space)==='admin';
+  /* Permissions choisies par le super administrateur (V47), espace par espace. */
+  const can=perm=>isAdmin()||!!state.myPerms?.get(state.space)?.has(perm);
+  const VIEW_PERM={planning:['planning.generate','planning.sessions'],groupes:['groups.edit'],enseignants:['planning.stations'],manips:['planning.manips'],dates:['planning.settings'],parametres:['planning.settings'],versions:['planning.generate'],classes:['classes.edit','students.edit'],equipe:['team.edit']};
+  const canView=k=>k==='espaces'||k==='acces'?isSuper():(VIEW_PERM[k]||[]).some(can);
   const isDefaultSpace=()=>state.space===DEFAULT_SPACE;
   const classesOf=d=>d.slots.filter(x=>x.active!==false).map(x=>x.class_name).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -24,7 +28,7 @@
   const S1_FROM='2026-09-01',S1_TO='2026-12-31';
   const CLASSES=['MPI1-A','MPI1-B','MPI1-C','MPI1-D','MPI1-E','PC1-A'];
   const KIND={ferie:'Jour férié',vacances:'Vacances',ds:'Semaine des DS',examen:'Examens',autre:'Autre'};
-  const VIEWS=[['espaces','Espaces','fa-building-user'],['classes','Classes & étudiants','fa-user-graduate'],['equipe','Équipe','fa-users'],['planning','Planning','fa-calendar-days'],['groupes','Groupes','fa-people-group'],['enseignants','Enseignants','fa-chalkboard-user'],['manips','Manipulations','fa-flask'],['dates','Dates exclues','fa-calendar-xmark'],['parametres','Paramètres','fa-sliders'],['versions','Versions','fa-clock-rotate-left']];
+  const VIEWS=[['espaces','Espaces','fa-building-user'],['classes','Classes & étudiants','fa-user-graduate'],['equipe','Équipe','fa-users'],['acces','Rôles et accès','fa-user-shield'],['planning','Planning','fa-calendar-days'],['groupes','Groupes','fa-people-group'],['enseignants','Enseignants','fa-chalkboard-user'],['manips','Manipulations','fa-flask'],['dates','Dates exclues','fa-calendar-xmark'],['parametres','Paramètres','fa-sliders'],['versions','Versions','fa-clock-rotate-left']];
   const state={space:(()=>{try{return root.localStorage.getItem(SPACE_KEY)||DEFAULT_SPACE;}catch(_){return DEFAULT_SPACE;}})(),spaces:[],myRoles:new Map(),sem:'S1',view:'planning',planView:'classe',planClass:'MPI1-A',planTeacher:'',planMonth:'all',groupClass:'MPI1-A',teacherDay:null,data:null,hash:'',busy:0,timer:null};
 
   /* ---------- Sélecteur de semestre ---------- */
@@ -73,6 +77,8 @@
     const [spaces,mine]=await Promise.all([q(c.from('spaces').select('id,name').order('created_at')),uid?q(c.from('space_members').select('space_id,role').eq('profile_id',uid)):Promise.resolve([])]);
     if(state.amSuper===undefined)state.amSuper=await q(c.rpc('v45_am_super_admin')).then(v=>v===true).catch(()=>false);
     state.spaces=spaces;state.myRoles=new Map(mine.map(m=>[m.space_id,m.role]));
+    const perms=uid?await q(c.from('space_permissions').select('space_id,perm').eq('profile_id',uid)).catch(()=>[]):[];
+    state.myPerms=new Map();for(const r of perms){if(!state.myPerms.has(r.space_id))state.myPerms.set(r.space_id,new Set());state.myPerms.get(r.space_id).add(r.perm);}
     /* Mes espaces par défaut ; les autres (planning seul, lecture) au choix « Autres espaces ». */
     const myIds=new Set(mine.map(m=>m.space_id));if(teacher()?.isAdmin||!myIds.size)myIds.add(DEFAULT_SPACE);
     if(state.amSuper)spaces.forEach(x=>myIds.add(x.id)); /* le super administrateur supervise tous les espaces */
@@ -146,15 +152,16 @@
     if(!state.data)out.innerHTML='<div class="v33-skel"><i></i><i></i><i></i></div>';
     try{await load(false);}catch(e){out.innerHTML=`<div class="v33-empty"><i class="fas fa-plug-circle-exclamation"></i><p>Impossible de charger le S2 : ${esc(e.message)}</p></div>`;return;}
     const d=state.data,admin=isAdmin();
-    const visible=(admin?VIEWS:VIEWS.filter(v=>(isMember()?['planning','groupes','enseignants','manips','dates','classes']:['planning','enseignants','manips','dates']).includes(v[0])))
-      .filter(v=>(v[0]!=='espaces'||isSuper())&&(v[0]!=='classes'||!isDefaultSpace())&&(v[0]!=='equipe'||(admin&&!isDefaultSpace())));
+    const readOnly=isMember()?['planning','groupes','enseignants','manips','dates','classes']:['planning','enseignants','manips','dates'];
+    const visible=VIEWS.filter(v=>admin||readOnly.includes(v[0])||canView(v[0]))
+      .filter(v=>(v[0]!=='espaces'&&v[0]!=='acces'||isSuper())&&(v[0]!=='classes'||!isDefaultSpace())&&(v[0]!=='equipe'||(canView('equipe')&&!isDefaultSpace())));
     if(!visible.some(v=>v[0]===state.view))state.view='planning';
     const spaceName=state.spaces.find(x=>x.id===state.space)?.name||'MPI1 · PC1';
     const mineIds=new Set((state.mySpaces||[]).map(x=>x.id));
     const shown=state.showOthers?state.spaces:state.spaces.filter(x=>mineIds.has(x.id));
     const others=state.spaces.length>shown.length||state.showOthers&&state.spaces.length>mineIds.size;
     const spaceChips=shown.length>1||others?`<div class="v33-spaces">${shown.length>1||state.showOthers?chips(shown.map(x=>[x.id,x.name,!mineIds.has(x.id)&&!isSuper()?'autre espace · planning seul':x.id===DEFAULT_SPACE?'MPI1 · PC1':(state.myRoles.get(x.id)==='admin'||isSuper()?'administration':'mon espace')]),state.space,'space','Espace'):''}${others?`<button type="button" class="btn v33-btn ghost sm" data-others aria-pressed="${!!state.showOthers}"><i class="fas ${state.showOthers?'fa-eye-slash':'fa-eye'}"></i> ${state.showOthers?'Mes espaces seulement':'Autres espaces'}</button>`:''}</div>`:'';
-    out.innerHTML=`${spaceChips}<div class="v33-hero"><div><span class="v33-tag">Semestre 2 · ${esc(spaceName)}</span><h3>Planning des TP</h3><p>À partir du <b>${C().fmt(d.settings.start_date)}</b>${d.settings.end_date?' jusqu\'au <b>'+C().fmt(d.settings.end_date)+'</b>':''}${admin?'':' · lecture seule'}</p></div>
+    out.innerHTML=`${spaceChips}<div class="v33-hero"><div><span class="v33-tag">Semestre 2 · ${esc(spaceName)}</span><h3>Planning des TP</h3><p>À partir du <b>${C().fmt(d.settings.start_date)}</b>${d.settings.end_date?' jusqu\'au <b>'+C().fmt(d.settings.end_date)+'</b>':''}${admin||Object.keys(VIEW_PERM).some(canView)?'':' · lecture seule'}</p></div>
         <div class="v33-hero-stats" id="v33-herostats"></div></div>
       <nav class="v33-tabs" role="tablist">${visible.map(([k,l,i])=>`<button type="button" role="tab" data-view="${k}" aria-selected="${k===state.view}"><i class="fas ${i}"></i><span>${l}</span></button>`).join('')}</nav>
       <div id="v33-view" class="v33-view"></div>`;
@@ -175,7 +182,7 @@
     const d=state.data,admin=isAdmin();
     const cl=classesOf(d);if(!cl.includes(state.planClass))state.planClass=cl[0]||'';if(!cl.includes(state.groupClass))state.groupClass=cl[0]||'';
     v.onclick=null;v.onchange=null;v.onsubmit=null;v.ondragstart=null;v.ondragover=null;v.ondrop=null;v.ondragend=null;
-    ({espaces:viewSpaces,equipe:viewTeam,classes:viewClasses,planning:viewPlanning,groupes:viewGroups,enseignants:viewTeachers,manips:viewManips,dates:viewDates,parametres:viewSettings,versions:viewVersions})[state.view](v,d,admin);
+    ({acces:viewAccess,espaces:viewSpaces,equipe:viewTeam,classes:viewClasses,planning:viewPlanning,groupes:viewGroups,enseignants:viewTeachers,manips:viewManips,dates:viewDates,parametres:viewSettings,versions:viewVersions})[state.view](v,d,canView(state.view));
     heroStats(d);
     v.classList.remove('v33-fade');void v.offsetWidth;v.classList.add('v33-fade');
   }
@@ -761,6 +768,47 @@
     };
   }
 
+  /* ----- Rôles et accès (super administrateur) : permissions par personne et par espace ----- */
+  const PERM_GROUPS=[
+    ['Étudiants et classes',[['students.edit','Ajouter, modifier, retirer des étudiants'],['classes.edit','Créer ou supprimer des classes'],['groups.edit','Changer le groupe d\'un étudiant, le rendre inactif']]],
+    ['Planning',[['planning.settings','Dates, créneaux, jours exclus, réglages'],['planning.manips','Manipulations (codes, titres, salles)'],['planning.stations','Affecter les enseignants aux postes'],['planning.generate','Générer ou recalculer le planning, versions'],['planning.sessions','Verrouiller ou déplacer une séance, changer un enseignant']]],
+    ['Appel et notes',[['attendance.any','Faire l\'appel de toutes les cases'],['attendance.edit','Modifier présences et notes après la séance'],['attendance.makeup','Enregistrer les rattrapages']]],
+    ['Exports et documents',[['exports','PDF (planning, cahier), Excel, Bilan S1'],['stats','Statistiques']]],
+    ['Équipe et comptes',[['team.edit','Ajouter ou retirer des enseignants de l\'espace'],['accounts.manage','Créer des comptes, réinitialiser un PIN'],['notices.edit','Modifier les avis officiels']]]];
+  const ALL_PERMS=PERM_GROUPS.flatMap(g=>g[1].map(x=>x[0]));
+  const PRESETS=[['Enseignant',[]],['Assistant',['attendance.any','attendance.makeup','exports']],['Gestionnaire du planning',['planning.settings','planning.manips','planning.stations','planning.generate','planning.sessions','exports']],['Administrateur d\'espace',ALL_PERMS.filter(p=>p!=='accounts.manage'&&p!=='notices.edit')]];
+  async function viewAccess(v){
+    v.innerHTML='<div class="v33-skel"><i></i><i></i></div>';
+    let dir,perms,members,audit;
+    try{[dir,perms,members,audit]=await Promise.all([q(client().rpc('v43_teacher_directory')),q(client().from('space_permissions').select('space_id,profile_id,perm')),q(client().from('space_members').select('space_id,profile_id,role')),
+      q(client().from('v33_s2_audit').select('id,space_id,actor,detail,created_at').eq('action','set_permissions').order('created_at',{ascending:false}).limit(30))]);}
+    catch(e){v.innerHTML=`<p class="v33-muted">Chargement impossible : ${esc(e.message)}</p>`;return;}
+    const nm=new Map(dir.map(p=>[p.id,p.full_name]));
+    const who=state.accWho&&nm.has(state.accWho)?state.accWho:dir.find(p=>p.id!==teacher()?.id)?.id;state.accWho=who;
+    const sp=state.accSpace&&state.spaces.some(x=>x.id===state.accSpace)?state.accSpace:state.space;state.accSpace=sp;
+    const role=members.find(m=>m.space_id===sp&&m.profile_id===who)?.role;
+    const cur=new Set(perms.filter(r=>r.space_id===sp&&r.profile_id===who).map(r=>r.perm));
+    const spName=id=>state.spaces.find(x=>x.id===id)?.name||'—';
+    v.innerHTML=`<p class="v33-lead"><i class="fas fa-user-shield"></i> Choisissez une personne et un espace, puis cochez ce qu'elle peut gérer. Partez d'un modèle, puis ajoutez ou retirez des cases. Chaque changement est enregistré et peut être annulé.</p>
+      <section class="v33-card v33-acc"><div class="v33-form">
+        <label>Personne<select data-accwho>${dir.filter(p=>p.id!==teacher()?.id).map(p=>`<option value="${p.id}" ${p.id===who?'selected':''}>${esc(p.full_name)}</option>`).join('')}</select></label>
+        <label>Espace<select data-accsp>${state.spaces.map(x=>`<option value="${x.id}" ${x.id===sp?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div>
+        ${role==='admin'?`<p class="v33-note"><i class="fas fa-circle-info"></i> ${esc(nm.get(who)||'')} est <b>administrateur de ${esc(spName(sp))}</b> : il a déjà tout dans cet espace. Pour limiter ses droits, retirez-le des administrateurs (onglet Espaces), puis cochez ses permissions ici.</p>`:''}
+        <div class="v33-row v33-presets"><span class="v33-muted">Modèles :</span>${PRESETS.map(([n],i)=>`<button type="button" class="btn v33-btn ghost sm" data-preset="${i}">${esc(n)}</button>`).join('')}</div>
+        <form data-accform>${PERM_GROUPS.map(([g,list])=>`<fieldset class="v33-perms"><legend>${esc(g)}</legend>${list.map(([k,l])=>`<label class="v33-check"><input type="checkbox" name="p" value="${k}" ${cur.has(k)?'checked':''}> ${esc(l)}</label>`).join('')}</fieldset>`).join('')}
+        <fieldset class="v33-perms"><legend>Réservé au super administrateur</legend><p class="v33-muted">Créer ou supprimer des espaces · changer les permissions · archives S1.</p></fieldset>
+        <button class="btn btn-primary v33-btn">Enregistrer les permissions</button></form></section>
+      <section class="v33-card"><h4 class="v33-h">Historique des permissions</h4>${audit.map(a=>{const d=a.detail||{};const bef=(d.before||[]).length,aft=(d.after||[]).length;
+        return `<div class="v33-item"><div><b>${esc(nm.get(d.profile)||'—')}</b> · ${esc(spName(a.space_id))}<small>${new Date(a.created_at).toLocaleString('fr-FR')} · ${bef} → ${aft} permission(s)</small></div><button type="button" class="btn v33-btn ghost sm" data-undo="${a.id}">Annuler</button></div>`;}).join('')||'<p class="v33-muted">Aucun changement pour l\'instant.</p>'}</section>`;
+    const save=async(space,profile,list,label)=>{state.busy++;try{await q(client().rpc('v47_set_permissions',{p_space:space,p_profile:profile,p_perms:list}));toast(label);}catch(e){toast('Échec : '+(e.message||e),'err');}finally{state.busy--;}viewAccess(v);};
+    v.onchange=e=>{if(e.target.matches('[data-accwho]')){state.accWho=e.target.value;viewAccess(v);}if(e.target.matches('[data-accsp]')){state.accSpace=e.target.value;viewAccess(v);}};
+    v.onsubmit=e=>{const f=e.target.closest('[data-accform]');if(!f)return;e.preventDefault();const list=[...f.querySelectorAll('input[name=p]:checked')].map(x=>x.value);
+      if(!confirm(`Enregistrer ${list.length} permission(s) pour ${nm.get(who)} dans ${spName(sp)} ?`))return;save(sp,who,list,'Permissions enregistrées');};
+    v.onclick=e=>{const pr=e.target.closest('[data-preset]');if(pr){const set=new Set(PRESETS[+pr.dataset.preset][1]);v.querySelectorAll('input[name=p]').forEach(x=>{x.checked=set.has(x.value);});return;}
+      const u=e.target.closest('[data-undo]');if(u){const a=audit.find(x=>String(x.id)===u.dataset.undo);if(!a)return;const d=a.detail||{};
+        if(confirm(`Revenir aux permissions d'avant pour ${nm.get(d.profile)||'cette personne'} (${spName(a.space_id)}) ?`))save(a.space_id,d.profile,d.before||[],'Changement annulé');}};
+  }
+
   /* ----- Équipe de l'espace : l'administrateur d'espace ajoute ou retire ses enseignants ----- */
   async function viewTeam(v,d){
     v.innerHTML='<div class="v33-skel"><i></i><i></i></div>';
@@ -832,7 +880,7 @@
   }
 
   /* ----- Versions et historique ----- */
-  const ACTION={replace_plan:'Planning généré / recalculé',save_version:'Version enregistrée',restore_version:'Version restaurée',init_groups:'Groupes préparés',balance:'Groupes équilibrés',move_student:'Étudiant déplacé',edit_student:'Étudiant modifié',reintegrate_student:'Étudiant réintégré',stations:'Enseignants enregistrés',manips:'Manipulations enregistrées',settings:'Paramètres modifiés',class_slots:'Créneaux modifiés',add_excluded:'Date exclue ajoutée',validate_excluded:'Date validée',delete_excluded:'Date supprimée',import_calendar:'Calendrier importé',edit_slot:'Case modifiée',lock:'Séance verrouillée',unlock:'Séance déverrouillée',move:'Séance déplacée',add_students:'Étudiants ajoutés',apply_groups:'Groupes appliqués'};
+  const ACTION={set_permissions:'Permissions modifiées',set_member:'Équipe modifiée',start_attendance:'Appel S2 ouvert',replace_plan:'Planning généré / recalculé',save_version:'Version enregistrée',restore_version:'Version restaurée',init_groups:'Groupes préparés',balance:'Groupes équilibrés',move_student:'Étudiant déplacé',edit_student:'Étudiant modifié',reintegrate_student:'Étudiant réintégré',stations:'Enseignants enregistrés',manips:'Manipulations enregistrées',settings:'Paramètres modifiés',class_slots:'Créneaux modifiés',add_excluded:'Date exclue ajoutée',validate_excluded:'Date validée',delete_excluded:'Date supprimée',import_calendar:'Calendrier importé',edit_slot:'Case modifiée',lock:'Séance verrouillée',unlock:'Séance déverrouillée',move:'Séance déplacée',add_students:'Étudiants ajoutés',apply_groups:'Groupes appliqués'};
   function viewVersions(v,d){
     v.innerHTML=`<div class="v33-cols2"><section class="v33-card"><h4 class="v33-h">Versions du planning</h4>${d.versions.map(x=>`<div class="v33-item"><div><b>${esc(x.label)}</b><small>${new Date(x.created_at).toLocaleString('fr-FR')}</small></div><button type="button" class="btn v33-btn ghost sm" data-rs="${x.id}">Restaurer</button></div>`).join('')||'<p class="v33-muted">Aucune version.</p>'}</section>
       <section class="v33-card"><h4 class="v33-h">Historique</h4>${d.audit.map(a=>`<div class="v33-item"><div><b>${esc(ACTION[a.action]||a.action)}</b><small>${new Date(a.created_at).toLocaleString('fr-FR')} · ${esc(short(tname(a.actor)))}</small></div></div>`).join('')||'<p class="v33-muted">Rien pour l\'instant.</p>'}</section></div>`;
