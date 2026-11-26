@@ -19,6 +19,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
@@ -1105,6 +1109,22 @@ private fun NewStudentForm(state: MainUiState, viewModel: MainViewModel) {
 /*  Appel                                                               */
 /* ------------------------------------------------------------------ */
 
+/** Couleurs de l'écran d'appel, identiques au site (vert / rouge / orange / bleu). */
+private fun appelColor(status: AttendanceStatus): Color = when (status) {
+    AttendanceStatus.PRESENT -> if (Uphf.dark) Color(0xFF3CC57A) else Color(0xFF1F9A55)
+    AttendanceStatus.ABSENT -> if (Uphf.dark) Color(0xFFF0716B) else Color(0xFFD64541)
+    AttendanceStatus.LATE -> if (Uphf.dark) Color(0xFFF2A93B) else Color(0xFFE08A00)
+    AttendanceStatus.JUSTIFIED -> if (Uphf.dark) Color(0xFF6DB3E6) else Color(0xFF2F7FB8)
+}
+
+private fun noAccent(s: String): String = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase().trim()
+
+/** Un brouillon diffère-t-il de ce qui est enregistré ? */
+private fun AttendanceDraft.differsFrom(r: AttendanceRecord): Boolean =
+    r.status != status || r.comment != comment || (if (status == AttendanceStatus.ABSENT) false else r.grade != grade)
+
+private data class Undo(val studentId: String, val name: String, val before: AttendanceStatus, val after: AttendanceStatus, val stamp: Long)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
@@ -1120,83 +1140,142 @@ private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
             .associateBy { it.studentId } }
     val drafts = students.map { state.attendanceDrafts[it.id] ?: AttendanceDraft(it.id) }
     val counts = AttendanceStatus.entries.associateWith { st -> drafts.count { it.status == st } }
+    // État de l'enregistrement : jamais enregistré, modifications en attente, ou à jour.
+    val neverSaved = saved.isEmpty()
+    val changed = if (neverSaved) 0 else drafts.count { d -> saved[d.studentId]?.let { d.differsFrom(it) } ?: true }
+    var filter by rememberSaveable(selected.id) { mutableStateOf("all") }
+    var query by rememberSaveable(selected.id) { mutableStateOf("") }
+    var undo by remember { mutableStateOf<Undo?>(null) }
     var makeupFor by remember { mutableStateOf<AttendanceRecord?>(null) }
+    LaunchedEffect(undo?.stamp) { if (undo != null) { kotlinx.coroutines.delay(4500); undo = null } }
+    val visible = students.filter { s ->
+        val d = state.attendanceDrafts[s.id] ?: AttendanceDraft(s.id)
+        (query.isBlank() || noAccent(s.displayName).contains(noAccent(query))) && when (filter) {
+            "absent" -> d.status == AttendanceStatus.ABSENT
+            "late" -> d.status == AttendanceStatus.LATE
+            "nograde" -> (d.status == AttendanceStatus.PRESENT || d.status == AttendanceStatus.LATE) && d.grade == null
+            else -> true
+        }
+    }
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 120.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                InfoCard(accent = Uphf.Teal) {
+                Column(Modifier.padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Tag(semesterOf(selected.sessionDate))
-                    Text(if (exam.isNotEmpty()) "Examen LPC3 — tous les groupes (${students.size})" else data.className(selected.classId), style = MaterialTheme.typography.headlineSmall, color = Uphf.Title)
-                    Text("${dayName(selected.sessionDate)} ${fmt(selected.sessionDate)} · ${selected.startTime}–${selected.endTime} · ${shortName(data.teacher(selected.teacherId))}", color = Uphf.Text)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        AttendanceStatus.entries.forEach { st ->
-                            Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(statusColor(st).copy(alpha = 0.10f)).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("${counts[st] ?: 0}", style = MaterialTheme.typography.titleLarge, color = statusColor(st))
-                                Text(st.label, style = MaterialTheme.typography.bodySmall, color = Uphf.Text, maxLines = 1)
-                            }
+                    Text(if (exam.isNotEmpty()) "Examen LPC3 — tous les groupes" else "Appel · ${data.className(selected.classId)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = Uphf.Title)
+                    Text("${dayName(selected.sessionDate)} ${fmt(selected.sessionDate)} · ${selected.startTime}–${selected.endTime} · ${shortName(data.teacher(selected.teacherId))}", color = Uphf.Muted, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            item {
+                // Compteur en direct.
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Uphf.Surface).padding(vertical = 12.dp)) {
+                    val cells = AttendanceStatus.entries.map { Triple("${counts[it] ?: 0}", when (it) { AttendanceStatus.PRESENT -> "Présents"; AttendanceStatus.ABSENT -> "Absents"; AttendanceStatus.LATE -> "Retards"; AttendanceStatus.JUSTIFIED -> "Justifiés" }, appelColor(it)) } +
+                        Triple("${students.size}", "Total", Uphf.Title)
+                    cells.forEachIndexed { i, (n, l, c) ->
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            val anim by animateIntAsState(n.toInt(), label = "compteur")
+                            Text("$anim", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = c)
+                            Text(l, style = MaterialTheme.typography.labelSmall, color = Uphf.Muted, maxLines = 1)
                         }
+                        if (i < cells.lastIndex) Box(Modifier.width(1.dp).height(36.dp).background(Uphf.Line).align(Alignment.CenterVertically))
                     }
                 }
             }
             item {
-                OutlinedButton(onClick = viewModel::markAllPresent, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.DoneAll, null); Spacer(Modifier.width(8.dp)); Text("Tous présents")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(listOf("all" to "Tous", "absent" to "Absents", "late" to "Retards", "nograde" to "Sans note")) { (k, l) ->
+                            val on = filter == k
+                            Box(Modifier.clip(RoundedCornerShape(50)).background(if (on) Uphf.Teal else Uphf.Surface).clickable { filter = k }.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                                Text(l, color = if (on) Uphf.OnTeal else Uphf.Text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                        item {
+                            Box(Modifier.clip(RoundedCornerShape(50)).border(1.dp, Uphf.Line, RoundedCornerShape(50)).clickable { viewModel.markAllPresent() }.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                                Text("✓ Tous présents", color = Uphf.Teal, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                    OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Rechercher un étudiant") }, singleLine = true, shape = RoundedCornerShape(50),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Uphf.Surface, focusedContainerColor = Uphf.Surface, unfocusedBorderColor = Color.Transparent), modifier = Modifier.fillMaxWidth())
+                    Text("Tout le monde est présent par défaut · touchez A, R ou J pour les autres.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 6.dp))
                 }
             }
-            items(students, key = { it.id }) { student ->
+            items(visible, key = { it.id }) { student ->
                 val draft = state.attendanceDrafts[student.id] ?: AttendanceDraft(student.id)
-                Box(Modifier.animateItem()) { AttendanceRow(student, draft, saved[student.id], viewModel) { makeupFor = it } }
+                Box(Modifier.animateItem()) {
+                    AttendanceRow(student, draft, saved[student.id], viewModel, onStatus = { before, after ->
+                        undo = Undo(student.id, student.displayName, before, after, System.nanoTime())
+                    }) { makeupFor = it }
+                }
             }
             if (students.isEmpty()) item { EmptyState("Aucun étudiant dans ce groupe.") }
+            else if (visible.isEmpty()) item { Text("Aucun étudiant pour ce filtre.", color = Uphf.Muted, modifier = Modifier.fillMaxWidth().padding(20.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         }
-        val hapticSave = LocalHapticFeedback.current
-        ExtendedFloatingActionButton(
-            onClick = { hapticSave.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.saveAttendance() },
-            containerColor = Uphf.Ochre,
-            contentColor = Color(0xFF1D1A14),
-            shape = RoundedCornerShape(50),
-            icon = { Icon(Icons.Default.Save, null) },
-            text = { Text("Enregistrer l’appel", fontWeight = FontWeight.Bold) },
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
-        )
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // « Annuler » quelques secondes après un changement de statut.
+            AnimatedVisibility(undo != null, enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut()) {
+                val u = undo
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF22313A)).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (u == null) "" else "${u.name} → ${u.after.label}", color = Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    TextButton(onClick = { u?.let { viewModel.updateAttendanceStatus(it.studentId, it.before) }; undo = null }) { Text("ANNULER", color = Color(0xFF7FD3EA), fontWeight = FontWeight.ExtraBold) }
+                }
+            }
+            val hapticSave = LocalHapticFeedback.current
+            val dirty = neverSaved || changed > 0
+            Row(Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(30.dp)).clip(RoundedCornerShape(30.dp)).background(Uphf.Surface).padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(9.dp).clip(CircleShape).background(if (dirty) appelColor(AttendanceStatus.LATE) else appelColor(AttendanceStatus.PRESENT)))
+                        Spacer(Modifier.width(8.dp))
+                        Text(when { neverSaved -> "Pas encore enregistré"; changed > 0 -> "Non enregistré"; else -> "Enregistré" }, fontWeight = FontWeight.Bold, color = Uphf.Title)
+                    }
+                    Text(when { neverSaved -> "Touchez « Enregistrer » à la fin"; changed > 0 -> if (changed == 1) "1 changement" else "$changed changements"; else -> "Appel à jour" }, color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                Button(onClick = { hapticSave.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.saveAttendance() }, enabled = !state.loading, shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal, contentColor = Uphf.OnTeal), modifier = Modifier.height(50.dp)) {
+                    Text(if (state.loading) "Enregistrement…" else "Enregistrer", fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
     }
     makeupFor?.let { rec -> MakeupDialog(onDismiss = { makeupFor = null }) { date -> makeupFor = null; viewModel.setMakeup(rec.id, date) } }
 }
 
 @Composable
-private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: AttendanceRecord?, viewModel: MainViewModel, onMakeup: (AttendanceRecord) -> Unit) {
-    var expanded by rememberSaveable(student.id) { mutableStateOf(false) }
-    val color by animateColorAsState(statusColor(draft.status), tween(220), label = "statut")
-    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(1.5.dp, color.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Nom complet, en grand, sur toute la largeur (jamais tronqué).
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { expanded = !expanded }) {
-                Box(Modifier.size(42.dp).clip(CircleShape).background(color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                    Text(initials(student.displayName), color = color, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.width(12.dp))
+private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: AttendanceRecord?, viewModel: MainViewModel, onStatus: (AttendanceStatus, AttendanceStatus) -> Unit, onMakeup: (AttendanceRecord) -> Unit) {
+    var expanded by rememberSaveable(student.id) { mutableStateOf(draft.comment.isNotBlank()) }
+    val band by animateColorAsState(appelColor(draft.status), tween(220), label = "bande")
+    val haptic = LocalHapticFeedback.current
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Uphf.Surface).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+        Box(Modifier.width(5.dp).fillMaxHeight().background(band))
+        Column(Modifier.weight(1f).padding(start = 12.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(student.lastName.uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = Uphf.Title)
-                    Text(student.firstName, style = MaterialTheme.typography.bodyLarge, color = Uphf.Title)
+                    Text(student.lastName.uppercase(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.ExtraBold, color = Uphf.Title)
+                    Text(student.firstName, style = MaterialTheme.typography.bodyMedium, color = Uphf.Text)
                     saved?.makeupDate?.let { Text("Rattrapé le ${fmt(it)}", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
                 }
-                Text(if (expanded) "Masquer" else "Commentaire", color = Uphf.Teal, style = MaterialTheme.typography.labelMedium)
-            }
-            val haptic = LocalHapticFeedback.current
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                AttendanceStatus.entries.forEach { st ->
-                    val on = draft.status == st
-                    val bg by animateColorAsState(if (on) statusColor(st) else Uphf.Surface, tween(200), label = "fond")
-                    val edge by animateColorAsState(if (on) statusColor(st) else Uphf.Line, tween(200), label = "bord")
-                    val ink by animateColorAsState(if (on) Uphf.OnTeal else Uphf.Text, tween(200), label = "texte")
-                    // Bouton P / A / R / J : pilule de 48 dp, petite vibration au choix (retour tactile).
-                    Box(
-                        Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(50))
-                            .background(bg)
-                            .border(1.5.dp, edge, RoundedCornerShape(50))
-                            .bounceClick { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); viewModel.updateAttendanceStatus(student.id, st) },
-                        contentAlignment = Alignment.Center
-                    ) { Text(st.label, color = ink, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
+                // P / A / R / J : ronds de 42 dp, petite vibration au choix.
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    AttendanceStatus.entries.forEach { st ->
+                        val on = draft.status == st
+                        val bg by animateColorAsState(if (on) appelColor(st) else Uphf.Background, tween(180), label = "fond")
+                        val ink by animateColorAsState(if (on) Color.White else Uphf.Muted, tween(180), label = "texte")
+                        Box(
+                            Modifier.size(42.dp).clip(CircleShape).background(bg)
+                                .semantics { contentDescription = "${st.label} — ${student.displayName}" }
+                                .bounceClick {
+                                    if (draft.status != st) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        val before = draft.status
+                                        viewModel.updateAttendanceStatus(student.id, st)
+                                        onStatus(before, st)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) { Text(statusShort(st), color = ink, fontWeight = FontWeight.ExtraBold) }
+                    }
                 }
             }
             if (saved != null && saved.status == AttendanceStatus.ABSENT && saved.makeupDate == null) {
@@ -1204,32 +1283,37 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
                     Icon(Icons.Default.Replay, null, tint = Uphf.Ochre, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Marquer « Rattrapé »…", color = Uphf.Ochre)
                 }
             }
-            // Note de la séance : toujours visible (sauf absent). Le texte tapé est gardé tel quel,
-            // pour pouvoir écrire « 12,5 » sans que le champ se transforme en « 12.0 » à chaque touche.
+            // Note de la séance (sauf absent). Le texte tapé est gardé tel quel (« 12,5 »).
             if (draft.status != AttendanceStatus.ABSENT) {
                 var gradeText by rememberSaveable(student.id) { mutableStateOf(draft.grade?.let(::gradeLabel).orEmpty()) }
+                LaunchedEffect(draft.grade) { val g = draft.grade?.let(::gradeLabel).orEmpty(); if (gradeText.replace(',', '.').toDoubleOrNull() != draft.grade) gradeText = g }
                 val parsed = gradeText.replace(',', '.').trim().let { t -> if (t.isEmpty()) null else t.toDoubleOrNull() }
                 val invalid = gradeText.isNotBlank() && (parsed == null || parsed !in 0.0..20.0)
-                OutlinedTextField(
-                    value = gradeText,
-                    onValueChange = { v ->
-                        val clean = v.filter { it.isDigit() || it == ',' || it == '.' }.take(5)
-                        gradeText = clean
-                        val g = clean.replace(',', '.').trim().let { t -> if (t.isEmpty()) "" else t }
-                        val d = g.toDoubleOrNull()
-                        if (g.isEmpty() || (d != null && d in 0.0..20.0)) viewModel.updateAttendanceGrade(student.id, g)
-                    },
-                    label = { Text("Note /20") },
-                    placeholder = { Text("ex. 14,5") },
-                    singleLine = true,
-                    isError = invalid,
-                    supportingText = if (invalid) { { Text("Entre 0 et 20") } } else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = gradeText,
+                        onValueChange = { v ->
+                            val clean = v.filter { it.isDigit() || it == ',' || it == '.' }.take(5)
+                            gradeText = clean
+                            val g = clean.replace(',', '.').trim()
+                            val d = g.toDoubleOrNull()
+                            if (g.isEmpty() || (d != null && d in 0.0..20.0)) viewModel.updateAttendanceGrade(student.id, g)
+                        },
+                        placeholder = { Text("Note /20") },
+                        singleLine = true,
+                        isError = invalid,
+                        shape = RoundedCornerShape(14.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.width(130.dp)
+                    )
+                    Text(if (invalid) "Entre 0 et 20" else if (expanded) "Masquer" else "+ Commentaire", color = if (invalid) Uphf.Bad else Uphf.Teal, style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).clickable { expanded = !expanded }.padding(horizontal = 8.dp, vertical = 10.dp))
+                }
+            } else if (!expanded) {
+                Text("+ Commentaire", color = Uphf.Teal, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(RoundedCornerShape(50)).clickable { expanded = true }.padding(horizontal = 8.dp, vertical = 6.dp))
             }
             if (expanded) {
-                OutlinedTextField(draft.comment, { viewModel.updateAttendanceComment(student.id, it) }, label = { Text("Commentaire") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(draft.comment, { viewModel.updateAttendanceComment(student.id, it) }, placeholder = { Text("Commentaire") }, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth())
             }
         }
     }
