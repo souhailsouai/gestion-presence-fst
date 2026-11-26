@@ -20,7 +20,9 @@ import java.time.LocalDate
 
 /** Gestion du semestre 2 depuis l'application (mêmes tables et mêmes règles que le site). */
 data class S2Settings(val startDate: String, val endDate: String?, val groupCount: Int, val manipCount: Int)
-data class ClassSlot(val className: String, val weekday: Int, val start: String, val end: String, val pairKey: String, val pairOrder: Int, val mode: String, val active: Boolean)
+data class ClassSlot(val className: String, val weekday: Int, val start: String, val end: String, val pairKey: String, val pairOrder: Int, val mode: String, val active: Boolean,
+    /** Groupes de la classe (= manipulations) : 4, 5 ou 6 ; null = réglage de l'espace. */
+    val groupCount: Int? = null)
 data class Excluded(val id: String, val startsOn: String, val endsOn: String, val label: String, val kind: String, val source: String, val validated: Boolean)
 data class Station(val weekday: Int, val code: String, val teacherId: String?, val room: String?)
 data class Manip(val code: String, val title: String?, val room: String?, val active: Boolean)
@@ -35,11 +37,20 @@ data class SpaceStudent(val id: String, val lastName: String, val firstName: Str
 data class SpaceMember(val spaceId: String, val profileId: String, val role: String)
 const val DEFAULT_SPACE = "00000000-0000-4000-8000-000000000001"
 
-/** Même règle que le site : on retire du groupe le plus chargé (non verrouillé) vers le moins chargé, présents seulement. */
-fun balanceMoves(members: List<Member>, groupCount: Int): List<Move> {
+/** Même règle que le site : on retire du groupe le plus chargé (non verrouillé) vers le moins chargé, présents seulement.
+ *  Les étudiants d'un groupe supprimé (classe passée à moins de groupes) rejoignent d'abord les plus petits groupes. */
+fun balanceMoves(members: List<Member>, groupCount: Int): List<Move> = balanceMoves(members) { groupCount }
+
+fun balanceMoves(members: List<Member>, groupsOf: (String) -> Int): List<Move> {
     val moves = mutableListOf<Move>()
     members.filter { it.status == "actif" }.groupBy { it.className }.forEach { (cls, list0) ->
         val list = list0.map { it.copy() }.toMutableList()
+        val groupCount = groupsOf(cls).coerceAtLeast(1)
+        list.filter { it.groupNo !in 1..groupCount }.sortedBy { it.name }.forEach { m ->
+            val to = (1..groupCount).minWith(compareBy({ g -> list.count { it.groupNo == g } }, { it }))
+            moves += Move(m.studentId, m.name, cls, m.groupNo, to)
+            list[list.indexOfFirst { it.studentId == m.studentId }] = m.copy(groupNo = to)
+        }
         repeat(500) {
             val sizes = (1..groupCount).map { g -> g to list.count { it.groupNo == g } }.sortedWith(compareBy({ -it.second }, { it.first }))
             val big = sizes.first(); val small = sizes.last()
@@ -71,6 +82,9 @@ data class S2Snapshot(
     /** Permissions (V47) de l'utilisateur dans l'espace affiché. */
     val myPerms: Set<String> = emptySet()
 )
+
+/** Groupes (= manipulations) d'une classe : son réglage (4, 5 ou 6), sinon celui de l'espace. */
+fun S2Snapshot.groupsOf(cls: String): Int = slots.firstOrNull { it.className == cls }?.groupCount ?: settings.groupCount
 
 val DAY_LABEL = mapOf(1 to "Lundi", 2 to "Mardi", 3 to "Mercredi", 4 to "Jeudi", 5 to "Vendredi", 6 to "Samedi")
 val KIND_LABEL = linkedMapOf("vacances" to "Vacances", "ferie" to "Jour férié", "ds" to "DS", "examen" to "Examen", "autre" to "Autre")
@@ -122,7 +136,7 @@ class S2Admin(private val repository: PresenceRepository) {
             val groupOf = allClasses.mapNotNull { c -> Regex("^(.*)-G\\d+$").find(c.name)?.groupValues?.get(1)?.let { baseIds[it] }?.let { c.id to it } }.toMap()
             S2Snapshot(
                 settings = S2Settings(st?.s("start_date") ?: S2_MIN, st?.s("end_date"), st?.i("group_count") ?: 5, st?.i("manip_count") ?: 5),
-                slots = slots.await().map { ClassSlot(it.s("class_name")!!, it.i("weekday") ?: 1, it.s("start_time")!!.take(5), it.s("end_time")!!.take(5), it.s("pair_key") ?: "", it.i("pair_order") ?: 1, it.s("mode") ?: "alternance", it.b("active") ?: true) }
+                slots = slots.await().map { ClassSlot(it.s("class_name")!!, it.i("weekday") ?: 1, it.s("start_time")!!.take(5), it.s("end_time")!!.take(5), it.s("pair_key") ?: "", it.i("pair_order") ?: 1, it.s("mode") ?: "alternance", it.b("active") ?: true, it.i("group_count")) }
                     .sortedWith(compareBy({ it.weekday }, { it.pairOrder }, { it.className })),
                 excluded = excluded.await().map { Excluded(it.s("id")!!, it.s("starts_on")!!, it.s("ends_on")!!, it.s("label") ?: "", it.s("kind") ?: "autre", it.s("source") ?: "manuel", it.b("validated") ?: false) },
                 stations = stations.await().map { Station(it.i("weekday") ?: 1, it.s("manipulation_code")!!, it.s("teacher_id"), it.s("room")) },
@@ -169,6 +183,7 @@ class S2Admin(private val repository: PresenceRepository) {
                 add(buildJsonObject {
                     put("space_id", space); put("class_name", c.className); put("weekday", c.weekday); put("start_time", c.start); put("end_time", c.end)
                     put("pair_key", c.pairKey.ifBlank { DAY_LABEL[c.weekday]!!.lowercase() }); put("pair_order", c.pairOrder); put("mode", c.mode); put("active", c.active)
+                    if (c.groupCount == null) put("group_count", JsonNull) else put("group_count", c.groupCount)
                     put("updated_at", java.time.Instant.now().toString())
                 })
             }
@@ -289,13 +304,15 @@ class S2Admin(private val repository: PresenceRepository) {
         if (!isDefault) {
             // Autres espaces : étudiants des classes de l'espace, répartis par ordre alphabétique (puis équilibrés).
             val cls = api.rows(session, "classes", "id,name", sp + ("deleted_at" to "is.null"), "name").associate { it.s("id")!! to it.s("name")!! }
-            val gc = api.rows(session, "v33_s2_settings", "group_count", sp, "space_id").firstOrNull()?.i("group_count") ?: 5
+            val gc0 = api.rows(session, "v33_s2_settings", "group_count", sp, "space_id").firstOrNull()?.i("group_count") ?: 5
+            val own = api.rows(session, "v33_s2_class_slots", "class_name,group_count", sp, "class_name").associate { it.s("class_name")!! to it.i("group_count") }
+            fun gc(name: String) = own[name] ?: gc0
             val counters = mutableMapOf<String, Int>()
             return api.rows(session, "students", "id,last_name,first_name,class_id,classes!inner(space_id)", mapOf("deleted_at" to "is.null", "classes.space_id" to "eq.$space"), "last_name")
                 .sortedBy { "${it.s("last_name")} ${it.s("first_name")}".lowercase() }
                 .mapNotNull { st -> val name = cls[st.s("class_id")] ?: return@mapNotNull null
                     val n = counters.getOrDefault(name, 0); counters[name] = n + 1
-                    Triple(st.s("id")!!, st.s("class_id")!!, name to (n % gc + 1)) }
+                    Triple(st.s("id")!!, st.s("class_id")!!, name to (n % gc(name) + 1)) }
         }
         val classes = api.rows(session, "classes", "id,name", mapOf("deleted_at" to "is.null"), "name").associate { it.s("id")!! to it.s("name")!! }
         return api.rows(session, "students", "id,class_id", mapOf("deleted_at" to "is.null"), "id").mapNotNull { st ->
@@ -316,7 +333,7 @@ class S2Admin(private val repository: PresenceRepository) {
     }
 
     /** Préparation : groupes du S1, absents à toutes les séances du S1 mis de côté, puis équilibrage. */
-    suspend fun initGroups(groupCount: Int): Int = repository.online { api, session ->
+    suspend fun initGroups(groupsOf: (String) -> Int): Int = repository.online { api, session ->
         val base = s1Groups(api, session)
         val att = if (!isDefault) emptyList() else api.rows(session, "attendance", "student_id,status,sessions!inner(session_date)",
             mapOf("deleted_at" to "is.null", "sessions.session_date" to "lte.2026-12-31"), "id")
@@ -328,7 +345,7 @@ class S2Admin(private val repository: PresenceRepository) {
             Member(id, names[id] ?: "?", cg.first, cg.second, classId, if (always) "exclu" else "actif",
                 if (always) "Toujours absent au S1 (${k.size} séance${if (k.size > 1) "s" else ""}) — réintégrable" else null, false)
         }
-        balanceMoves(members, groupCount).forEach { mv -> members = members.map { if (it.studentId == mv.studentId) it.copy(groupNo = mv.to) else it } }
+        balanceMoves(members, groupsOf).forEach { mv -> members = members.map { if (it.studentId == mv.studentId) it.copy(groupNo = mv.to) else it } }
         api.insertRows(session, "v33_s2_group_members", buildJsonArray {
             members.forEach { m -> add(buildJsonObject {
                 put("space_id", space); put("student_id", m.studentId); put("class_name", m.className); put("group_no", m.groupNo); put("s1_class_id", m.s1ClassId)

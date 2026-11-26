@@ -69,3 +69,7 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 - Les politiques de lecture `attendance_select_authorized` et `sessions_select_authorized` utilisent `private.accessible_session_ids()` : la liste des séances visibles est calculée une fois par requête au lieu d'une vérification des droits par ligne. Règle d'accès identique.
 - Vérifié avant et après sur 4 comptes (super administrateur, deux enseignants, responsable d'espace) : mêmes séances et mêmes présences ; lecture des présences d'un enseignant ~0,7 s → ~0,07 s.
 - Retour arrière : recréer les deux politiques avec `private.can_access_session(session_id)` / `private.can_access_session(id)`.
+
+## 2026-11-26 — V52 : groupes par classe (4, 5 ou 6) — aucune donnée modifiée
+- Nouvelle colonne `v33_s2_class_slots.group_count` (4 à 6, vide = réglage de l'espace). Une classe a autant de manipulations que de groupes (rotation complète M1…Mn).
+- `v37_s2_compute_plan` utilise le réglage de chaque classe ; l'heure d'une classe est lue dans son espace. Vérifié : sans réglage, le planning calculé est identique à avant (même empreinte pour les 3 espaces) ; essai annulé avec MPI1-A à 6 et MPI1-B à 4 : 6 et 4 séances, chaque groupe fait chaque manipulation une fois.

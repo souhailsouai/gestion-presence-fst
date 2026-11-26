@@ -21,13 +21,13 @@ object GroupsPdf {
     private fun ink(c: Int) = if (Color.red(c) * 0.299 + Color.green(c) * 0.587 + Color.blue(c) * 0.114 > 165) Color.rgb(30, 30, 30) else Color.WHITE
 
     fun build(context: Context, s: S2Snapshot, classes: List<String>, spaceName: String, academicYear: String = "2026/2027"): File? {
-        val G = s.settings.groupCount.coerceAtLeast(1)
         val doc = PdfDocument(); var n = 0
         val W = 297f; val H = 210f; val M = 10f; val IW = W - 2 * M
-        val per = 3; val blocks = (G + per - 1) / per; val nw = 11f
+        val per = 3; val nw = 11f
         classes.forEach { cls ->
             val act = s.members.filter { it.className == cls && it.status == "actif" }
             if (act.isEmpty()) return@forEach
+            val G = s.groupsOf(cls).coerceAtLeast(1); val blocks = (G + per - 1) / per
             n++
             val page = doc.startPage(PdfDocument.PageInfo.Builder((W * MM).toInt(), (H * MM).toInt(), n).create())
             val c = page.canvas
