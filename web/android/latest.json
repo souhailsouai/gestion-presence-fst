@@ -1,6 +1,6 @@
 {
-  "version": "2.23.0",
-  "notes": "Plus interactif : vibration au choix P/A/R et à l'enregistrement, carte « Maintenant » qui suit la journée (appel, puis notes), chargement animé. PDF plus lisibles (texte plus grand). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.24.0",
+  "notes": "Nouvel écran d'appel : compteur en direct, filtres (Absents, Retards, Sans note), recherche, boutons P / A / R / J plus grands, « Annuler » après une erreur, barre qui indique si l'appel est enregistré. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
   "size": 3349343
 }
