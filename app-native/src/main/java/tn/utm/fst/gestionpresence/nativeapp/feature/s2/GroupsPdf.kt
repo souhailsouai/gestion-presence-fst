@@ -56,7 +56,7 @@ object GroupsPdf {
             // Blocs de groupes
             val top = M + 21f; val foot = 8f; val gapB = 5f
             val bh = (H - top - M - foot - (blocks - 1) * gapB) / blocks; val rh = bh / (R + 2); val gw = (IW - nw) / per
-            val fs = maxOf(7f, minOf(11f, rh * 1.75f))
+            val fs = maxOf(8f, minOf(11f, rh * 1.75f))
             for (b in 0 until blocks) {
                 val y0 = top + b * (bh + gapB); val gs = (0 until per).map { b * per + it }.filter { it < G }
                 box(M, y0, nw, rh, Color.rgb(242, 242, 242), Color.rgb(60, 60, 60))

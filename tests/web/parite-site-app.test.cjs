@@ -28,6 +28,7 @@ const FEATURES=[
   ['Afficher le S1 (archives)','Afficher le S1 (archives)'],
   ['Rôles et accès','Rôles et accès'],
   ['MAINTENANT','MAINTENANT'],
+  ['Saisir les notes','Saisir les notes'],
   ['À rattraper','À rattraper'],
   ['Bilan S2','Bilan S2'],
   ["LISTE DES GROUPES D'ÉTUDIANTS","LISTE DES GROUPES D'ÉTUDIANTS"],

@@ -48,7 +48,7 @@ object StatsPdf {
         statuses.forEachIndexed { i, (_, lab) ->
             val h = 28f * counts[i] / max; val x = 14f + i * 44f
             fill.color = colors[i]; c.drawRect(x * MM, (y + 30f - h) * MM, (x + 28f) * MM, (y + 30f) * MM, fill)
-            text("${counts[i]}", x + 11f, y + 28.5f - h, paint(8f, true)); text(lab, x + 6f, y + 35f, paint(8f))
+            text("${counts[i]}", x + 11f, y + 28.5f - h, paint(9.5f, true)); text(lab, x + 6f, y + 35.5f, paint(9.5f))
         }
         y += 42f
         // Répartition des notes par tranche
@@ -60,7 +60,7 @@ object StatsPdf {
             buckets.forEachIndexed { i, (a, b) ->
                 val h = 28f * bc[i] / bm; val x = 14f + i * 30f
                 fill.color = Color.rgb(31, 78, 120); c.drawRect(x * MM, (y + 30f - h) * MM, (x + 24f) * MM, (y + 30f) * MM, fill)
-                text("${bc[i]}", x + 9f, y + 28.5f - h, paint(7.5f, true)); text("${a.toInt()}–${minOf(20, b.toInt())}", x + 5f, y + 35f, paint(7.5f))
+                text("${bc[i]}", x + 9f, y + 28.5f - h, paint(9f, true)); text("${a.toInt()}–${minOf(20, b.toInt())}", x + 5f, y + 35.5f, paint(9f))
             }
             y += 42f
         }
@@ -70,11 +70,12 @@ object StatsPdf {
             text(title, 14f, y, paint(11f, true)); y += 3f
             val cols = listOf(14f, 110f, 140f, 166f, 196f)
             fun row(vals: List<String>, head: Boolean) {
-                newPageIfNeeded(7f)
-                if (head) { fill.color = Color.rgb(221, 235, 247); c.drawRect(cols[0] * MM, y * MM, cols[4] * MM, (y + 6f) * MM, fill) }
-                c.drawRect(cols[0] * MM, y * MM, cols[4] * MM, (y + 6f) * MM, stroke)
-                vals.forEachIndexed { i, v -> text(v, cols[i] + 1.5f, y + 4.3f, paint(8f, head)) }
-                y += 6f
+                // Lignes de 7 mm, texte 9 pt : lisible une fois imprimé.
+                newPageIfNeeded(8f)
+                if (head) { fill.color = Color.rgb(221, 235, 247); c.drawRect(cols[0] * MM, y * MM, cols[4] * MM, (y + 7f) * MM, fill) }
+                c.drawRect(cols[0] * MM, y * MM, cols[4] * MM, (y + 7f) * MM, stroke)
+                vals.forEachIndexed { i, v -> text(v, cols[i] + 1.5f, y + 5f, paint(9f, head)) }
+                y += 7f
             }
             row(listOf(head, "Pointages", "Présence", "Moyenne"), true)
             groups.entries.sortedBy { it.key }.forEach { (k, l) -> row(listOf(k.take(55), "${l.size}", "${rate(l)} %", avg(l)?.toString() ?: "—"), false) }

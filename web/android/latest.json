@@ -1,6 +1,6 @@
 {
-  "version": "2.22.0",
-  "notes": "Nouveau design style One UI 9 (mode sombre automatique). Carte « Maintenant » sur l'accueil, écran « À rattraper », Bilan S2. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.23.0",
+  "notes": "Plus interactif : vibration au choix P/A/R et à l'enregistrement, carte « Maintenant » qui suit la journée (appel, puis notes), chargement animé. PDF plus lisibles (texte plus grand). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
   "size": 3349343
 }
