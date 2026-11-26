@@ -72,7 +72,7 @@
       sheets.push({name:fam,title:`Bilan ${SEM} — ${fam} — absences, rattrapages et notes`,head,rows,styles});
       summary.push([fam,students.length,withAbs,tAbs,tJ,tR]);
     }
-    return {sheets,summary,manips};
+    return {sheets,summary,manips,sem:SEM};
   }
 
   function border(){const t={style:'thin',color:{rgb:'A6A6A6'}};return {top:t,bottom:t,left:t,right:t};}
@@ -84,9 +84,10 @@
   }
 
   function toWorkbook(lib,model,meta){
+    const SEM=model.sem==='S2'?'S2':'S1';
     const wb=lib.utils.book_new();
     for(const sh of model.sheets){
-      const aoa=[[sh.title],[meta.institution],[`Année universitaire ${meta.year} — semestre 1 — généré le ${meta.today}`],[],sh.head,...sh.rows];
+      const aoa=[[sh.title],[meta.institution],[`Année universitaire ${meta.year} — semestre ${SEM==='S2'?2:1} — généré le ${meta.today}`],[],sh.head,...sh.rows];
       const ws=lib.utils.aoa_to_sheet(aoa);
       const ncol=sh.head.length,H=4;
       ws['!merges']=[0,1,2].map(r=>({s:{r,c:0},e:{r,c:ncol-1}}));

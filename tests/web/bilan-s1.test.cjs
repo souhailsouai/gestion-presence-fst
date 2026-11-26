@@ -41,3 +41,17 @@ test('Bilan S2 : même modèle, période du S2 seulement',()=>{
   assert.match(m.sheets[0].title,/^Bilan S2 — /);
   assert.ok(B.build({...data,sem:'S2'}).sheets.every(sh=>sh.rows.every(r=>!r.slice(4).some(v=>/^(A|P|R|J)$/.test(String(v))))),'aucune séance du S1 dans le bilan S2');
 });
+// Régression 26/11/2026 : « SEM is not defined » au téléchargement (toWorkbook n'avait pas le semestre).
+test('Bilan : le classeur se construit pour S1 et S2 sans erreur',()=>{
+  const col=c=>{let s='';c++;while(c>0){const m=(c-1)%26;s=String.fromCharCode(65+m)+s;c=Math.floor((c-1)/26);}return s;};
+  const enc=({r,c})=>col(c)+(r+1);
+  const lib={utils:{encode_cell:enc,encode_col:col,book_new:()=>({SheetNames:[],Sheets:{}}),
+    aoa_to_sheet:aoa=>{const ws={};aoa.forEach((row,r)=>(row||[]).forEach((v,c)=>{if(v!==undefined&&v!==null&&v!=='')ws[enc({r,c})]={t:typeof v==='number'?'n':'s',v};}));return ws;},
+    book_append_sheet:(wb,ws,name)=>{wb.SheetNames.push(name);wb.Sheets[name]=ws;}}};
+  for(const sem of ['S1','S2']){
+    const m=B.build(Object.assign({},data,{sem}));
+    const wb=B.toWorkbook(lib,m,{institution:'FST',year:'2026/2027',today:'26/11/2026'});
+    assert.ok(wb.SheetNames.includes('Synthèse'));
+    assert.equal(wb.Sheets['Synthèse'].A1.v,'Synthèse du '+sem);
+  }
+});
