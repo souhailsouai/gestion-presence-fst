@@ -67,6 +67,9 @@ class OnlineApiClient(
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val http = HttpClient(OkHttp) {
         expectSuccess = false
+        // Ouverture : une quinzaine de lectures partent en même temps. Par défaut OkHttp n'en laisse
+        // passer que 5 vers le même serveur ; les autres attendaient leur tour.
+        engine { config { dispatcher(okhttp3.Dispatcher().apply { maxRequests = 64; maxRequestsPerHost = 24 }) } }
         install(ContentNegotiation) { json(json) }
     }
 
@@ -573,13 +576,19 @@ class OnlineApiClient(
             val total = response.headers["Content-Range"]?.substringAfter('/')?.toIntOrNull()
             return response.requireJson().jsonArray to total
         }
-        // Première page avec le total, puis les pages restantes en parallèle.
-        val (first, total) = fetch(0, count = true)
-        if (total == null || total <= first.size) return first
-        val rest = coroutineScope {
-            (page until total step page).map { from -> async { fetch(from, count = false).first } }.awaitAll()
+        // Sans « count=exact » : ce comptage refaisait toute la lecture (et ses droits) côté serveur.
+        // Une page pleine signifie qu'il peut en rester : on lit la suivante, jusqu'à une page incomplète.
+        val first = fetch(0, count = false).first
+        if (first.size < page) return first
+        val all = first.toMutableList()
+        var from = page
+        while (true) {
+            val next = fetch(from, count = false).first
+            all.addAll(next)
+            if (next.size < page) break
+            from += page
         }
-        return first + rest.flatten()
+        return all
     }
 
     private suspend fun upsert(session: AuthSession, table: String, row: JsonObject) {
