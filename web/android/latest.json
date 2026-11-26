@@ -1,6 +1,6 @@
 {
-  "version": "2.21.0",
-  "notes": "PDF des groupes (une page paysage par classe). Comptes enseignants et PIN gérés par l'administrateur de l'espace. Avis officiels modifiables avec la permission. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.22.0",
+  "notes": "Nouveau design style One UI 9 (mode sombre automatique). Carte « Maintenant » sur l'accueil, écran « À rattraper », Bilan S2. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3347747
+  "size": 3349343
 }

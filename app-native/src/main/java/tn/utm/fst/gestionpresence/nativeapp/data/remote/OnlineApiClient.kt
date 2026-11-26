@@ -311,7 +311,13 @@ class OnlineApiClient(
     suspend fun sessionManipulations(session: AuthSession): Map<String, String> = runCatching {
         getPaged(session, "session_plans", "session_id,manipulation,status", mapOf("deleted_at" to "is.null", "session_id" to "not.is.null"), "session_id")
             .map { it.jsonObject }.filter { it.string("manipulation") != null && it.string("status")?.lowercase() != "cancelled" }
-            .associate { it.requiredString("session_id") to it.requiredString("manipulation") }
+            .associate { it.requiredString("session_id") to it.requiredString("manipulation") } +
+        // S2 : la séance ouverte depuis une case du planning (« Faire l'appel ») porte la manipulation de la case.
+        runCatching {
+            getPaged(session, "v33_s2_slots", "attendance_session_id,manipulation_code", mapOf("attendance_session_id" to "not.is.null"), "attendance_session_id")
+                .map { it.jsonObject }.filter { it.string("manipulation_code") != null }
+                .associate { it.requiredString("attendance_session_id") to it.requiredString("manipulation_code") }
+        }.getOrDefault(emptyMap())
     }.getOrDefault(emptyMap())
 
     /** Noms des enseignants (id → nom complet), si la lecture est autorisée. */

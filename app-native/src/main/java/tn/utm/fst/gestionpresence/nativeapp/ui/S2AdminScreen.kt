@@ -148,7 +148,7 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
         }
         notice?.let { (err, msg) ->
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = if (err) Uphf.BadSoft else Uphf.TealSoft), shape = RoundedCornerShape(10.dp)) {
+                Card(colors = CardDefaults.cardColors(containerColor = if (err) Uphf.BadSoft else Uphf.TealSoft), shape = RoundedCornerShape(24.dp)) {
                     Text(msg, color = Uphf.Title, modifier = Modifier.padding(12.dp))
                 }
             }
@@ -202,7 +202,7 @@ private fun AdminTabs(options: List<Pair<String, String>>, selected: String, onS
             FilterChip(
                 selected = k == selected, onClick = { onSelect(k) }, label = { Text(l, fontWeight = FontWeight.SemiBold) },
                 shape = RoundedCornerShape(50),
-                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White, labelColor = Uphf.Title)
+                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal, labelColor = Uphf.Title)
             )
         }
     }
@@ -210,7 +210,7 @@ private fun AdminTabs(options: List<Pair<String, String>>, selected: String, onS
 
 @Composable
 private fun Panel(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
             subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Uphf.Muted) }
@@ -270,10 +270,10 @@ private fun WeekGrid(s: S2Snapshot, onToggle: (Week, Excluded?) -> Unit) {
             val days = (0..5).count { d -> val day = LocalDate.parse(w.mon).plusDays(d.toLong()).toString(); validated.any { day in it.startsOn..it.endsOn } }
             val pending = s.excluded.any { !it.validated && it.startsOn <= w.sat && it.endsOn >= w.mon }
             val (bg, border, tagColor, tag) = when {
-                full != null -> Quad(Color(0xFFEEF1F4), Color(0xFFCFD6DE), Uphf.Bad, "Exclue")
+                full != null -> Quad(if (Uphf.dark) Color(0xFF222C34) else Color(0xFFEEF1F4), Uphf.Line, Uphf.Bad, "Exclue")
                 days > 0 -> Quad(Uphf.OchreSoft, Color(0xFFDCC8A3), Uphf.Ochre, "$days j exclu${if (days > 1) "s" else ""}")
-                pending -> Quad(Color.White, Color(0xFFDCC8A3), Uphf.Ochre, "À valider")
-                else -> Quad(Color.White, Uphf.Line, Uphf.Teal, "TP")
+                pending -> Quad(Uphf.Surface, Color(0xFFDCC8A3), Uphf.Ochre, "À valider")
+                else -> Quad(Uphf.Surface, Uphf.Line, Uphf.Teal, "TP")
             }
             Column(
                 Modifier.width(104.dp).clip(RoundedCornerShape(10.dp)).background(bg).border(1.5.dp, border, RoundedCornerShape(10.dp))
@@ -292,7 +292,7 @@ private data class Quad(val a: Color, val b: Color, val c: Color, val d: String)
 @Composable
 private fun ExcludedRow(x: Excluded, run: (String?, Boolean, suspend () -> String?) -> Unit, viewModel: MainViewModel) {
     var confirm by remember { mutableStateOf(false) }
-    Card(colors = CardDefaults.cardColors(containerColor = if (x.validated) Color.White else Uphf.OchreSoft), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, Uphf.Line)) {
+    Card(colors = CardDefaults.cardColors(containerColor = if (x.validated) Uphf.Surface else Uphf.OchreSoft), shape = RoundedCornerShape(24.dp)) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(if (x.startsOn == x.endsOn) f(x.startsOn) else "${f(x.startsOn)} → ${f(x.endsOn)}", fontWeight = FontWeight.Bold, color = Uphf.Title)
@@ -310,7 +310,7 @@ private fun ExcludedRow(x: Excluded, run: (String?, Boolean, suspend () -> Strin
         text = { Text("« ${x.label} » sera retirée et le planning recalculé.") },
         confirmButton = { TextButton(onClick = { confirm = false; run("Date supprimée.", true) { viewModel.s2.deleteExcluded(x.id); null } }) { Text("Supprimer", color = Uphf.Bad) } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annuler") } },
-        containerColor = Color.White
+        containerColor = Uphf.Surface
     )
 }
 
@@ -328,7 +328,7 @@ private fun AddExcludedForm(s: S2Snapshot, onAdd: (String, String, String, Strin
         OutlinedTextField(label, { label = it }, label = { Text("Libellé") }, placeholder = { Text("Ex. Vacances de printemps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(KIND_LABEL.entries.toList()) { (k, l) ->
-                FilterChip(k == kind, { kind = k }, label = { Text(l) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Ochre, selectedLabelColor = Color.White))
+                FilterChip(k == kind, { kind = k }, label = { Text(l) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Ochre, selectedLabelColor = Uphf.OnTeal))
             }
         }
         val valid = runCatching { LocalDate.parse(from); if (to.isNotBlank()) LocalDate.parse(to); true }.getOrDefault(false) && label.isNotBlank()
@@ -355,7 +355,7 @@ private fun SlotsEditor(s: S2Snapshot, onSave: (List<ClassSlot>) -> Unit) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(DAY_LABEL.entries.toList()) { (d, l) ->
                         FilterChip(c.weekday == d, { rows[i] = c.copy(weekday = d, pairKey = l.lowercase()) }, label = { Text(l.take(3)) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -390,7 +390,7 @@ private fun StationsEditor(s: S2Snapshot, fromS1: suspend (Int) -> List<Station>
     Panel("Enseignants du S2", "Chaque enseignant garde sa manipulation : la rotation des groupes se fait automatiquement.") {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(days) { d ->
-                FilterChip(d == day, { day = d }, label = { Text(DAY_LABEL[d] ?: "") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                FilterChip(d == day, { day = d }, label = { Text(DAY_LABEL[d] ?: "") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal))
             }
         }
         s.manips.filter { it.active }.forEach { m ->
@@ -490,7 +490,7 @@ private fun ManipsEditor(s: S2Snapshot, onSave: (List<Manip>) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(m.room.orEmpty(), { edits[i] = m.copy(room = it.take(40)) }, label = { Text("Salle par défaut") }, singleLine = true, modifier = Modifier.weight(1f))
                     FilterChip(m.active, { edits[i] = m.copy(active = !m.active) }, label = { Text(if (m.active) "Active" else "Inactive") },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal))
                 }
             }
         }
@@ -580,7 +580,7 @@ private fun GenerateTab(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
         text = { Text("À partir du ${f(from)}. Les dates exclues validées sont évitées, rien n’est placé après la fin du S2.") },
         confirmButton = { TextButton(onClick = { confirmGen = false; run(null, true) { viewModel.s2.replan(from, force = true) } }) { Text("Continuer") } },
         dismissButton = { TextButton(onClick = { confirmGen = false }) { Text("Annuler") } },
-        containerColor = Color.White
+        containerColor = Uphf.Surface
     )
     restore?.let { id ->
         AlertDialog(
@@ -589,7 +589,7 @@ private fun GenerateTab(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
             text = { Text("Le planning actuel sera remplacé par celui de la version choisie.") },
             confirmButton = { TextButton(onClick = { restore = null; run("Version restaurée.", true) { viewModel.s2.restoreVersion(id); null } }) { Text("Restaurer") } },
             dismissButton = { TextButton(onClick = { restore = null }) { Text("Annuler") } },
-            containerColor = Color.White
+            containerColor = Uphf.Surface
         )
     }
 }
@@ -626,7 +626,7 @@ private fun ImportCalendarButton(run: (String?, Boolean, suspend () -> String?) 
             },
             confirmButton = { TextButton(onClick = { found = null; run("${rows.size} proposition(s) importée(s) — à valider.", false) { viewModel.s2.importProposals(rows, name); null } }) { Text("Importer") } },
             dismissButton = { TextButton(onClick = { found = null }) { Text("Annuler") } },
-            containerColor = Color.White
+            containerColor = Uphf.Surface
         )
     }
 }
@@ -649,7 +649,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.groupsTab(
                 if (ask) AlertDialog(onDismissRequest = { ask = false }, title = { Text("Préparer les groupes S2 ?") },
                     text = { Text("Les groupes seront créés à partir du S1 puis équilibrés. Vous pourrez ensuite tout ajuster.") },
                     confirmButton = { TextButton(onClick = { ask = false; run(null, false) { "${viewModel.s2.initGroups(s.settings.groupCount)} étudiant(s) répartis." } }) { Text("Préparer") } },
-                    dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Color.White)
+                    dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
             }
         }
         return
@@ -722,13 +722,13 @@ private fun GroupsPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
         AlertDialog(onDismissRequest = { preview = null }, title = { Text("${moves.size} déplacement(s) dans $cls") },
             text = { Column { Text("Présents seulement ; les étudiants verrouillés ne bougent pas.", color = Uphf.Text); moves.forEach { Text("• ${it.name} : G${it.from} → G${it.to}", style = MaterialTheme.typography.bodySmall) } } },
             confirmButton = { TextButton(onClick = { preview = null; run("$cls équilibrée (${moves.size} déplacement(s)).", false) { viewModel.s2.applyBalance(cls, moves); null } }) { Text("Appliquer") } },
-            dismissButton = { TextButton(onClick = { preview = null }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { preview = null }) { Text("Annuler") } }, containerColor = Uphf.Surface)
     }
     edit?.let { m -> MemberDialog(m, G, sizes, onDismiss = { edit = null }) { patch, label -> edit = null; run(label, false) { viewModel.s2.updateMember(m.studentId, patch, "edit_student"); null } } }
     if (applyAsk) AlertDialog(onDismissRequest = { applyAsk = false }, title = { Text("Appliquer les groupes S2 ?") },
         text = { Text("Les étudiants changeront de groupe dans les listes de présence. Les présences du S1 restent attachées à leurs séances.") },
         confirmButton = { TextButton(onClick = { applyAsk = false; run(null, true) { "${viewModel.s2.applyGroupsToLists(s.members)} étudiant(s) déplacé(s) dans les listes." } }) { Text("Appliquer") } },
-        dismissButton = { TextButton(onClick = { applyAsk = false }) { Text("Annuler") } }, containerColor = Color.White)
+        dismissButton = { TextButton(onClick = { applyAsk = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
 }
 
 @Composable
@@ -745,7 +745,7 @@ private fun MemberDialog(m: tn.utm.fst.gestionpresence.nativeapp.feature.s2.Memb
                 Text("Groupe", fontWeight = FontWeight.Bold)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items((1..G).toList()) { x -> FilterChip(g == x, { g = x }, label = { Text("G$x (${sizes.getOrElse(x - 1) { 0 }})") },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White)) }
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal)) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) { Text("Verrouiller dans ce groupe", modifier = Modifier.weight(1f)); Switch(locked, { locked = it }) }
                 Row(verticalAlignment = Alignment.CenterVertically) { Text("Mettre de côté pour le S2", modifier = Modifier.weight(1f)); Switch(aside, { aside = it }) }
@@ -762,7 +762,7 @@ private fun MemberDialog(m: tn.utm.fst.gestionpresence.nativeapp.feature.s2.Memb
             }) { Text("Enregistrer") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
-        containerColor = Color.White
+        containerColor = Uphf.Surface
     )
 }
 
@@ -786,9 +786,9 @@ private fun SharePanel(s: S2Snapshot, onChoose: (String, String) -> Unit) {
             Text(if (bloc) "Toutes les séances de ${names.first()}, puis celles de ${names.drop(1).joinToString()}" else "Une semaine chacune, à tour de rôle", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(!bloc, { if (bloc) pending = Triple(key, "alternance", names.joinToString(" et ")) }, label = { Text("Semaine par semaine") },
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal))
                 FilterChip(bloc, { if (!bloc) pending = Triple(key, "bloc", names.joinToString(" et ")) }, label = { Text("Comme au S1") },
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal))
             }
         }
     }
@@ -889,14 +889,14 @@ private fun SpacesPanel(viewModel: MainViewModel, open: (String) -> Unit) {
                         TextButton(onClick = { del = true }) { Text("Supprimer", color = Uphf.Bad) }
                         if (del) AlertDialog(onDismissRequest = { del = false }, title = { Text("Supprimer « ${sp.name} » ?") }, text = { Text("Possible seulement si l’espace n’a plus de classe.") },
                             confirmButton = { TextButton(onClick = { del = false; act("Espace supprimé.") { viewModel.s2.deleteSpace(sp.id) } }) { Text("Supprimer", color = Uphf.Bad) } },
-                            dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Color.White)
+                            dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
                     }
                 }
                 ms.forEach { m ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(nameOf(m.profileId), color = Uphf.Text, modifier = Modifier.weight(1f))
                         FilterChip(m.role == "admin", { act(if (m.role == "admin") "Retiré des administrateurs." else "Nommé administrateur.") { viewModel.s2.setMember(sp.id, m.profileId, if (m.role == "admin") "teacher" else "admin") } },
-                            label = { Text(if (m.role == "admin") "Admin" else "Enseignant") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White))
+                            label = { Text(if (m.role == "admin") "Admin" else "Enseignant") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal))
                         TextButton(onClick = { act("Retiré de l’espace.") { viewModel.s2.setMember(sp.id, m.profileId, null) } }) { Text("Retirer", color = Uphf.Bad) }
                     }
                 }
@@ -984,7 +984,7 @@ private fun AccessPanel(s: S2Snapshot, viewModel: MainViewModel, me: String?) {
         if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("Enregistrer ?") },
             text = { Text("${checked.size} permission(s) pour ${nameOf(who)} dans ${spaceName(space)}.") },
             confirmButton = { TextButton(onClick = { confirm = false; save(space, who, ALL_PERMS.filter { it in checked }, "Permissions enregistrées.") }) { Text("Enregistrer") } },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
         Text("Historique", fontWeight = FontWeight.Bold, color = Uphf.Title, modifier = Modifier.padding(top = 8.dp))
         if (history.isEmpty()) Text("Aucun changement pour l’instant.", color = Uphf.Muted)
         history.forEach { h ->
@@ -1031,7 +1031,7 @@ private fun TeamPanel(space: String, viewModel: MainViewModel, canTeam: Boolean 
                 AlertDialog(onDismissRequest = { pinFor = null }, title = { Text("Nouveau PIN — ${nameOf(pid)}") },
                     text = { OutlinedTextField(newPin, { newPin = it.filter(Char::isDigit).take(6) }, label = { Text("PIN (6 chiffres)") }, singleLine = true) },
                     confirmButton = { TextButton(enabled = newPin.length == 6, onClick = { val p = newPin; pinFor = null; act("PIN modifié. Communiquez-le à l’enseignant.") { viewModel.s2.resetTeacherPin(pid, p) } }) { Text("Enregistrer") } },
-                    dismissButton = { TextButton(onClick = { pinFor = null }) { Text("Annuler") } }, containerColor = Color.White)
+                    dismissButton = { TextButton(onClick = { pinFor = null }) { Text("Annuler") } }, containerColor = Uphf.Surface)
             }
             val out = d.second.filter { t -> d.first.none { it.profileId == t.id } }
             if (canAccounts) {
@@ -1070,7 +1070,7 @@ private fun ClassesPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> St
         var partner by rememberSaveable { mutableStateOf("") }
         OutlinedTextField(name, { name = it.take(30) }, label = { Text("Nom (ex. LPC1-A)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            DAY_LABEL.entries.forEach { (k, l) -> FilterChip(day == k, { day = k }, label = { Text(l) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White)) }
+            DAY_LABEL.entries.forEach { (k, l) -> FilterChip(day == k, { day = k }, label = { Text(l) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal)) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(st, { st = it.take(5) }, label = { Text("Début (HH:MM)") }, singleLine = true, modifier = Modifier.weight(1f))
@@ -1121,6 +1121,6 @@ private fun ClassesPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> St
         OutlinedButton(onClick = { del = true }, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth()) { Text("Supprimer la classe", color = Uphf.Bad) }
         if (del) AlertDialog(onDismissRequest = { del = false }, title = { Text("Supprimer ${cur.name} ?") }, text = { Text("Son créneau, ses groupes S2 et ses étudiants sont retirés.") },
             confirmButton = { TextButton(onClick = { del = false; run("Classe supprimée.", false) { viewModel.s2.deleteClass(cur); null } }) { Text("Supprimer", color = Uphf.Bad) } },
-            dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
     }
 }
