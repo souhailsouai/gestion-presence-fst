@@ -53,7 +53,7 @@ import java.time.LocalDate
 
 @Composable
 private fun Box(title: String, subtitle: String? = null, content: @Composable () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
             subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Uphf.Muted) }
@@ -100,13 +100,13 @@ fun AccountsScreen(state: MainUiState, viewModel: MainViewModel) {
                 if (!self) Row { FilterChip(active, { active = true }, label = { Text("Actif") }); androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp)); FilterChip(!active, { active = false }, label = { Text("Désactivé") }) }
             } },
             confirmButton = { TextButton(onClick = { edit = null; run("Compte modifié.") { viewModel.admin.saveTeacher(t, name, user, mail, if (active) "active" else "disabled", pin.ifBlank { null }, self) } }) { Text("Enregistrer") } },
-            dismissButton = { TextButton(onClick = { edit = null }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { edit = null }) { Text("Annuler") } }, containerColor = Uphf.Surface)
     }
     del?.let { t ->
         AlertDialog(onDismissRequest = { del = null }, title = { Text("Supprimer ${t.fullName} ?") },
             text = { Text("Le compte et toutes ses données seront supprimés définitivement. Cette action est irréversible.") },
             confirmButton = { TextButton(onClick = { del = null; run("Compte enseignant supprimé.") { viewModel.admin.deleteTeacher(t.id) } }) { Text("Supprimer", color = Uphf.Bad) } },
-            dismissButton = { TextButton(onClick = { del = null }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { del = null }) { Text("Annuler") } }, containerColor = Uphf.Surface)
     }
 }
 
@@ -152,7 +152,7 @@ fun ReportPdfScreen(state: MainUiState) {
 private fun Chips(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
     androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items(options) { (k, l) -> FilterChip(k == selected, { onSelect(k) }, label = { Text(l) },
-            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White)) }
+            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal)) }
     }
 }
 
@@ -182,7 +182,7 @@ fun NoticesCard(viewModel: MainViewModel) {
     var list by remember { mutableStateOf<List<Notice>>(emptyList()) }
     LaunchedEffect(Unit) { list = runCatching { viewModel.admin.notices() }.getOrDefault(emptyList()) }
     if (list.isEmpty()) return
-    Card(colors = CardDefaults.cardColors(containerColor = Uphf.OchreSoft), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.OchreSoft), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Avis officiels", style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
             list.forEach { n ->
@@ -227,7 +227,7 @@ fun StudentAdminActions(student: Student, viewModel: MainViewModel, onDeleted: (
                 if (iso == null) { err = "Choisissez une date."; return@TextButton }
                 inactive = false; viewModel.endMembership(student.id, iso)
             }) { Text("Confirmer") } },
-            dismissButton = { TextButton(onClick = { inactive = false }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { inactive = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
     }
     if (edit) {
         var last by remember { mutableStateOf(student.lastName) }; var first by remember { mutableStateOf(student.firstName) }; var mail by remember { mutableStateOf(student.email.orEmpty()) }
@@ -239,12 +239,12 @@ fun StudentAdminActions(student: Student, viewModel: MainViewModel, onDeleted: (
                 Text("Pour changer de groupe, utilisez « Changer de groupe ».", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
             } },
             confirmButton = { TextButton(onClick = { edit = false; viewModel.s2Action("Étudiant modifié.") { viewModel.admin.updateStudent(student.id, last, first, mail) } }) { Text("Enregistrer") } },
-            dismissButton = { TextButton(onClick = { edit = false }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { edit = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
     }
     if (del) AlertDialog(onDismissRequest = { del = false }, title = { Text("Suppression définitive") },
         text = { Text("${student.displayName} : les présences, notes, commentaires et appartenances liés seront supprimés. Cette action est irréversible.") },
         confirmButton = { TextButton(onClick = { del = false; viewModel.deleteStudent(student.id); onDeleted() }) { Text("Supprimer", color = Uphf.Bad) } },
-        dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Color.White)
+        dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
 }
 
 /* -------- Import d'étudiants (CSV / Excel) -------- */
@@ -280,7 +280,7 @@ fun ImportStudentsButton(state: MainUiState, viewModel: MainViewModel) {
                 msg = "$ok étudiant(s) ajouté(s)." + if (errs.isNotEmpty()) " ${errs.size} refus : ${errs.take(3).joinToString(" ; ")}" else ""
                 viewModel.reloadData()
             } }) { Text("Importer") } },
-            dismissButton = { TextButton(onClick = { rows = null }) { Text("Annuler") } }, containerColor = Color.White)
+            dismissButton = { TextButton(onClick = { rows = null }) { Text("Annuler") } }, containerColor = Uphf.Surface)
     }
 }
 
@@ -333,7 +333,7 @@ fun S1ConfigScreen(state: MainUiState, viewModel: MainViewModel) {
             try { viewModel.admin.saveS1Config(cfg!!); cfg = viewModel.admin.s1Config(); msg = false to "Affectations enregistrées."; viewModel.reloadData() }
             catch (e: CancellationException) { throw e } catch (e: Throwable) { msg = true to (e.message ?: "Enregistrement refusé.") }
         } }) { Text("Enregistrer") } },
-        dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Color.White)
+        dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
 }
 
 /* -------- Aide -------- */
@@ -391,7 +391,7 @@ fun NoticesEditorScreen(viewModel: MainViewModel) {
                 var visible by rememberSaveable(n.id) { mutableStateOf(n.active) }
                 var del by remember { mutableStateOf(false) }
                 val phase = when { n.startsOn != null && n.startsOn > today -> "programmé (à partir du ${frDate(n.startsOn)})"; n.endsOn != null && n.endsOn < today -> "terminé"; else -> "affiché" }
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (n.id == null) "Nouvel avis" else "Avis ${i + 1} — ${if (!n.active) "masqué" else phase}", color = Uphf.Muted, style = MaterialTheme.typography.labelMedium)
                         OutlinedTextField(title, { title = it }, label = { Text("Titre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -421,7 +421,7 @@ fun NoticesEditorScreen(viewModel: MainViewModel) {
                 }
                 if (del) AlertDialog(onDismissRequest = { del = false }, title = { Text("Supprimer cet avis ?") }, text = { Text(n.title) },
                     confirmButton = { TextButton(onClick = { del = false; act("Avis supprimé.") { viewModel.admin.deleteNotice(n.id!!) } }) { Text("Supprimer", color = Uphf.Bad) } },
-                    dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Color.White)
+                    dismissButton = { TextButton(onClick = { del = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
             }
             item {
                 OutlinedButton(onClick = { list = l + tn.utm.fst.gestionpresence.nativeapp.feature.admin.NoticeRow(null, cycle, "", "", null, null, true, 0) },

@@ -48,6 +48,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -98,6 +102,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -227,15 +232,16 @@ fun AppRoot(viewModel: MainViewModel = viewModel()) {
                 }
                 AnimatedContent(targetState = kind, transitionSpec = { (fadeIn(tween(240)) + scaleIn(tween(280), initialScale = 0.98f)) togetherWith fadeOut(tween(120)) }, label = "root") { k ->
                     when (k) {
-                        0 -> LoginScreen(state, viewModel)
-                        1 -> MfaScreen(state, viewModel)
-                        3 -> LockScreen(state, viewModel)
+                        // Écrans de connexion : à l'écart de la barre d'état et de la barre de navigation (bord à bord).
+                        0 -> Box(Modifier.fillMaxSize().background(Uphf.Background).safeDrawingPadding()) { LoginScreen(state, viewModel) }
+                        1 -> Box(Modifier.fillMaxSize().background(Uphf.Background).safeDrawingPadding()) { MfaScreen(state, viewModel) }
+                        3 -> Box(Modifier.fillMaxSize().background(Uphf.Background).safeDrawingPadding()) { LockScreen(state, viewModel) }
                         else -> MainShell(state, viewModel)
                     }
                 }
                 if (state.loading) {
                     if (state.data == null) {
-                        Surface(color = Color.White.copy(alpha = 0.85f), modifier = Modifier.fillMaxSize()) {
+                        Surface(color = Uphf.Surface.copy(alpha = 0.85f), modifier = Modifier.fillMaxSize()) {
                             Box(contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     CircularProgressIndicator(color = Uphf.Teal)
@@ -262,7 +268,7 @@ private fun LoginScreen(state: MainUiState, viewModel: MainViewModel) {
     var role by rememberSaveable { mutableStateOf("teacher") }
     var identifier by rememberSaveable { mutableStateOf("") }
     var credential by rememberSaveable { mutableStateOf("") }
-    Box(Modifier.fillMaxSize().background(Color.White)) {
+    Box(Modifier.fillMaxSize().background(Uphf.Background)) {
         AnimatedWaves(
             modifier = Modifier.align(Alignment.BottomCenter),
             height = 170.dp,
@@ -295,9 +301,9 @@ private fun LoginScreen(state: MainUiState, viewModel: MainViewModel) {
             }
             Spacer(Modifier.height(22.dp))
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Uphf.Surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                shape = RoundedCornerShape(28.dp),
                 modifier = Modifier.fillMaxWidth().widthIn(max = 460.dp)
             ) {
                 Box(Modifier.fillMaxWidth().height(5.dp).background(Uphf.Teal))
@@ -350,7 +356,7 @@ private fun LockScreen(state: MainUiState, viewModel: MainViewModel) {
             onFailure = { failure = it })
     }
     LaunchedEffect(Unit) { ask() }
-    Box(Modifier.fillMaxSize().background(Color.White)) {
+    Box(Modifier.fillMaxSize().background(Uphf.Background)) {
         AnimatedWaves(
             modifier = Modifier.align(Alignment.BottomCenter), height = 170.dp,
             layers = listOf(
@@ -394,13 +400,13 @@ private fun BiometricOffer(viewModel: MainViewModel) {
             }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal)) { Text("Activer") }
         },
         dismissButton = { TextButton(onClick = viewModel::dismissBiometricOffer) { Text("Plus tard") } },
-        containerColor = Color.White
+        containerColor = Uphf.Surface
     )
 }
 
 @Composable
 private fun LogoTile(res: Int, width: androidx.compose.ui.unit.Dp) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(3.dp), shape = RoundedCornerShape(14.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), elevation = CardDefaults.cardElevation(3.dp), shape = RoundedCornerShape(24.dp)) {
         Image(painterResource(res), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.padding(8.dp).width(width).height(76.dp))
     }
 }
@@ -410,7 +416,7 @@ private fun MfaScreen(state: MainUiState, viewModel: MainViewModel) {
     var code by rememberSaveable { mutableStateOf("") }
     val enrolling = state.screen == AppScreen.MFA_ENROLL
     Column(
-        modifier = Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(28.dp),
+        modifier = Modifier.fillMaxSize().background(Uphf.Background).verticalScroll(rememberScrollState()).padding(28.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -460,6 +466,7 @@ private val TABS = listOf(
 
 private fun tabOf(screen: AppScreen): AppScreen = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
+    AppScreen.MAKEUP -> AppScreen.HOME
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
     AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT, AppScreen.ACCOUNTS, AppScreen.REPORT_PDF, AppScreen.S1_CONFIG, AppScreen.HELP, AppScreen.NOTICES -> AppScreen.MORE
     else -> screen
@@ -467,6 +474,7 @@ private fun tabOf(screen: AppScreen): AppScreen = when (screen) {
 
 private fun backOf(screen: AppScreen): AppScreen? = when (screen) {
     AppScreen.ATTENDANCE -> AppScreen.SESSIONS
+    AppScreen.MAKEUP -> AppScreen.HOME
     AppScreen.STUDENT_DETAIL -> AppScreen.STUDENTS
     AppScreen.CLASSES, AppScreen.TIMETABLE, AppScreen.TEACHERS, AppScreen.REPORTS, AppScreen.ADMIN, AppScreen.ACCOUNT, AppScreen.STATS, AppScreen.S2_ADMIN, AppScreen.SWAP, AppScreen.EXPORT, AppScreen.ACCOUNTS, AppScreen.REPORT_PDF, AppScreen.S1_CONFIG, AppScreen.HELP, AppScreen.NOTICES -> AppScreen.MORE
     else -> null
@@ -486,25 +494,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
     Scaffold(
         containerColor = Uphf.Background,
         topBar = { TopBar(state, viewModel, module.takeIf { bothModules }) { module = it } },
-        bottomBar = {
-            NavigationBar(containerColor = Color.White, tonalElevation = 0.dp) {
-                TABS.forEach { tab ->
-                    NavigationBarItem(
-                        selected = current == tab.screen,
-                        onClick = { viewModel.navigate(tab.screen) },
-                        icon = { Icon(tab.icon, contentDescription = null) },
-                        label = { Text(tab.label, maxLines = 1) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            indicatorColor = Uphf.Teal,
-                            selectedTextColor = Uphf.Teal,
-                            unselectedIconColor = Uphf.Muted,
-                            unselectedTextColor = Uphf.Muted
-                        )
-                    )
-                }
-            }
-        }
+        bottomBar = { FloatingTabBar(current) { viewModel.navigate(it) } }
     ) { padding ->
         if (state.offerBiometric) BiometricOffer(viewModel)
         UpdateChecker()
@@ -540,6 +530,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
                         AppScreen.S1_CONFIG -> S1ConfigScreen(state, viewModel)
                         AppScreen.HELP -> HelpScreen()
                         AppScreen.NOTICES -> NoticesEditorScreen(viewModel)
+                        AppScreen.MAKEUP -> MakeupScreen(state, viewModel)
                         else -> Unit
                     }
                 }
@@ -548,11 +539,36 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
     }
 }
 
+/** Barre d'onglets flottante (style One UI 9) : pilule blanche, onglet actif en bleu canard pâle. */
+@Composable
+private fun FloatingTabBar(current: AppScreen, onSelect: (AppScreen) -> Unit) {
+    Box(Modifier.fillMaxWidth().background(Uphf.Background).navigationBarsPadding().padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth().height(64.dp)
+                .shadow(14.dp, RoundedCornerShape(50), ambientColor = Color(0x331C3D5E), spotColor = Color(0x331C3D5E))
+                .clip(RoundedCornerShape(50)).background(Uphf.Surface).padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically
+        ) {
+            TABS.forEach { tab ->
+                val on = current == tab.screen
+                val bg by animateColorAsState(if (on) Uphf.TealSoft else Color.Transparent, tween(220), label = "onglet")
+                Column(
+                    Modifier.clip(RoundedCornerShape(50)).background(bg).clickable(role = androidx.compose.ui.semantics.Role.Tab) { onSelect(tab.screen) }
+                        .padding(horizontal = if (on) 14.dp else 8.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(tab.icon, contentDescription = null, tint = if (on) Uphf.Teal else Uphf.Muted, modifier = Modifier.size(22.dp))
+                    Text(tab.label, maxLines = 1, style = MaterialTheme.typography.labelMedium, fontWeight = if (on) FontWeight.ExtraBold else FontWeight.SemiBold, color = if (on) Uphf.Teal else Uphf.Muted)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun TopBar(state: MainUiState, viewModel: MainViewModel, module: String?, onModule: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().background(Color.White)) {
-        Box(Modifier.fillMaxWidth().height(4.dp).background(Uphf.Teal))
-        Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxWidth().background(Uphf.Background).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = if (backOf(state.screen) == null) 22.dp else 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             val back = backOf(state.screen)
             if (back != null) {
                 IconButton(onClick = { viewModel.navigate(back) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour", tint = Uphf.Title) }
@@ -562,7 +578,8 @@ private fun TopBar(state: MainUiState, viewModel: MainViewModel, module: String?
                 Spacer(Modifier.width(8.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(screenTitle(state.screen), style = MaterialTheme.typography.titleLarge, color = Uphf.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Grand titre (One UI) sur les écrans principaux, titre moyen sur les écrans de détail.
+                Text(screenTitle(state.screen), style = if (back == null && state.screen != AppScreen.HOME) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge, color = Uphf.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${shortName(state.profile?.fullName)} · ${currentSemester()} · ${if (module == "LPC") "LPC3" else "2026/2027"}", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted, maxLines = 1)
             }
             IconButton(onClick = viewModel::refresh, enabled = state.online) { Icon(Icons.Default.Refresh, contentDescription = "Actualiser", tint = Uphf.Teal) }
@@ -570,7 +587,6 @@ private fun TopBar(state: MainUiState, viewModel: MainViewModel, module: String?
         if (module != null && state.screen != AppScreen.ATTENDANCE && state.screen != AppScreen.STUDENT_DETAIL) {
             Segmented(listOf("PHY" to "MPI1 · PC1", "LPC" to "LPC3"), module, Modifier.padding(horizontal = 14.dp, vertical = 4.dp), onModule)
         }
-        WaveLine(Uphf.Teal.copy(alpha = 0.45f), Modifier.fillMaxWidth(), height = 8.dp, animated = false)
     }
 }
 
@@ -580,13 +596,13 @@ private fun TopBar(state: MainUiState, viewModel: MainViewModel, module: String?
 
 @Composable
 private fun Segmented(options: List<Pair<String, String>>, selected: String, modifier: Modifier = Modifier, onSelect: (String) -> Unit) {
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(Color(0xFFF1F4F6)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(if (Uphf.dark) Color(0xFF222C34) else Color(0xFFE4E8EB)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         options.forEach { (key, label) ->
             val on = key == selected
             Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Uphf.Teal else Color.Transparent).clickable { onSelect(key) }.padding(vertical = 10.dp),
+                Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Uphf.Surface else Color.Transparent).clickable { onSelect(key) }.padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
-            ) { Text(label, color = if (on) Color.White else Uphf.Text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
+            ) { Text(label, color = if (on) Uphf.Title else Uphf.Muted, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
         }
     }
 }
@@ -600,7 +616,7 @@ private fun ChipRow(options: List<Pair<String, String>>, selected: String, onSel
                 onClick = { onSelect(key) },
                 label = { Text(label, fontWeight = FontWeight.SemiBold) },
                 shape = RoundedCornerShape(6.dp),
-                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Color.White, labelColor = Uphf.Title)
+                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal, labelColor = Uphf.Title)
             )
         }
     }
@@ -611,12 +627,12 @@ private fun InfoCard(modifier: Modifier = Modifier, accent: Color? = null, onCli
     val base = modifier.fillMaxWidth()
     Card(
         modifier = if (onClick != null) base.bounceClick(onClick = onClick) else base,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(10.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line)
+        colors = CardDefaults.cardColors(containerColor = Uphf.Surface),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        Row {
-            if (accent != null) Box(Modifier.width(4.dp).height(IntrinsicSizeFallback).background(accent))
+        // Bloc One UI : blanc sur fond gris, sans contour ; la couleur d'accent devient une pastille.
+        Row(Modifier.padding(start = if (accent != null) 16.dp else 0.dp)) {
+            if (accent != null) Box(Modifier.padding(top = 22.dp).size(8.dp).clip(CircleShape).background(accent))
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
         }
     }
@@ -643,14 +659,14 @@ private fun Tag(text: String, color: Color = Uphf.Teal) {
 @Composable
 private fun AnimatedBar(fraction: Float, color: Color, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 10.dp) {
     val animated by animateFloatAsState(targetValue = fraction.coerceIn(0f, 1f), animationSpec = tween(400), label = "bar")
-    Box(modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(50)).background(Color(0xFFEDF1F5))) {
+    Box(modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(50)).background((if (Uphf.dark) Color(0xFF26313A) else Color(0xFFE4E8EB)))) {
         Box(Modifier.fillMaxWidth(animated).fillMaxHeight().clip(RoundedCornerShape(50)).background(color))
     }
 }
 
 @Composable
 private fun Kpi(value: String, label: String, color: Color, icon: ImageVector, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line)) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(14.dp)) {
             Box(Modifier.size(34.dp).clip(CircleShape).background(color.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = color, modifier = Modifier.size(18.dp)) }
             Spacer(Modifier.height(8.dp))
@@ -666,7 +682,7 @@ private fun Notice(state: MainUiState, padded: Boolean = true) {
     val error = state.error != null
     Card(
         colors = CardDefaults.cardColors(containerColor = if (error) Uphf.BadSoft else Uphf.TealSoft),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth().padding(horizontal = if (padded) 14.dp else 0.dp, vertical = 6.dp)
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -679,7 +695,7 @@ private fun Notice(state: MainUiState, padded: Boolean = true) {
 
 @Composable
 private fun OfflineCard() {
-    Card(colors = CardDefaults.cardColors(containerColor = Uphf.BadSoft), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.BadSoft), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.CloudOff, null, tint = Uphf.Bad)
             Spacer(Modifier.width(10.dp))
@@ -717,29 +733,17 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
     val upcoming = remember(data, me) { data.plan.filter { it.date >= today() }.flatMap { p -> p.slots.filter { it.teacherId == me }.map { p to it } }.take(3) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line)) {
-                Box {
-                    AnimatedWaves(
-                        modifier = Modifier.align(Alignment.BottomCenter), height = 46.dp,
-                        layers = listOf(WaveLayer(Uphf.Teal.copy(alpha = 0.14f), 0.18f, 420f, 1f, 0.45f), WaveLayer(Uphf.Ochre.copy(alpha = 0.14f), 0.16f, 300f, -1.4f, 0.6f)),
-                        animated = false
-                    )
-                    Column(Modifier.padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 40.dp)) {
-                        Tag("${dayName(today())} ${fmt(today())}")
-                        Spacer(Modifier.height(10.dp))
-                        Text("Bonjour, ${shortName(state.profile?.fullName)}", style = MaterialTheme.typography.headlineSmall, color = Uphf.Title)
-                        Text(
-                            if (todays.isEmpty() && (data.pendingS1(me, false) + data.pendingS2(me, false)).none { it.plan.date == today() }) "Aucune séance prévue aujourd’hui." else "Séance(s) aujourd’hui — touchez pour faire l’appel.",
-                            color = Uphf.Text
-                        )
-                    }
-                }
+            // En-tête One UI : date, salutation en grand, puis la carte « Maintenant ».
+            Column(Modifier.padding(start = 8.dp, top = 2.dp, bottom = 4.dp)) {
+                Text("${dayName(today())} ${fmt(today())} · ${currentSemester()}", color = Uphf.Muted, fontWeight = FontWeight.Medium)
+                Text("Bonjour, ${shortName(state.profile?.fullName)}", style = MaterialTheme.typography.headlineMedium, color = Uphf.Title)
             }
         }
+        item { NowCard(data, me, todays, data.pendingS1(me, false) + data.pendingS2(me, false), viewModel) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Kpi("${"%.0f".format(t.rate)} %", "présence (${currentSemester()})", Uphf.rateColor(t.rate), Icons.Default.HowToReg, Modifier.weight(1f))
-                Kpi("${t.absent}", "absences", Uphf.Bad, Icons.Default.Warning, Modifier.weight(1f))
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).clickable { viewModel.navigate(AppScreen.MAKEUP) }) { Kpi("${t.absent}", "absences · à rattraper", Uphf.Bad, Icons.Default.Warning, Modifier.fillMaxWidth()) }
                 Kpi("${mine.count { semesterOf(it.sessionDate) == currentSemester() }}", "séances", Uphf.Title, Icons.Default.Event, Modifier.weight(1f))
             }
         }
@@ -766,6 +770,104 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
         items(mine.filter { it.sessionDate <= today() }.take(6)) { s -> SessionCard(s, data, viewModel) }
         if (mine.isEmpty()) item { EmptyState("Aucune séance à votre nom.", Icons.Default.Event) }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** « À rattraper » : étudiants avec 2 absences non rattrapées ou plus (semestre en cours), manipulations manquées
+ *  et créneau proposé (même manipulation, autre groupe de la même classe, à partir d'aujourd'hui). */
+@Composable
+private fun MakeupScreen(state: MainUiState, viewModel: MainViewModel) {
+    val data = state.data ?: return EmptyState("Aucune donnée disponible.")
+    val sem = currentSemester()
+    data class Row2(val student: Student, val cls: String, val missed: List<Pair<String, String?>>, val suggestion: String?)
+    val rows = remember(data, sem) {
+        val abs = data.attendance.filter { it.status == AttendanceStatus.ABSENT && it.makeupDate == null }
+            .mapNotNull { a -> data.sessionById[a.sessionId]?.let { s -> Triple(a, s, data.className(s.classId)) } }
+            .filter { semesterOf(it.second.sessionDate) == sem }
+        abs.groupBy { it.first.studentId }.filterValues { it.size >= 2 }.mapNotNull { (sid, list) ->
+            val st = data.students.firstOrNull { it.id == sid } ?: return@mapNotNull null
+            val missed = list.sortedBy { it.second.sessionDate }.map { (_, s, cn) ->
+                val base = cn.substringBeforeLast("-G"); val g = cn.substringAfterLast("-G", "").toIntOrNull()
+                val m = data.plan.firstOrNull { it.className == base && it.date == s.sessionDate }?.slots?.firstOrNull { it.groupNo == g }?.manipulation
+                s.sessionDate to m
+            }
+            val cls = list.first().third
+            val base = cls.substringBeforeLast("-G"); val g = cls.substringAfterLast("-G", "").toIntOrNull()
+            val sug = missed.firstNotNullOfOrNull { (_, m) -> m?.let { mm ->
+                data.plan.filter { it.className == base && it.date >= today() }.sortedBy { it.date }
+                    .firstNotNullOfOrNull { p -> p.slots.firstOrNull { it.manipulation == mm && it.groupNo != g }?.let { sl ->
+                        "${dayName(p.date).take(3)}. ${shortDate(p.date)} · ${p.startTime.take(5)} · G${sl.groupNo} — $mm${sl.room?.let { " · Salle $it" } ?: ""}" } }
+            } }
+            Row2(st, cls, missed, sug)
+        }.sortedByDescending { it.missed.size }
+    }
+    var cls by rememberSaveable { mutableStateOf("Toutes") }
+    val classes = listOf("Toutes") + rows.map { it.cls.substringBeforeLast("-G") }.distinct().sorted()
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("2 absences non rattrapées ou plus · $sem", color = Uphf.Muted, modifier = Modifier.padding(start = 8.dp)) }
+        if (classes.size > 2) item { ChipRow(classes.map { it to it }, cls) { cls = it } }
+        val shown = rows.filter { cls == "Toutes" || it.cls.startsWith(cls) }
+        if (shown.isEmpty()) item { EmptyState("Aucun étudiant à rattraper pour l’instant.", Icons.Default.HowToReg) }
+        items(shown, key = { it.student.id }) { r ->
+            InfoCard(onClick = { viewModel.openStudent(r.student.id) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(r.student.displayName, style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
+                        Text(r.cls, color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("${r.missed.size} absences", color = Uphf.OnTeal, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Uphf.Bad).padding(horizontal = 10.dp, vertical = 5.dp))
+                }
+                Text("Manquées : " + r.missed.joinToString(", ") { (d, m) -> "${shortDate(d)}${m?.let { " ($it)" } ?: ""}" }, color = Uphf.Text, style = MaterialTheme.typography.bodySmall)
+                r.suggestion?.let { sug ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Uphf.TealSoft).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Replay, null, tint = Uphf.Teal, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                        Text("Proposé : $sug", color = Uphf.Title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    }
+                }
+                Text("Ouvrir la fiche pour marquer « Rattrapé » →", color = Uphf.Teal, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** Carte « Maintenant » (comme la Now Bar de One UI) : la séance en cours ou la prochaine du jour, avec « Faire l'appel ». */
+@Composable
+private fun NowCard(data: RepositoryData, me: String?, todays: List<TeachingSession>, pending: List<PendingSlot>, viewModel: MainViewModel) {
+    data class Next(val title: String, val detail: String, val start: String, val end: String, val done: Boolean, val open: () -> Unit)
+    val now = java.time.LocalTime.now().toString().take(5)
+    val list = buildList {
+        pending.filter { it.plan.date == today() }.forEach { x ->
+            add(Next(x.groupName, listOfNotNull(x.slot.manipulation + (data.manipTitle(x.plan.spaceId, x.slot.manipulation)?.let { " — $it" } ?: ""), x.slot.room?.let { "Salle $it" }).joinToString(" · "),
+                x.plan.startTime.take(5), x.plan.endTime.take(5), false) { viewModel.openPlannedSession(x.slot.id, x.s2) })
+        }
+        todays.filter { it.teacherId == me || me == null }.forEach { s ->
+            val done = data.attendanceBySession[s.id].orEmpty().isNotEmpty()
+            add(Next(data.className(s.classId), if (done) "Appel déjà saisi" else "Appel non saisi", s.startTime.take(5), s.endTime.take(5), done) { viewModel.selectAttendanceSession(s.id) })
+        }
+    }.sortedBy { it.start }
+    val next = list.firstOrNull { it.end >= now && !it.done } ?: list.firstOrNull { it.end >= now } ?: return
+    val running = now >= next.start
+    val mins = runCatching { java.time.Duration.between(java.time.LocalTime.parse(now), java.time.LocalTime.parse(next.start)).toMinutes() }.getOrDefault(0)
+    val whenLabel = when { running -> "en cours"; mins < 120 -> "dans $mins min"; else -> "à ${next.start.replace(':', 'h')}" }
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Teal), shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("MAINTENANT · ${next.start} – ${next.end}", color = Uphf.OnTeal, style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Uphf.OnTeal.copy(alpha = 0.16f)).padding(horizontal = 12.dp, vertical = 6.dp))
+                Spacer(Modifier.weight(1f))
+                Text(whenLabel, color = Uphf.OnTeal.copy(alpha = 0.9f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+            }
+            Column {
+                Text(next.title, color = Uphf.OnTeal, style = MaterialTheme.typography.headlineSmall)
+                Text(next.detail, color = Uphf.OnTeal.copy(alpha = 0.92f))
+            }
+            Button(onClick = next.open, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.OnTeal, contentColor = Uphf.Teal),
+                modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Icon(Icons.Default.HowToReg, null); Spacer(Modifier.width(8.dp)); Text(if (next.done) "Voir l’appel" else "Faire l’appel", fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
@@ -1035,7 +1137,7 @@ private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
 private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: AttendanceRecord?, viewModel: MainViewModel, onMakeup: (AttendanceRecord) -> Unit) {
     var expanded by rememberSaveable(student.id) { mutableStateOf(false) }
     val color by animateColorAsState(statusColor(draft.status), tween(220), label = "statut")
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.5.dp, color.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), border = androidx.compose.foundation.BorderStroke(1.5.dp, color.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Nom complet, en grand, sur toute la largeur (jamais tronqué).
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { expanded = !expanded }) {
@@ -1053,9 +1155,9 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AttendanceStatus.entries.forEach { st ->
                     val on = draft.status == st
-                    val bg by animateColorAsState(if (on) statusColor(st) else Color.White, tween(200), label = "fond")
+                    val bg by animateColorAsState(if (on) statusColor(st) else Uphf.Surface, tween(200), label = "fond")
                     val edge by animateColorAsState(if (on) statusColor(st) else Uphf.Line, tween(200), label = "bord")
-                    val ink by animateColorAsState(if (on) Color.White else Uphf.Text, tween(200), label = "texte")
+                    val ink by animateColorAsState(if (on) Uphf.OnTeal else Uphf.Text, tween(200), label = "texte")
                     Box(
                         Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(10.dp))
                             .background(bg)
@@ -1272,7 +1374,7 @@ private fun PlanCard(p: PlanSession, data: RepositoryData, me: String?, admin: M
                 text = { Column { OutlinedTextField(date, { date = it.trim() }, label = { Text("Nouvelle date (AAAA-MM-JJ)") }, singleLine = true); Text("La séance sera verrouillée.", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall) } },
                 confirmButton = { TextButton(enabled = runCatching { LocalDate.parse(date); date >= S2_START }.getOrDefault(false), onClick = { moving = false
                     admin.s2Action("Séance déplacée et verrouillée.") { admin.s2.moveSession(p.id, p.date, date) } }) { Text("Déplacer") } },
-                dismissButton = { TextButton(onClick = { moving = false }) { Text("Annuler") } }, containerColor = Color.White)
+                dismissButton = { TextButton(onClick = { moving = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
         }
     }
 }
@@ -1319,7 +1421,7 @@ private fun S1PlanCard(p: PlanSession, data: RepositoryData, me: String?, admin:
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { edit = null }) { Text("Fermer") } }, containerColor = Color.White)
+            confirmButton = { TextButton(onClick = { edit = null }) { Text("Fermer") } }, containerColor = Uphf.Surface)
     }
 }
 
@@ -1348,7 +1450,7 @@ private fun SlotDialog(p: PlanSession, slot: tn.utm.fst.gestionpresence.nativeap
             }
         },
         confirmButton = { TextButton(onClick = { onSave(code, teacher, room.ifBlank { null }) }) { Text("Enregistrer") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }, containerColor = Color.White)
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }, containerColor = Uphf.Surface)
 }
 
 /* ------------------------------------------------------------------ */
@@ -1369,7 +1471,8 @@ private fun StudentsScreen(state: MainUiState, viewModel: MainViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Rechercher un étudiant…") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(query, { query = it }, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Rechercher un étudiant…") }, singleLine = true, shape = RoundedCornerShape(50),
+                    colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Uphf.Surface, focusedContainerColor = Uphf.Surface, unfocusedBorderColor = Color.Transparent), modifier = Modifier.fillMaxWidth())
                 ChipRow(listOf("all" to "Toutes") + data.classNames().map { it to it }, cls) { cls = it }
                 Text("${list.size} étudiant(s)", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
                 if (state.isAdmin) NewStudentForm(state, viewModel)
@@ -1378,7 +1481,7 @@ private fun StudentsScreen(state: MainUiState, viewModel: MainViewModel) {
         }
         items(list.take(300), key = { it.id }) { s ->
             val t = tallies[s.id] ?: tally(emptyList())
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth().animateItem().bounceClick { viewModel.openStudent(s.id) }) {
+            Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().animateItem().bounceClick { viewModel.openStudent(s.id) }) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(CircleShape).background(Uphf.TealSoft), contentAlignment = Alignment.Center) { Text(initials(s.displayName), color = Uphf.Teal, fontWeight = FontWeight.Bold) }
                     Spacer(Modifier.width(10.dp))
@@ -1525,7 +1628,7 @@ private fun SwapScreen(state: MainUiState, viewModel: MainViewModel) {
         title = { Text("Confirmer la permutation") },
         text = { Text("${data.teacherNames[a]} (${days.first { it.first == dayA }.second}) ⇄ ${data.teacherNames[b]} (${days.first { it.first == dayB }.second}), ${if (scope == "week") "semaine du ${fmt(date)}" else "à partir du ${fmt(date)}"}. Le serveur vérifie la règle avant d’appliquer.") },
         confirmButton = { TextButton(onClick = { ask = false; viewModel.swapTeachers(a, dayA, b, dayB, date, scope) }) { Text("Permuter") } },
-        dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Color.White)
+        dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
 }
 
 @Composable
@@ -1559,6 +1662,15 @@ private fun ExportScreen(state: MainUiState, viewModel: MainViewModel) {
                     val file = runCatching { tn.utm.fst.gestionpresence.nativeapp.feature.export.BilanS1Xlsx.build(context, data) }.getOrElse { msg = "Échec du bilan : ${it.message}"; null }
                     if (file != null) tn.utm.fst.gestionpresence.nativeapp.feature.export.TrackingXlsx.share(context, file) else if (msg == null) msg = "Aucune donnée du S1."
                 }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Bad), modifier = Modifier.fillMaxWidth()) { Text("Bilan S1 (absences en couleur)") }
+            }
+        }
+        if (families.any { it.startsWith("MPI1") || it.startsWith("PC1") }) {
+            item { SectionHeader("Bilan S2 (absences en couleur)", "Même modèle que le bilan S1, pour les séances du S2.") }
+            item {
+                Button(onClick = {
+                    val file = runCatching { tn.utm.fst.gestionpresence.nativeapp.feature.export.BilanS1Xlsx.build(context, data, "S2") }.getOrElse { msg = "Échec du bilan : ${it.message}"; null }
+                    if (file != null) tn.utm.fst.gestionpresence.nativeapp.feature.export.TrackingXlsx.share(context, file) else if (msg == null) msg = "Aucune donnée du S2 pour l’instant."
+                }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Bad), modifier = Modifier.fillMaxWidth()) { Text("Bilan S2 (absences en couleur)") }
             }
         }
         item { SectionHeader("Export Excel du suivi des TP", "Une feuille par classe : statut et note de chaque manipulation, présences, absences et pourcentages.") }
@@ -1621,7 +1733,7 @@ private fun UpdateChecker(manual: Boolean = false) {
             }) { Text("Mettre à jour") }
         },
         dismissButton = { TextButton(enabled = progress == null, onClick = { dismissed = true }) { Text("Plus tard") } },
-        containerColor = Color.White
+        containerColor = Uphf.Surface
     )
 }
 
@@ -1644,7 +1756,7 @@ private fun Donut(t: Tally, modifier: Modifier = Modifier) {
             val stroke = 26.dp.toPx()
             val d = size.minDimension - stroke
             var start = -90f
-            drawArc(Color(0xFFEDF1F5), 0f, 360f, false, topLeft = Offset(stroke / 2, stroke / 2), size = Size(d, d), style = Stroke(stroke))
+            drawArc((if (Uphf.dark) Color(0xFF26313A) else Color(0xFFE4E8EB)), 0f, 360f, false, topLeft = Offset(stroke / 2, stroke / 2), size = Size(d, d), style = Stroke(stroke))
             parts.forEach { (n, c) ->
                 val angle = 360f * n / t.total.coerceAtLeast(1) * sweep
                 drawArc(c, start, angle, false, topLeft = Offset(stroke / 2, stroke / 2), size = Size(d, d), style = Stroke(stroke, cap = StrokeCap.Butt))
@@ -1766,6 +1878,7 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
     val entries = buildList {
         if (state.isAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 (dates, créneaux, planning)", Icons.Default.CalendarMonth))
         else if (spaceAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 de mon espace", Icons.Default.CalendarMonth))
+        add(Triple(AppScreen.MAKEUP, "À rattraper (absences)", Icons.Default.Replay))
         add(Triple(AppScreen.STATS, "Statistiques", Icons.Default.BarChart))
         add(Triple(AppScreen.REPORT_PDF, "Rapport de présence (PDF)", Icons.Default.Assessment))
         add(Triple(AppScreen.EXPORT, "Exports (Excel, sauvegardes)", Icons.Default.Assessment))
@@ -1789,7 +1902,7 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
             }
         }
         items(entries) { (screen, label, icon) ->
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth().bounceClick { viewModel.navigate(screen) }) {
+            Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().bounceClick { viewModel.navigate(screen) }) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(CircleShape).background(Uphf.TealSoft), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Uphf.Teal) }
                     Spacer(Modifier.width(12.dp))
@@ -1818,7 +1931,7 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
 private fun BiometricSetting(state: MainUiState, viewModel: MainViewModel) {
     val context = LocalContext.current
     val available = remember { biometricAvailable(context) }
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(38.dp).clip(CircleShape).background(Uphf.TealSoft), contentAlignment = Alignment.Center) { Icon(Icons.Default.Fingerprint, null, tint = Uphf.Teal) }
             Spacer(Modifier.width(12.dp))
@@ -2021,7 +2134,7 @@ private fun AccountScreen(state: MainUiState, viewModel: MainViewModel) {
 
 @Composable
 private fun FormCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Uphf.Line), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Surface), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = Uphf.Title)
             HorizontalDivider(color = Uphf.Line)
@@ -2032,6 +2145,7 @@ private fun FormCard(title: String, content: @Composable ColumnScope.() -> Unit)
 
 private fun screenTitle(screen: AppScreen): String = when (screen) {
     AppScreen.HOME -> "Accueil"
+    AppScreen.MAKEUP -> "À rattraper"
     AppScreen.SESSIONS -> "Séances"
     AppScreen.ATTENDANCE -> "Appel"
     AppScreen.PLANNING -> "Planning"

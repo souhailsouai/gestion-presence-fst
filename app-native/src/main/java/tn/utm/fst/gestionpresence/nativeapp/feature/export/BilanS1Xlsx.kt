@@ -28,10 +28,12 @@ object BilanS1Xlsx {
     private fun dm(d: String?) = d?.let { it.substring(8, 10) + "/" + it.substring(5, 7) } ?: ""
     private fun gradeText(g: Double) = if (g % 1.0 == 0.0) g.toInt().toString() else g.toString().replace('.', ',')
 
-    fun build(context: Context, data: RepositoryData): File? {
+    /** [sem] = "S1" (défaut) ou "S2" : même bilan, seule la période change (V48). */
+    fun build(context: Context, data: RepositoryData, sem: String = "S1"): File? {
+        val (from, to) = if (sem == "S2") "2027-01-11" to "2027-04-30" else S1_START to S1_END
         val classes = data.classes.filter { Regex("^(MPI1|PC1)-[A-Z]").containsMatchIn(it.name) }
         val classById = classes.associateBy { it.id }
-        val sessions = data.sessions.filter { it.sessionDate in S1_START..S1_END && it.classId in classById }.associateBy { it.id }
+        val sessions = data.sessions.filter { it.sessionDate in from..to && it.classId in classById }.associateBy { it.id }
         val manipOf = { sid: String -> data.sessionManipulations[sid].orEmpty() }
         val manips = sessions.keys.map(manipOf).filter { it.isNotBlank() }.distinct().sortedWith(compareBy({ it.drop(1).toIntOrNull() ?: 99 }, { it }))
         // Groupe du S1 : celui des séances S1 suivies (le plus fréquent), pas la liste actuelle (changée au S2).
@@ -47,7 +49,7 @@ object BilanS1Xlsx {
             if (students.isEmpty()) continue
             val head = listOf("N°", "Nom", "Prénom", "Groupe") + manips + listOf("Sans manip.", "Moyenne", "Absences", "Justifiées", "Rattrapées", "Détail des absences")
             val rows = mutableListOf<List<Cell>>(
-                listOf(Cell.T("Bilan S1 — $fam — absences, rattrapages et notes", 1)),
+                listOf(Cell.T("Bilan $sem — $fam — absences, rattrapages et notes", 1)),
                 listOf(Cell.T("Université de Tunis El Manar — Faculté des Sciences de Tunis — TP de Physique")),
                 listOf(Cell.T("Année universitaire 2026/2027 — semestre 1 — généré le $today (application)")),
                 emptyList(),
@@ -98,7 +100,7 @@ object BilanS1Xlsx {
             summaryNames += fam; summary += listOf(students.size, withAbs, tAbs, tJ, tR)
         }
         if (sheets.isEmpty()) return null
-        val syn = mutableListOf<List<Cell>>(listOf(Cell.T("Synthèse du S1", 1)), emptyList(),
+        val syn = mutableListOf<List<Cell>>(listOf(Cell.T("Synthèse du $sem", 1)), emptyList(),
             listOf("Classe", "Étudiants", "Étudiants avec absence non rattrapée", "Absences non rattrapées", "Absences justifiées", "Absences rattrapées").map { Cell.T(it, HEAD) })
         summaryNames.forEachIndexed { i, n ->
             val s = summary[i]
@@ -117,7 +119,7 @@ object BilanS1Xlsx {
             listOf(Cell.T("Sans manip.", BOX), Cell.T("Séance dont la manipulation n'est pas connue du planning", LEFT)))
         sheets += Sheet("Légende", leg, 3, listOf(18.0, 70.0))
         val dir = File(context.cacheDir, "reports").apply { mkdirs() }
-        val file = File(dir, "Bilan_S1_TP_Physique_MPI1_PC1_2026_2027.xlsx")
+        val file = File(dir, "Bilan_${sem}_TP_Physique_MPI1_PC1_2026_2027.xlsx")
         file.outputStream().use { TrackingXlsx.write(it, sheets) }
         return file
     }

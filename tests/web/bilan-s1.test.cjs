@@ -34,3 +34,10 @@ test('Bilan S1 : un étudiant déplacé au S2 reste dans son groupe du S1',()=>{
   assert.equal(sh.rows.find(r=>r[1]==='TRABELSI')[3],'G2','groupe du S1, pas la liste actuelle');
   assert.ok(!m.sheets.some(s=>s.name==='MPI1-B'),'aucune feuille créée par le S2');
 });
+test('Bilan S2 : même modèle, période du S2 seulement',()=>{
+  const s2={...data,sem:'S2',sessions:data.sessions.map((s,i)=>({...s,session_date:i===0?'2027-01-12':'2026-10-10'}))};
+  const m=B.build(s2);
+  assert.ok(m.sheets.length>=1,'au moins une feuille');
+  assert.match(m.sheets[0].title,/^Bilan S2 — /);
+  assert.ok(B.build({...data,sem:'S2'}).sheets.every(sh=>sh.rows.every(r=>!r.slice(4).some(v=>/^(A|P|R|J)$/.test(String(v))))),'aucune séance du S1 dans le bilan S2');
+});

@@ -47,7 +47,8 @@ enum class AppScreen {
     REPORT_PDF,
     S1_CONFIG,
     HELP,
-    NOTICES
+    NOTICES,
+    MAKEUP
 }
 
 data class MainUiState(

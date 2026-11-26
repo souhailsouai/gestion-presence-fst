@@ -10,6 +10,8 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(root){
   'use strict';
   const S1_START='2026-09-01',S1_END='2026-12-31';
+  /* Le même bilan sert au S2 (V48) : seules la période et la source des manipulations changent. */
+  const WINDOWS={S1:[S1_START,S1_END],S2:['2027-01-11','2027-04-30']};
   const C={
     red:{fill:'FFC7CE',font:'9C0006'},orange:{fill:'FFEB9C',font:'9C5700'},green:{fill:'C6EFCE',font:'006100'},
     late:{fill:'FFF2CC',font:'7F6000'},head:{fill:'1F4E78',font:'FFFFFF'},title:{fill:'F3EFC8',font:'1F1F1F'}};
@@ -20,9 +22,10 @@
 
   /* Construit le classeur (indépendant du moteur Excel : testable sous Node). */
   function build(input){
+    const SEM=input.sem==='S2'?'S2':'S1',[FROM,TO]=WINDOWS[SEM];
     const classes=(input.classes||[]).filter(c=>/^(MPI1|PC1)-[A-Z]/.test(c.name||''));
     const classById=new Map(classes.map(c=>[String(c.id),c]));
-    const sessions=(input.sessions||[]).filter(s=>s.session_date>=S1_START&&s.session_date<=S1_END&&classById.has(String(s.class_id)));
+    const sessions=(input.sessions||[]).filter(s=>s.session_date>=FROM&&s.session_date<=TO&&classById.has(String(s.class_id)));
     const sessionById=new Map(sessions.map(s=>[String(s.id),s]));
     const manipBySession=new Map((input.plans||[]).filter(p=>p.session_id&&p.manipulation).map(p=>[String(p.session_id),String(p.manipulation)]));
     const att=(input.attendance||[]).filter(a=>sessionById.has(String(a.session_id)));
@@ -66,7 +69,7 @@
           grades.length?Math.round(grades.reduce((a,b)=>a+b,0)/grades.length*100)/100:null,abs.length||null,jus.length||null,rat.length||null,detail||null]);
         styles.push([nameStyle,nameStyle,nameStyle,null,...cellStyles,null,null,abs.length?C.red:null,jus.length?C.orange:null,rat.length?C.green:null,nameStyle]);
       });
-      sheets.push({name:fam,title:`Bilan S1 — ${fam} — absences, rattrapages et notes`,head,rows,styles});
+      sheets.push({name:fam,title:`Bilan ${SEM} — ${fam} — absences, rattrapages et notes`,head,rows,styles});
       summary.push([fam,students.length,withAbs,tAbs,tJ,tR]);
     }
     return {sheets,summary,manips};
@@ -103,7 +106,7 @@
       ws['!autofilter']={ref:`A${H+1}:${lib.utils.encode_col(ncol-1)}${H+1}`};
       lib.utils.book_append_sheet(wb,ws,sh.name.slice(0,31));
     }
-    const syn=[['Synthèse du S1'],[],['Classe','Étudiants','Étudiants avec absence non rattrapée','Absences non rattrapées','Absences justifiées','Absences rattrapées'],...model.summary];
+    const syn=[['Synthèse du '+SEM],[],['Classe','Étudiants','Étudiants avec absence non rattrapée','Absences non rattrapées','Absences justifiées','Absences rattrapées'],...model.summary];
     const ws=lib.utils.aoa_to_sheet(syn);
     ws['A1'].s={font:{name:'Arial',sz:14,bold:true}};
     syn[2].forEach((_,c)=>{ws[lib.utils.encode_cell({r:2,c})].s=style(C.head,{bold:true,wrap:true});});
@@ -123,15 +126,18 @@
   /* ----- Navigateur : données, moteur Excel, bouton ----- */
   function client(){try{return typeof supabaseClient!=='undefined'?supabaseClient:root.supabaseClient;}catch(_){return root.supabaseClient;}}
   async function all(q){const out=[];for(let from=0;;from+=1000){const {data,error}=await q().range(from,from+999);if(error)throw error;out.push(...(data||[]));if(!data||data.length<1000)break;}return out;}
-  async function fetchData(){
+  async function fetchData(sem){
     const c=client();if(!c)throw new Error('Connexion indisponible.');
+    const [FROM,TO]=WINDOWS[sem==='S2'?'S2':'S1'];
     const [classes,students,sessions,attendance,plans]=await Promise.all([
       all(()=>c.from('classes').select('id,name').is('deleted_at',null).order('id')),
       all(()=>c.from('students').select('id,last_name,first_name,class_id').is('deleted_at',null).order('id')),
-      all(()=>c.from('sessions').select('id,class_id,session_date').is('deleted_at',null).gte('session_date',S1_START).lte('session_date',S1_END).order('id')),
+      all(()=>c.from('sessions').select('id,class_id,session_date').is('deleted_at',null).gte('session_date',FROM).lte('session_date',TO).order('id')),
       all(()=>c.from('attendance').select('id,session_id,student_id,status,grade,makeup_date,makeup_note').is('deleted_at',null).order('id')),
-      all(()=>c.from('session_plans').select('session_id,manipulation').is('deleted_at',null).not('session_id','is',null).order('id'))]);
-    return {classes,students,sessions,attendance,plans};
+      sem==='S2'
+        ? all(()=>c.from('v33_s2_slots').select('attendance_session_id,manipulation_code').not('attendance_session_id','is',null).order('id')).then(r=>r.map(x=>({session_id:x.attendance_session_id,manipulation:x.manipulation_code})))
+        : all(()=>c.from('session_plans').select('session_id,manipulation').is('deleted_at',null).not('session_id','is',null).order('id'))]);
+    return {classes,students,sessions,attendance,plans,sem:sem==='S2'?'S2':'S1'};
   }
   let libPromise=null;
   function styledXlsx(){
@@ -144,17 +150,18 @@
     });
     return libPromise;
   }
-  async function exportBilan(btn){
+  async function exportBilan(btn,sem){
+    sem=sem==='S2'?'S2':'S1';
     const alertUser=(m,t)=>{try{(typeof showAlert==='function'?showAlert:root.showAlert)?.(m,t);}catch(_){}};
     if(btn)btn.disabled=true;
     try{
-      const [lib,data]=await Promise.all([styledXlsx(),fetchData()]);
-      const model=build(data);if(!model.sheets.length)throw new Error('Aucune donnée du S1.');
+      const [lib,data]=await Promise.all([styledXlsx(),fetchData(sem)]);
+      const model=build(data);if(!model.sheets.length)throw new Error('Aucune donnée du '+sem+'.');
       const d=new Date(),today=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
       const wb=toWorkbook(lib,model,{institution:'Université de Tunis El Manar — Faculté des Sciences de Tunis — TP de Physique',year:'2026/2027',today});
-      lib.writeFile(wb,'Bilan_S1_TP_Physique_MPI1_PC1_2026_2027.xlsx',{compression:true});
-      alertUser('Bilan S1 généré : '+model.sheets.length+' classes.','success');
-    }catch(e){alertUser('Bilan S1 impossible : '+(e?.message||e),'danger');}
+      lib.writeFile(wb,'Bilan_'+sem+'_TP_Physique_MPI1_PC1_2026_2027.xlsx',{compression:true});
+      alertUser('Bilan '+sem+' généré : '+model.sheets.length+' classes.','success');
+    }catch(e){alertUser('Bilan '+sem+' impossible : '+(e?.message||e),'danger');}
     finally{if(btn)btn.disabled=false;}
   }
   function mount(){
@@ -164,7 +171,13 @@
     const b=document.createElement('button');b.type='button';b.className='btn btn-danger';b.dataset.v34Bilan='1';
     b.title='Une feuille par classe : notes, absences en rouge, absences justifiées en orange, rattrapages en vert';
     b.innerHTML='<i class="fas fa-file-excel"></i> Bilan S1 (absences en couleur)';
-    b.addEventListener('click',()=>exportBilan(b));actions.appendChild(b);
+    b.addEventListener('click',()=>exportBilan(b,'S1'));actions.appendChild(b);
+    if(!actions.querySelector('[data-v48-bilan-s2]')){
+      const b2=document.createElement('button');b2.type='button';b2.className='btn btn-danger';b2.dataset.v48BilanS2='1';
+      b2.title='Même bilan pour le S2 : une feuille par classe, absences en rouge, rattrapages en vert, notes par manipulation';
+      b2.innerHTML='<i class="fas fa-file-excel"></i> Bilan S2 (absences en couleur)';
+      b2.addEventListener('click',()=>exportBilan(b2,'S2'));actions.appendChild(b2);
+    }
   }
   if(root.document){
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,50),{once:true});else setTimeout(mount,50);
