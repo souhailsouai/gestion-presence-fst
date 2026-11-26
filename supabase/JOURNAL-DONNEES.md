@@ -64,3 +64,8 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 ## 2026-11-26 — Comptes délégués, avis, annuaire
 - Fonction serveur `admin-teacher` (v14, source dans `supabase/functions/admin-teacher`) : un administrateur d'espace ou un titulaire de « accounts.manage » crée un compte enseignant (ajouté à son espace) et réinitialise le PIN d'un enseignant de son espace ; jamais d'un administrateur ni du super administrateur. Comportement inchangé pour les administrateurs de l'application.
 - V47d : lecture des avis pour « notices.edit » ; V47e : annuaire des enseignants pour « team.edit » / « accounts.manage ».
+
+## 2026-11-26 — V51 : ouverture plus rapide (aucune donnée modifiée)
+- Les politiques de lecture `attendance_select_authorized` et `sessions_select_authorized` utilisent `private.accessible_session_ids()` : la liste des séances visibles est calculée une fois par requête au lieu d'une vérification des droits par ligne. Règle d'accès identique.
+- Vérifié avant et après sur 4 comptes (super administrateur, deux enseignants, responsable d'espace) : mêmes séances et mêmes présences ; lecture des présences d'un enseignant ~0,7 s → ~0,07 s.
+- Retour arrière : recréer les deux politiques avec `private.can_access_session(session_id)` / `private.can_access_session(id)`.
