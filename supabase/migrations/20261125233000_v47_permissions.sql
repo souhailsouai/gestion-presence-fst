@@ -271,3 +271,18 @@ begin
     values (v_slot.space_id, 'start_attendance', jsonb_build_object('slot', v_slot.id, 'session', v_session, 'class', v_name, 'date', v_ses.session_date));
   return v_session;
 end $$;
+
+-- V47d — lecture des avis (y compris programmés ou masqués) pour la permission « notices.edit »
+drop policy if exists v21_notices_read on public.v21_notices;
+create policy v21_notices_read on public.v21_notices for select to authenticated
+  using (active or (select private.is_admin()) or private.can_do(private.default_space(), 'notices.edit'));
+
+-- V47e — annuaire des enseignants pour les titulaires de « team.edit » ou « accounts.manage »
+create or replace function public.v43_teacher_directory() returns table(id uuid, full_name text)
+language sql stable security definer set search_path to '' as $$
+  select p.id, p.full_name from public.profiles p
+   where p.deleted_at is null and (private.is_super_admin()
+     or exists (select 1 from public.space_members m where m.profile_id = (select auth.uid()) and m.role = 'admin')
+     or exists (select 1 from public.space_permissions sp where sp.profile_id = (select auth.uid()) and sp.perm in ('team.edit','accounts.manage')))
+   order by p.full_name;
+$$;

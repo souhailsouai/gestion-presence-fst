@@ -18,7 +18,9 @@
   const isAdmin=()=>isSuper()||(adminMode()&&state.space===DEFAULT_SPACE)||state.myRoles.get(state.space)==='admin';
   /* Permissions choisies par le super administrateur (V47), espace par espace. */
   const can=perm=>isAdmin()||!!state.myPerms?.get(state.space)?.has(perm);
-  const VIEW_PERM={planning:['planning.generate','planning.sessions'],groupes:['groups.edit'],enseignants:['planning.stations'],manips:['planning.manips'],dates:['planning.settings'],parametres:['planning.settings'],versions:['planning.generate'],classes:['classes.edit','students.edit'],equipe:['team.edit']};
+  const VIEW_PERM={planning:['planning.generate','planning.sessions'],groupes:['groups.edit'],enseignants:['planning.stations'],manips:['planning.manips'],dates:['planning.settings'],parametres:['planning.settings'],versions:['planning.generate'],classes:['classes.edit','students.edit'],equipe:['team.edit','accounts.manage']};
+  /* Exports : membres de l'espace, administrateurs, ou permission « exports » ; pas pour un simple visiteur d'un autre espace. */
+  const canExport=()=>isAdmin()||can('exports')||isMember();
   const canView=k=>k==='espaces'||k==='acces'?isSuper():(VIEW_PERM[k]||[]).some(can);
   const isDefaultSpace=()=>state.space===DEFAULT_SPACE;
   const classesOf=d=>d.slots.filter(x=>x.active!==false).map(x=>x.class_name).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
@@ -217,7 +219,7 @@
       ${d.sessions.length?`<div class="v33-toolbar">
         <div class="v33-seg" role="tablist" aria-label="Vue">${[['classe','Par classe'],['enseignant','Par enseignant'],['semaine','Par semaine']].map(([k,l])=>`<button type="button" data-pv="${k}" aria-pressed="${k===state.planView}">${l}</button>`).join('')}</div>
         <div class="v33-grow"></div>${status}
-        <button type="button" class="btn v33-btn ghost" data-act="pdf"><i class="fas fa-file-pdf"></i> PDF</button><button type="button" class="btn v33-btn ghost" data-act="pdfall"><i class="fas fa-file-pdf"></i> Toutes</button><button type="button" class="btn v33-btn ghost" data-act="book" title="Cahier de présence du jour de la classe choisie : page de garde puis une page par groupe"><i class="fas fa-book"></i> Cahier</button><button type="button" class="btn v33-btn ghost" data-act="bookall"><i class="fas fa-book"></i> Tous les cahiers</button></div>
+        ${canExport()?`<button type="button" class="btn v33-btn ghost" data-act="pdf"><i class="fas fa-file-pdf"></i> PDF</button><button type="button" class="btn v33-btn ghost" data-act="pdfall"><i class="fas fa-file-pdf"></i> Toutes</button><button type="button" class="btn v33-btn ghost" data-act="book" title="Cahier de présence du jour de la classe choisie : page de garde puis une page par groupe"><i class="fas fa-book"></i> Cahier</button><button type="button" class="btn v33-btn ghost" data-act="bookall"><i class="fas fa-book"></i> Tous les cahiers</button></div><button type="button" class="btn v33-btn ghost" data-act="groups" title="Une page par classe avec tous ses groupes"><i class="fas fa-people-group"></i> Groupes</button>`:''}
         ${monthChips(d)}
         ${state.planView==='classe'?chips(classesOf(d).map(c=>[c,c,d.sessions.filter(s=>s.class_name===c).length+' séances']),state.planClass,'pc','Classe'):''}
         ${state.planView==='enseignant'?chips(teachers.map(t=>[t,short(tname(t)),null]),state.planTeacher,'pt','Enseignant'):''}
@@ -252,6 +254,7 @@
     if(a==='pdfall')return exportPdf(classesOf(d),d);
     if(a==='book')return exportBook([state.planClass],d);
     if(a==='bookall')return exportBook(classesOf(d),d);
+    if(a==='groups')return exportGroups(classesOf(d),d);
     if(a==='version'){const label=prompt('Nom de la version :','Version du '+new Date().toLocaleDateString('fr-FR'));if(!label)return;
       return mutate('Version enregistrée',null,async()=>{await q(client().rpc('v33_s2_save_version',{p_label:label.slice(0,120),p_space:state.space}));state.data.versions=await q(client().from('v33_s2_versions').select('id,label,created_at').order('created_at',{ascending:false}));});}
     if(a==='gen'||a==='regen'){
@@ -483,10 +486,64 @@
   }
 
   /* ----- Groupes : une classe à la fois, équilibre sur les étudiants présents (actifs) ----- */
+  /* PDF des groupes (modèle « Liste des groupes d'étudiants ») : A4 paysage, une page pleine par classe ;
+     groupes par blocs de 3 (G1-G3 puis G4-G6), lignes numérotées, effectif en bas de chaque groupe. */
+  const GCOL=[[61,124,201],[106,168,79],[255,217,102],[237,125,49],[194,84,160],[128,100,162],[69,160,170],[150,150,150]];
+  function exportGroups(classes,d){
+    const jsPDF=root.jspdf?.jsPDF;if(!jsPDF){toast('Le moteur PDF n\'est pas chargé.','err');return;}
+    if(!d.members.some(m=>m.status==='actif')){toast('Préparez d\'abord les groupes du S2 (onglet Groupes).','err');return;}
+    const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const G=d.settings.group_count,W=297,H=210,M=10,IW=W-2*M,year=d.settings.academic_year||'2026/2027';
+    const ink=c=>(c[0]*0.299+c[1]*0.587+c[2]*0.114)>165?[30,30,30]:[255,255,255];
+    const per=3,blocks=Math.ceil(G/per),nw=11;
+    let first=true;
+    for(const cls of classes){
+      const act=d.members.filter(m=>m.class_name===cls&&m.status==='actif');if(!act.length)continue;
+      if(!first)doc.addPage();first=false;
+      const lists=Array.from({length:G},(_,g)=>act.filter(m=>m.group_no===g+1).map(m=>sname(m.student_id)).sort((a,b)=>a.localeCompare(b,'fr')));
+      const R=Math.max(12,...lists.map(l=>l.length));
+      // En-tête
+      doc.setDrawColor(200);doc.setLineWidth(0.2);
+      doc.setFillColor(220,230,241);doc.rect(M,M,IW,10,'F');
+      doc.setFont('times','bold');doc.setFontSize(16);doc.setTextColor(25);doc.text(`LISTE DES GROUPES D'ÉTUDIANTS - ${cls}`,W/2,M+7,{align:'center'});
+      doc.setFillColor(255,242,204);doc.rect(M,M+10,IW,7,'F');
+      doc.setFontSize(10.5);doc.text(`Année universitaire ${year} - Répartition en ${G} groupes`,W/2,M+15,{align:'center'});
+      // Blocs de groupes
+      const top=M+21,foot=8,gapB=5,avail=H-top-M-foot-(blocks-1)*gapB,bh=avail/blocks,rh=bh/(R+2),gw=(IW-nw)/per;
+      const fs=Math.max(7,Math.min(11,rh*1.75));
+      for(let b=0;b<blocks;b++){
+        const y0=top+b*(bh+gapB),gs=Array.from({length:per},(_,k)=>b*per+k).filter(g=>g<G);
+        // en-tête du bloc
+        doc.setLineWidth(0.5);doc.setDrawColor(60);
+        doc.setFillColor(242,242,242);doc.rect(M,y0,nw,rh,'FD');doc.setFont('times','bold');doc.setFontSize(fs);doc.setTextColor(25);doc.text('N°',M+nw/2,y0+rh*0.68,{align:'center'});
+        gs.forEach((g,k)=>{const x=M+nw+k*gw,c=GCOL[g%GCOL.length];doc.setFillColor(...c);doc.rect(x,y0,gw,rh,'FD');doc.setTextColor(...ink(c));doc.setFontSize(fs+1);doc.text(`G${g+1}`,x+gw/2,y0+rh*0.7,{align:'center'});});
+        // lignes
+        doc.setLineWidth(0.2);doc.setDrawColor(150);
+        for(let r=0;r<R;r++){
+          const y=y0+(r+1)*rh;
+          doc.setFont('times','bold');doc.setFontSize(fs);doc.setTextColor(25);doc.rect(M,y,nw,rh);doc.text(String(r+1),M+nw/2,y+rh*0.7,{align:'center'});
+          gs.forEach((g,k)=>{const x=M+nw+k*gw;doc.rect(x,y,gw,rh);const n=lists[g][r];if(n){doc.setFont('times','normal');doc.setTextColor(25);doc.text(doc.splitTextToSize(n,gw-3)[0],x+1.5,y+rh*0.7);}});
+        }
+        // effectif
+        const ye=y0+(R+1)*rh;
+        doc.setFillColor(242,248,246);doc.rect(M,ye,nw,rh,'FD');doc.setFont('times','bold');doc.setFontSize(fs-1);doc.setTextColor(25);doc.text('Effectif',M+nw/2,ye+rh*0.7,{align:'center'});
+        gs.forEach((g,k)=>{const x=M+nw+k*gw,c=GCOL[g%GCOL.length];doc.setFillColor(242,248,246);doc.rect(x,ye,gw,rh,'FD');doc.setTextColor(...(c[0]>230&&c[1]>200?[160,120,0]:c));doc.text(`${lists[g].length}/${R}`,x+gw/2,ye+rh*0.7,{align:'center'});});
+        doc.setLineWidth(0.5);doc.setDrawColor(60);doc.rect(M,y0,nw+gs.length*gw,(R+2)*rh);
+      }
+      const exc=d.members.filter(m=>m.class_name===cls&&m.status==='exclu').map(m=>sname(m.student_id)).sort((a,b)=>a.localeCompare(b,'fr'));
+      doc.setFont('times','italic');doc.setFontSize(9);doc.setTextColor(90);
+      doc.text(doc.splitTextToSize(exc.length?`Mis de côté (absents à tout le S1, réintégrables) : ${exc.join(', ')}`:`Effectif total : ${act.length} étudiants · édité le ${new Date().toLocaleDateString('fr-FR')}`,IW)[0],M,H-M+1);
+    }
+    if(first){toast('Aucun groupe à imprimer.','err');return;}
+    const spName=state.spaces.find(x=>x.id===state.space)?.name||'MPI1 · PC1';
+    doc.save(`Groupes_S2_${(classes.length===1?classes[0]:spName).replace(/[^\w-]+/g,'_')}.pdf`);
+  }
+
   function viewGroups(v,d,admin){
     if(!d.members.length){
       v.innerHTML=`<div class="v33-empty"><i class="fas fa-people-group"></i><h4>Groupes S2 pas encore préparés</h4><p>La préparation reprend les groupes du S1, met de côté les étudiants absents à toutes les séances du S1 (réintégrables en un clic) et équilibre les groupes sur les étudiants présents.</p>${admin?'<button type="button" class="btn btn-primary v33-btn" id="v33-init"><i class="fas fa-wand-magic-sparkles"></i> Préparer les groupes S2</button>':''}</div>`;
-      v.onclick=e=>{if(e.target.closest('#v33-init'))initGroups(d);};return;
+      v.onclick=e=>{
+      const gp=e.target.closest('[data-gpdf]');if(gp)return exportGroups(gp.dataset.gpdf==='one'?[cls]:classesOf(d),d);if(e.target.closest('#v33-init'))initGroups(d);};return;
     }
     const G=d.settings.group_count,cls=state.groupClass;
     const ms=d.members.filter(m=>m.class_name===cls),act=ms.filter(m=>m.status==='actif'),exc=ms.filter(m=>m.status==='exclu');
@@ -496,6 +553,7 @@
       <section class="v33-card v33-summary">
         <div class="v33-balance ${gap<=1?'ok':'warn'}"><i class="fas ${gap<=1?'fa-scale-balanced':'fa-triangle-exclamation'}"></i><div><b>${gap<=1?'Groupes équilibrés':'Écart de '+gap+' étudiants'}</b><small>${act.length} présent(s) répartis · ${exc.length} mis de côté</small></div></div>
         <div class="v33-sizes">${sizes.map((n,i)=>`<div><span>G${i+1}</span><b>${n}</b></div>`).join('')}</div>
+        ${canExport()?`<div class="v33-row tight"><button type="button" class="btn v33-btn ghost" data-gpdf="one"><i class="fas fa-file-pdf"></i> PDF des groupes de ${esc(cls)}</button><button type="button" class="btn v33-btn ghost" data-gpdf="all"><i class="fas fa-file-pdf"></i> Toutes les classes (une page par classe)</button></div>`:''}
         ${admin?`<div class="v33-row tight"><button type="button" class="btn btn-primary v33-btn" data-bal ${gap<=1?'disabled':''}><i class="fas fa-scale-balanced"></i> Équilibrer</button><button type="button" class="btn v33-btn ghost" data-sync><i class="fas fa-user-plus"></i> Nouveaux</button></div>`:''}</section>
       <div class="v33-groups">${Array.from({length:G},(_,i)=>i+1).map(g=>{const list=act.filter(m=>m.group_no===g).sort((a,b)=>sname(a.student_id).localeCompare(sname(b.student_id)));
         return `<section class="v33-group" data-drop="${g}"><header><h4>G${g}</h4><span class="v33-count">${list.length}</span></header><ul>${list.map(m=>`<li ${admin?`draggable="true" data-drag="${m.student_id}"`:''}><span class="v33-sn">${esc(sname(m.student_id))}</span>${m.locked?'<i class="fas fa-lock v33-lk" title="Verrouillé dans ce groupe"></i>':''}${admin?`<button type="button" class="v33-icon" data-menu="${m.student_id}" aria-label="Actions pour ${esc(sname(m.student_id))}"><i class="fas fa-ellipsis-vertical"></i></button>`:''}</li>`).join('')||'<li class="v33-muted">—</li>'}</ul></section>`;}).join('')}</div>
@@ -773,7 +831,7 @@
     ['Étudiants et classes',[['students.edit','Ajouter, modifier, retirer des étudiants'],['classes.edit','Créer ou supprimer des classes'],['groups.edit','Changer le groupe d\'un étudiant, le rendre inactif']]],
     ['Planning',[['planning.settings','Dates, créneaux, jours exclus, réglages'],['planning.manips','Manipulations (codes, titres, salles)'],['planning.stations','Affecter les enseignants aux postes'],['planning.generate','Générer ou recalculer le planning, versions'],['planning.sessions','Verrouiller ou déplacer une séance, changer un enseignant']]],
     ['Appel et notes',[['attendance.any','Faire l\'appel de toutes les cases'],['attendance.edit','Modifier présences et notes après la séance'],['attendance.makeup','Enregistrer les rattrapages']]],
-    ['Exports et documents',[['exports','PDF (planning, cahier), Excel, Bilan S1'],['stats','Statistiques']]],
+    ['Exports et documents',[['exports','PDF (planning, cahier, groupes) des espaces dont on n\'est pas membre']]],
     ['Équipe et comptes',[['team.edit','Ajouter ou retirer des enseignants de l\'espace'],['accounts.manage','Créer des comptes, réinitialiser un PIN'],['notices.edit','Modifier les avis officiels']]]];
   const ALL_PERMS=PERM_GROUPS.flatMap(g=>g[1].map(x=>x[0]));
   const PRESETS=[['Enseignant',[]],['Assistant',['attendance.any','attendance.makeup','exports']],['Gestionnaire du planning',['planning.settings','planning.manips','planning.stations','planning.generate','planning.sessions','exports']],['Administrateur d\'espace',ALL_PERMS.filter(p=>p!=='accounts.manage'&&p!=='notices.edit')]];
@@ -816,13 +874,27 @@
     const nm=new Map(dir.map(p=>[p.id,p.full_name]));
     const ms=[...d.spaceMembers].sort((a,b)=>(a.role===b.role?0:a.role==='admin'?-1:1)||String(nm.get(a.profile_id)).localeCompare(String(nm.get(b.profile_id)),'fr'));
     const out=dir.filter(p=>!ms.some(m=>m.profile_id===p.id));
+    const canTeam=can('team.edit'),canAcc=can('accounts.manage');
     v.innerHTML=`<p class="v33-lead"><i class="fas fa-circle-info"></i> Les enseignants de l'équipe apparaissent dans l'onglet Enseignants pour être placés sur les postes, puis dans le planning et l'appel S2.</p>
       <section class="v33-card"><h4 class="v33-h">Équipe de l'espace</h4>
-      ${ms.map(m=>`<div class="v33-item"><div><b>${esc(nm.get(m.profile_id)||'—')}</b> <span class="v33-muted">${m.role==='admin'?'Administrateur':'Enseignant'}</span></div>${m.role==='teacher'?`<button type="button" class="btn v33-btn ghost sm" data-rmt="${m.profile_id}">Retirer</button>`:''}</div>`).join('')}
-      ${out.length?`<div class="v33-row"><select data-addt aria-label="Enseignant à ajouter"><option value="">— Ajouter un enseignant —</option>${out.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select><button type="button" class="btn btn-primary v33-btn" data-addteam>Ajouter</button></div>`:''}
-      <p class="v33-muted">Seul le super administrateur nomme ou retire un administrateur d'espace.</p></section>`;
+      ${ms.map(m=>`<div class="v33-item"><div><b>${esc(nm.get(m.profile_id)||'—')}</b> <span class="v33-muted">${m.role==='admin'?'Administrateur':'Enseignant'}</span></div><div class="v33-row tight">${m.role==='teacher'&&canAcc?`<button type="button" class="btn v33-btn ghost sm" data-pin="${m.profile_id}">Nouveau PIN</button>`:''}${m.role==='teacher'&&canTeam?`<button type="button" class="btn v33-btn ghost sm" data-rmt="${m.profile_id}">Retirer</button>`:''}</div></div>`).join('')}
+      ${out.length&&canTeam?`<div class="v33-row"><select data-addt aria-label="Enseignant à ajouter"><option value="">— Ajouter un enseignant —</option>${out.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select><button type="button" class="btn btn-primary v33-btn" data-addteam>Ajouter</button></div>`:''}
+      <p class="v33-muted">Seul le super administrateur nomme ou retire un administrateur d'espace.</p></section>
+      ${canAcc?`<section class="v33-card"><h4 class="v33-h">Créer un compte enseignant</h4><form class="v33-form" data-newacc>
+        <label>Nom et prénom<input name="full_name" required maxlength="80"></label>
+        <label>Identifiant<input name="username" required maxlength="40" placeholder="ex. a.benali" pattern="[a-z0-9._-]+"></label>
+        <label>E-mail (facultatif)<input name="email" type="email" maxlength="120"></label>
+        <label>PIN de connexion (6 chiffres)<input name="pin" required inputmode="numeric" pattern="\\d{6}" maxlength="6"></label>
+        <button class="btn btn-primary v33-btn">Créer le compte</button></form>
+        <p class="v33-muted">Le nouvel enseignant rejoint directement l'équipe de cet espace. Communiquez-lui son identifiant et son PIN.</p></section>`:''}`;
+    const fn=async(body)=>{const {data,error}=await client().functions.invoke('admin-teacher',{body});if(error||data?.error){let m=data?.error||error?.message||'Échec';try{const j=await error?.context?.json?.();m=j?.code==='USERNAME_TAKEN'?'Identifiant déjà utilisé':j?.code==='EMAIL_TAKEN'?'E-mail déjà utilisé':(j?.error||m);}catch(_){}throw new Error(m);}return data;};
+    v.onsubmit=e=>{const f=e.target.closest('[data-newacc]');if(!f)return;e.preventDefault();const x=Object.fromEntries(new FormData(f));
+      if(!/^\d{6}$/.test(x.pin)){toast('Le PIN doit avoir 6 chiffres','err');return;}
+      call(`Compte créé : ${String(x.username).toLowerCase()}`,()=>fn({action:'create',space_id:state.space,full_name:x.full_name.trim(),username:x.username.trim(),email:x.email.trim()||undefined,pin:x.pin}));};
     const call=async(label,fn)=>{state.busy++;try{await fn();toast(label);}catch(e){toast('Échec : '+(e.message||e),'err');}finally{state.busy--;}state.data=null;await load(true).catch(()=>{});render();};
     v.onclick=e=>{
+      const pb=e.target.closest('[data-pin]');if(pb){const pin=prompt(`Nouveau PIN (6 chiffres) pour ${nm.get(pb.dataset.pin)||'cet enseignant'} :`);if(pin==null)return;if(!/^\d{6}$/.test(pin)){toast('Le PIN doit avoir 6 chiffres','err');return;}
+        return call('PIN modifié — communiquez-le à l\'enseignant',()=>fn({action:'set_teacher_pin',user_id:pb.dataset.pin,pin}));}
       const rm=e.target.closest('[data-rmt]');if(rm&&confirm('Retirer cet enseignant de l\'équipe ?'))return call('Retiré de l\'équipe',()=>q(client().rpc('v43_set_member',{p_space:state.space,p_profile:rm.dataset.rmt,p_role:null})));
       if(e.target.closest('[data-addteam]')){const pid=v.querySelector('[data-addt]').value;if(!pid){toast('Choisissez un enseignant','err');return;}
         return call('Ajouté à l\'équipe',()=>q(client().rpc('v43_set_member',{p_space:state.space,p_profile:pid,p_role:'teacher'})));}

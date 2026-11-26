@@ -5,7 +5,9 @@
   'use strict';
   const client=()=>typeof supabaseClient!=='undefined'?supabaseClient:root.supabaseClient;
   const teacher=()=>typeof currentTeacher!=='undefined'?currentTeacher:root.currentTeacher;
-  const isAdmin=()=>{const t=teacher();return !!(t&&t.isAdmin&&t.activeMode==='admin');};
+  /* Modifier les avis : administrateur, ou permission « notices.edit » donnée par le super administrateur (V47). */
+  let noticePerm=false;
+  const isAdmin=()=>{const t=teacher();return !!(t&&((t.isAdmin&&t.activeMode==='admin')||noticePerm));};
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const format=body=>esc(body).split('\n').map(l=>l.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')).join('<br>');
   let notices=null,loadedFor=null,loading=false,cycleId=null;
@@ -16,6 +18,7 @@
     if(!force&&loadedFor===t.id+':'+t.activeMode)return;
     loading=true;
     try{
+      noticePerm=await c.from('space_permissions').select('perm').eq('profile_id',t.id).eq('perm','notices.edit').then(r=>!r.error&&(r.data||[]).length>0,()=>false);
       const {data,error}=await c.from('v21_notices').select('id,cycle_id,title,body,starts_on,ends_on,sort_order,active,updated_at').order('sort_order').order('updated_at');
       notices=error?null:(data||[]).map(n=>({...n,published:n.active!==false}));
       if(notices&&notices.length)cycleId=notices[0].cycle_id;

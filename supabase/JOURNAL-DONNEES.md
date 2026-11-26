@@ -60,3 +60,7 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 ## 2026-11-25 — V47 : rôles et accès (permissions par personne et par espace)
 - Table `space_permissions` ; `private.can_do` / `can_do_any` ; règles d'écriture S2, classes, étudiants, avis, appel et équipe vérifiées par permission. Un administrateur d'espace garde tout dans son espace.
 - `v47_set_permissions` (super administrateur seul) : historique dans `v33_s2_audit` (action `set_permissions`, avant/après) pour annuler.
+
+## 2026-11-26 — Comptes délégués, avis, annuaire
+- Fonction serveur `admin-teacher` (v14, source dans `supabase/functions/admin-teacher`) : un administrateur d'espace ou un titulaire de « accounts.manage » crée un compte enseignant (ajouté à son espace) et réinitialise le PIN d'un enseignant de son espace ; jamais d'un administrateur ni du super administrateur. Comportement inchangé pour les administrateurs de l'application.
+- V47d : lecture des avis pour « notices.edit » ; V47e : annuaire des enseignants pour « team.edit » / « accounts.manage ».

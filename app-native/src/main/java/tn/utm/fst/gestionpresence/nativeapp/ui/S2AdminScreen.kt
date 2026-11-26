@@ -133,14 +133,14 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
                 if (sup) add("acces" to "Rôles et accès")
                 if (sup) add("espaces" to "Espaces")
                 if (s != null && !def) add("classes" to "Classes & étudiants")
-                if (s != null && !def && (canAdmin || "team.edit" in s.myPerms)) add("equipe" to "Équipe")
+                if (s != null && !def && (canAdmin || "team.edit" in s.myPerms || "accounts.manage" in s.myPerms)) add("equipe" to "Équipe")
                 addAll(listOf("dates" to "Dates exclues", "groupes" to "Groupes", "creneaux" to "Créneaux", "postes" to "Enseignants", "manips" to "Manipulations", "planning" to "Générer & PDF", "historique" to "Historique"))
             }
             // Espace consulté sans en être administrateur : planning et PDF, manipulations (lecture).
             // Permissions choisies par le super administrateur : chaque onglet s'ouvre avec la permission correspondante.
             val tabPerm = mapOf("dates" to listOf("planning.settings"), "creneaux" to listOf("planning.settings", "classes.edit"), "groupes" to listOf("groups.edit"),
                 "postes" to listOf("planning.stations"), "manips" to listOf("planning.manips"), "planning" to listOf("planning.generate", "planning.sessions"),
-                "historique" to listOf("planning.generate"), "classes" to listOf("classes.edit", "students.edit"), "equipe" to listOf("team.edit"))
+                "historique" to listOf("planning.generate"), "classes" to listOf("classes.edit", "students.edit"), "equipe" to listOf("team.edit", "accounts.manage"))
             val mine = s?.myPerms.orEmpty()
             val shownTabs = if (canAdmin) tabs else tabs.filter { it.first in setOf("planning", "manips", "postes") || tabPerm[it.first].orEmpty().any { p -> p in mine } }
             if (shownTabs.none { it.first == tab }) tab = shownTabs.first().first
@@ -177,7 +177,7 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             "espaces" -> item { SpacesPanel(viewModel) { id -> viewModel.s2.space = id; tab = "classes"; snap = null; run(null, false) { null } } }
             "classes" -> item { ClassesPanel(s, ::run, viewModel) }
             "acces" -> item { AccessPanel(s, viewModel, state.profile?.id) }
-            "equipe" -> item { TeamPanel(s.space, viewModel) { snap = null; run(null, false) { null } } }
+            "equipe" -> item { TeamPanel(s.space, viewModel, canTeam = canAdmin || "team.edit" in s.myPerms, canAccounts = canAdmin || "accounts.manage" in s.myPerms) { snap = null; run(null, false) { null } } }
             else -> {
                 item {
                     SharePanel(s) { key, mode ->
@@ -187,7 +187,8 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
                         }
                     }
                 }
-                item { PdfPanel(state, s) }; item { GenerateTab(s, ::run, viewModel) }
+                // Exports : membres de l'espace, administrateurs, ou permission « exports » (pas un simple visiteur d'un autre espace)
+                if (canAdmin || "exports" in s.myPerms || s.space in s.myRoles || sup) item { PdfPanel(state, s) }; item { GenerateTab(s, ::run, viewModel) }
             }
         }
         item { Spacer(Modifier.height(30.dp)) }
@@ -685,6 +686,13 @@ private fun GroupsPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
                 OutlinedButton(onClick = { run(null, false) { val n = viewModel.s2.addNewMembers(s.members.map { it.studentId }.toSet()); if (n == 0) "Aucun nouvel étudiant." else "$n étudiant(s) ajouté(s)." } },
                     shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Nouveaux") }
             }
+            // PDF des groupes : une page par classe (même modèle que le site)
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val share = { list: List<String> -> tn.utm.fst.gestionpresence.nativeapp.feature.s2.GroupsPdf.build(ctx, s, list, s.spaces.firstOrNull { it.id == s.space }?.name ?: "MPI1 · PC1")?.let { tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(ctx, it) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { share(listOf(cls)) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("PDF des groupes") }
+                OutlinedButton(onClick = { share(s2Classes(s)) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Toutes les classes") }
+            }
         }
         (1..G).forEach { g ->
             val list = act.filter { it.groupNo == g }.sortedBy { it.name }
@@ -822,6 +830,10 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
         val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.AttendanceBookPdf.build(context, s, plan, classes)
         if (file == null) msg = "Préparez d’abord les groupes du S2 (onglet Groupes)." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
     }
+    fun groups(classes: List<String>) {
+        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.GroupsPdf.build(context, s, classes, s.spaces.firstOrNull { it.id == s.space }?.name ?: "MPI1 · PC1")
+        if (file == null) msg = "Préparez d’abord les groupes du S2 (onglet Groupes)." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)
+    }
     Panel("Exporter le planning en PDF", "Même modèle que le site : une page A4 paysage par jour ; les classes qui alternent sont sur la même feuille.") {
         AdminTabs(s2Classes(s).map { it to it }, cls) { cls = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -832,6 +844,11 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { book(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("Cahier $cls") }
             OutlinedButton(onClick = { book(s2Classes(s)) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Tous les cahiers") }
+        }
+        Text("Groupes : une page par classe avec tous ses groupes et leurs étudiants.", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { groups(listOf(cls)) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("Groupes $cls") }
+            OutlinedButton(onClick = { groups(s2Classes(s)) }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Toutes les classes") }
         }
         msg?.let { Text(it, color = Uphf.Bad) }
     }
@@ -905,7 +922,7 @@ private val PERM_GROUPS = listOf(
     "Planning" to listOf("planning.settings" to "Dates, créneaux, jours exclus, réglages", "planning.manips" to "Manipulations (codes, titres, salles)", "planning.stations" to "Affecter les enseignants aux postes",
         "planning.generate" to "Générer ou recalculer le planning, versions", "planning.sessions" to "Verrouiller ou déplacer une séance, changer un enseignant"),
     "Appel et notes" to listOf("attendance.any" to "Faire l’appel de toutes les cases", "attendance.edit" to "Modifier présences et notes après la séance", "attendance.makeup" to "Enregistrer les rattrapages"),
-    "Exports et documents" to listOf("exports" to "PDF (planning, cahier), Excel, Bilan S1", "stats" to "Statistiques"),
+    "Exports et documents" to listOf("exports" to "PDF (planning, cahier, groupes) des espaces dont on n’est pas membre"),
     "Équipe et comptes" to listOf("team.edit" to "Ajouter ou retirer des enseignants de l’espace", "accounts.manage" to "Créer des comptes, réinitialiser un PIN", "notices.edit" to "Modifier les avis officiels"))
 private val ALL_PERMS = PERM_GROUPS.flatMap { g -> g.second.map { it.first } }
 private val PRESETS = listOf("Enseignant" to emptyList(), "Assistant" to listOf("attendance.any", "attendance.makeup", "exports"),
@@ -984,11 +1001,13 @@ private fun AccessPanel(s: S2Snapshot, viewModel: MainViewModel, me: String?) {
 
 /* ---------------- Équipe de l'espace : l'administrateur d'espace ajoute ou retire ses enseignants ---------------- */
 @Composable
-private fun TeamPanel(space: String, viewModel: MainViewModel, changed: () -> Unit) {
+private fun TeamPanel(space: String, viewModel: MainViewModel, canTeam: Boolean = true, canAccounts: Boolean = false, changed: () -> Unit) {
     val scope = rememberCoroutineScope()
     var data by remember { mutableStateOf<Pair<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.SpaceMember>, List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Teacher>>?>(null) }
     var msg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var reload by remember { mutableStateOf(0) }
+    var pinFor by remember { mutableStateOf<String?>(null) }; var newPin by remember { mutableStateOf("") }
+    var fName by remember { mutableStateOf("") }; var fUser by remember { mutableStateOf("") }; var fMail by remember { mutableStateOf("") }; var fPin by remember { mutableStateOf("") }
     LaunchedEffect(space, reload) {
         data = runCatching { viewModel.s2.allMembers().filter { it.spaceId == space } to viewModel.s2.directory() }.getOrElse { msg = true to (it.message ?: "Chargement impossible."); null }
     }
@@ -1004,11 +1023,27 @@ private fun TeamPanel(space: String, viewModel: MainViewModel, changed: () -> Un
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(nameOf(m.profileId), color = Uphf.Text, modifier = Modifier.weight(1f))
                     Text(if (m.role == "admin") "Administrateur" else "Enseignant", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)
-                    if (m.role == "teacher") TextButton(onClick = { act("Retiré de l’équipe.") { viewModel.s2.setMember(space, m.profileId, null) } }) { Text("Retirer", color = Uphf.Bad) }
+                    if (m.role == "teacher" && canAccounts) TextButton(onClick = { pinFor = m.profileId; newPin = "" }) { Text("Nouveau PIN") }
+                    if (m.role == "teacher" && canTeam) TextButton(onClick = { act("Retiré de l’équipe.") { viewModel.s2.setMember(space, m.profileId, null) } }) { Text("Retirer", color = Uphf.Bad) }
                 }
             }
+            pinFor?.let { pid ->
+                AlertDialog(onDismissRequest = { pinFor = null }, title = { Text("Nouveau PIN — ${nameOf(pid)}") },
+                    text = { OutlinedTextField(newPin, { newPin = it.filter(Char::isDigit).take(6) }, label = { Text("PIN (6 chiffres)") }, singleLine = true) },
+                    confirmButton = { TextButton(enabled = newPin.length == 6, onClick = { val p = newPin; pinFor = null; act("PIN modifié. Communiquez-le à l’enseignant.") { viewModel.s2.resetTeacherPin(pid, p) } }) { Text("Enregistrer") } },
+                    dismissButton = { TextButton(onClick = { pinFor = null }) { Text("Annuler") } }, containerColor = Color.White)
+            }
             val out = d.second.filter { t -> d.first.none { it.profileId == t.id } }
-            if (out.isNotEmpty()) {
+            if (canAccounts) {
+                Text("Créer un compte enseignant", fontWeight = FontWeight.Bold, color = Uphf.Title, modifier = Modifier.padding(top = 8.dp))
+                OutlinedTextField(fName, { fName = it }, label = { Text("Nom et prénom") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(fUser, { fUser = it.lowercase().filter { c -> c.isLetterOrDigit() || c in "._-" } }, label = { Text("Identifiant (ex. a.benali)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(fMail, { fMail = it }, label = { Text("E-mail (facultatif)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(fPin, { fPin = it.filter(Char::isDigit).take(6) }, label = { Text("PIN de connexion (6 chiffres)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Button(onClick = { val (n, u, m, p) = listOf(fName, fUser, fMail, fPin); act("Compte créé : $u. Il rejoint l’équipe de l’espace.") { viewModel.s2.createTeacherAccount(space, n, u, m, p); fName = ""; fUser = ""; fMail = ""; fPin = "" } },
+                    enabled = fName.isNotBlank() && fUser.isNotBlank() && fPin.length == 6, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) { Text("Créer le compte") }
+            }
+            if (out.isNotEmpty() && canTeam) {
                 var openMenu by remember { mutableStateOf(false) }
                 Box {
                     OutlinedButton(onClick = { openMenu = true }, shape = RoundedCornerShape(50)) { Text("Ajouter un enseignant") }

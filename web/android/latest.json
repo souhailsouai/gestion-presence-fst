@@ -1,6 +1,6 @@
 {
-  "version": "2.20.0",
-  "notes": "Rôles et accès : le super administrateur choisit, espace par espace, ce que chaque personne peut gérer (étudiants, planning, appel, équipe…). Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.21.0",
+  "notes": "PDF des groupes (une page paysage par classe). Comptes enseignants et PIN gérés par l'administrateur de l'espace. Avis officiels modifiables avec la permission. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
-  "size": 3331363
+  "size": 3347747
 }

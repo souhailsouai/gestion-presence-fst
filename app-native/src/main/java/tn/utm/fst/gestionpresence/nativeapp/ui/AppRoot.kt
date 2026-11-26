@@ -1760,6 +1760,9 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
     // Enseignant nommé administrateur d'un espace S2 : accès à la gestion du S2 de son espace.
     var spaceAdmin by remember { mutableStateOf(false) }
     LaunchedEffect(state.online, state.isAdmin) { spaceAdmin = !state.isAdmin && state.online && runCatching { viewModel.s2.isSpaceAdmin() }.getOrDefault(false) }
+    // Permissions données par le super administrateur (Rôles et accès)
+    var perms by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(state.online, state.isAdmin) { perms = if (state.isAdmin || !state.online) emptySet() else runCatching { viewModel.s2.myPermissions() }.getOrDefault(emptySet()) }
     val entries = buildList {
         if (state.isAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 (dates, créneaux, planning)", Icons.Default.CalendarMonth))
         else if (spaceAdmin) add(Triple(AppScreen.S2_ADMIN, "Gestion du S2 de mon espace", Icons.Default.CalendarMonth))
@@ -1768,7 +1771,7 @@ private fun MoreScreen(state: MainUiState, viewModel: MainViewModel) {
         add(Triple(AppScreen.EXPORT, "Exports (Excel, sauvegardes)", Icons.Default.Assessment))
         if (state.isAdmin) add(Triple(AppScreen.ACCOUNTS, "Comptes enseignants", Icons.Default.AdminPanelSettings))
         if (state.isAdmin) add(Triple(AppScreen.S1_CONFIG, "Intervenants S1 par jour", Icons.Default.Groups))
-        if (state.isAdmin) add(Triple(AppScreen.NOTICES, "Avis officiels (modifier)", Icons.Default.Campaign))
+        if (state.isAdmin || "notices.edit" in perms) add(Triple(AppScreen.NOTICES, "Avis officiels (modifier)", Icons.Default.Campaign))
         add(Triple(AppScreen.HELP, "Aide", Icons.Default.School))
         if (state.isAdmin) add(Triple(AppScreen.SWAP, "Permuter des enseignants", Icons.Default.Groups))
         add(Triple(AppScreen.CLASSES, "Classes et groupes", Icons.Default.Groups))
