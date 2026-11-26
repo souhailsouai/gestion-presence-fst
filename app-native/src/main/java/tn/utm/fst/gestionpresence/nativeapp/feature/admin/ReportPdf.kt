@@ -32,7 +32,7 @@ object ReportPdf {
         val title = Paint().apply { textSize = 15f; typeface = Typeface.DEFAULT_BOLD; color = Color.rgb(28, 61, 94); isAntiAlias = true }
         val head = Paint().apply { textSize = 9f; typeface = Typeface.DEFAULT_BOLD; color = Color.WHITE; isAntiAlias = true }
         val body = Paint().apply { textSize = 9f; color = Color.rgb(40, 40, 40); isAntiAlias = true }
-        val small = Paint().apply { textSize = 8f; color = Color.rgb(107, 118, 130); isAntiAlias = true }
+        val small = Paint().apply { textSize = 8.5f; color = Color.rgb(74, 88, 102); isAntiAlias = true }
         val fill = Paint().apply { style = Paint.Style.FILL }
         fun newPage() { page?.let { doc.finishPage(it) }; pageNo++; page = doc.startPage(PdfDocument.PageInfo.Builder(W.toInt(), H.toInt(), pageNo).create()); y = M
             page!!.canvas.drawText("Faculté des Sciences de Tunis — Rapport de présence des TP — page $pageNo", M, H - 18f, small) }

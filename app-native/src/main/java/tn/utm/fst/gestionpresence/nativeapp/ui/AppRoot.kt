@@ -48,6 +48,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -241,15 +250,8 @@ fun AppRoot(viewModel: MainViewModel = viewModel()) {
                 }
                 if (state.loading) {
                     if (state.data == null) {
-                        Surface(color = Uphf.Surface.copy(alpha = 0.85f), modifier = Modifier.fillMaxSize()) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    CircularProgressIndicator(color = Uphf.Teal)
-                                    Spacer(Modifier.height(12.dp))
-                                    Text("Connexion sécurisée…", color = Uphf.Text)
-                                }
-                            }
-                        }
+                        // Squelette animé (forme de l'accueil) au lieu d'un simple indicateur.
+                        Surface(color = Uphf.Background, modifier = Modifier.fillMaxSize()) { LoadingSkeleton() }
                     } else {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter), color = Uphf.Teal, trackColor = Uphf.TealSoft)
                     }
@@ -773,6 +775,21 @@ private fun HomeScreen(state: MainUiState, viewModel: MainViewModel) {
     }
 }
 
+@Composable
+private fun LoadingSkeleton() {
+    val pulse = rememberInfiniteTransition(label = "squelette")
+    val alpha by pulse.animateFloat(0.45f, 0.9f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "alpha")
+    val block = if (Uphf.dark) Color(0xFF222C34) else Color(0xFFE4E8EB)
+    @Composable fun Bar(w: Float, h: Int, r: Int = 14) = Box(Modifier.fillMaxWidth(w).height(h.dp).clip(RoundedCornerShape(r.dp)).background(block.copy(alpha = alpha)))
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 22.dp, vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Bar(0.45f, 16); Bar(0.7f, 34)
+        Box(Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(28.dp)).background(Uphf.Teal.copy(alpha = alpha * 0.35f)))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { repeat(3) { Box(Modifier.weight(1f).height(84.dp).clip(RoundedCornerShape(24.dp)).background(block.copy(alpha = alpha))) } }
+        Bar(1f, 76, 24); Bar(1f, 76, 24)
+        Text("Connexion sécurisée…", color = Uphf.Muted, modifier = Modifier.align(Alignment.CenterHorizontally))
+    }
+}
+
 /** « À rattraper » : étudiants avec 2 absences non rattrapées ou plus (semestre en cours), manipulations manquées
  *  et créneau proposé (même manipulation, autre groupe de la même classe, à partir d'aujourd'hui). */
 @Composable
@@ -835,23 +852,35 @@ private fun MakeupScreen(state: MainUiState, viewModel: MainViewModel) {
 /** Carte « Maintenant » (comme la Now Bar de One UI) : la séance en cours ou la prochaine du jour, avec « Faire l'appel ». */
 @Composable
 private fun NowCard(data: RepositoryData, me: String?, todays: List<TeachingSession>, pending: List<PendingSlot>, viewModel: MainViewModel) {
-    data class Next(val title: String, val detail: String, val start: String, val end: String, val done: Boolean, val open: () -> Unit)
+    data class Next(val title: String, val detail: String, val start: String, val end: String, val done: Boolean, val open: () -> Unit, val needGrades: Boolean = false)
     val now = java.time.LocalTime.now().toString().take(5)
     val list = buildList {
         pending.filter { it.plan.date == today() }.forEach { x ->
             add(Next(x.groupName, listOfNotNull(x.slot.manipulation + (data.manipTitle(x.plan.spaceId, x.slot.manipulation)?.let { " — $it" } ?: ""), x.slot.room?.let { "Salle $it" }).joinToString(" · "),
-                x.plan.startTime.take(5), x.plan.endTime.take(5), false) { viewModel.openPlannedSession(x.slot.id, x.s2) })
+                x.plan.startTime.take(5), x.plan.endTime.take(5), false, open = { viewModel.openPlannedSession(x.slot.id, x.s2) }))
         }
         todays.filter { it.teacherId == me || me == null }.forEach { s ->
-            val done = data.attendanceBySession[s.id].orEmpty().isNotEmpty()
-            add(Next(data.className(s.classId), if (done) "Appel déjà saisi" else "Appel non saisi", s.startTime.take(5), s.endTime.take(5), done) { viewModel.selectAttendanceSession(s.id) })
+            val recs = data.attendanceBySession[s.id].orEmpty(); val done = recs.isNotEmpty()
+            val needGrades = recs.any { (it.status == AttendanceStatus.PRESENT || it.status == AttendanceStatus.LATE) && it.grade == null }
+            add(Next(data.className(s.classId), if (done) "Appel déjà saisi" else "Appel non saisi", s.startTime.take(5), s.endTime.take(5), done, { viewModel.selectAttendanceSession(s.id) }, needGrades))
         }
     }.sortedBy { it.start }
-    val next = list.firstOrNull { it.end >= now && !it.done } ?: list.firstOrNull { it.end >= now } ?: return
-    val running = now >= next.start
+    // Carte contextuelle : avant/pendant la séance → « Faire l'appel » ; après → appel oublié, ou notes à saisir.
+    val upcoming = list.filter { it.end >= now }
+    val ended = list.filter { it.end < now }
+    val next = upcoming.firstOrNull { !it.done } ?: upcoming.firstOrNull { !it.needGrades || now < it.end }
+        ?: ended.lastOrNull { !it.done } ?: ended.lastOrNull { it.needGrades } ?: upcoming.firstOrNull() ?: return
+    val finished = next.end < now
+    val running = !finished && now >= next.start
     val mins = runCatching { java.time.Duration.between(java.time.LocalTime.parse(now), java.time.LocalTime.parse(next.start)).toMinutes() }.getOrDefault(0)
-    val whenLabel = when { running -> "en cours"; mins < 120 -> "dans $mins min"; else -> "à ${next.start.replace(':', 'h')}" }
-    Card(colors = CardDefaults.cardColors(containerColor = Uphf.Teal), shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
+    val whenLabel = when { finished -> "terminée"; running -> "en cours"; mins < 120 -> "dans $mins min"; else -> "à ${next.start.replace(':', 'h')}" }
+    val action = when { !next.done -> "Faire l’appel"; finished && next.needGrades -> "Saisir les notes"; else -> "Voir l’appel" }
+    // Apparition douce (ressort) de la carte.
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val scale by animateFloatAsState(if (shown) 1f else 0.94f, spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessLow), label = "maintenant")
+    Card(colors = CardDefaults.cardColors(containerColor = if (finished && !next.done) Uphf.Bad else Uphf.Teal), shape = RoundedCornerShape(28.dp),
+        modifier = Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale; alpha = scale.coerceIn(0f, 1f) }) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("MAINTENANT · ${next.start} – ${next.end}", color = Uphf.OnTeal, style = MaterialTheme.typography.labelSmall,
@@ -865,7 +894,7 @@ private fun NowCard(data: RepositoryData, me: String?, todays: List<TeachingSess
             }
             Button(onClick = next.open, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.OnTeal, contentColor = Uphf.Teal),
                 modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Icon(Icons.Default.HowToReg, null); Spacer(Modifier.width(8.dp)); Text(if (next.done) "Voir l’appel" else "Faire l’appel", fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.HowToReg, null); Spacer(Modifier.width(8.dp)); Text(action, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1120,8 +1149,9 @@ private fun AttendanceScreen(state: MainUiState, viewModel: MainViewModel) {
             }
             if (students.isEmpty()) item { EmptyState("Aucun étudiant dans ce groupe.") }
         }
+        val hapticSave = LocalHapticFeedback.current
         ExtendedFloatingActionButton(
-            onClick = viewModel::saveAttendance,
+            onClick = { hapticSave.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.saveAttendance() },
             containerColor = Uphf.Ochre,
             contentColor = Color(0xFF1D1A14),
             shape = RoundedCornerShape(50),
@@ -1152,17 +1182,19 @@ private fun AttendanceRow(student: Student, draft: AttendanceDraft, saved: Atten
                 }
                 Text(if (expanded) "Masquer" else "Commentaire", color = Uphf.Teal, style = MaterialTheme.typography.labelMedium)
             }
+            val haptic = LocalHapticFeedback.current
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AttendanceStatus.entries.forEach { st ->
                     val on = draft.status == st
                     val bg by animateColorAsState(if (on) statusColor(st) else Uphf.Surface, tween(200), label = "fond")
                     val edge by animateColorAsState(if (on) statusColor(st) else Uphf.Line, tween(200), label = "bord")
                     val ink by animateColorAsState(if (on) Uphf.OnTeal else Uphf.Text, tween(200), label = "texte")
+                    // Bouton P / A / R / J : pilule de 48 dp, petite vibration au choix (retour tactile).
                     Box(
-                        Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(10.dp))
+                        Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(50))
                             .background(bg)
-                            .border(1.5.dp, edge, RoundedCornerShape(10.dp))
-                            .bounceClick { viewModel.updateAttendanceStatus(student.id, st) },
+                            .border(1.5.dp, edge, RoundedCornerShape(50))
+                            .bounceClick { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); viewModel.updateAttendanceStatus(student.id, st) },
                         contentAlignment = Alignment.Center
                     ) { Text(st.label, color = ink, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
                 }

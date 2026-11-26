@@ -510,7 +510,7 @@
       doc.setFontSize(10.5);doc.text(`Année universitaire ${year} - Répartition en ${G} groupes`,W/2,M+15,{align:'center'});
       // Blocs de groupes
       const top=M+21,foot=8,gapB=5,avail=H-top-M-foot-(blocks-1)*gapB,bh=avail/blocks,rh=bh/(R+2),gw=(IW-nw)/per;
-      const fs=Math.max(7,Math.min(11,rh*1.75));
+      const fs=Math.max(8,Math.min(11,rh*1.75));
       for(let b=0;b<blocks;b++){
         const y0=top+b*(bh+gapB),gs=Array.from({length:per},(_,k)=>b*per+k).filter(g=>g<G);
         // en-tête du bloc

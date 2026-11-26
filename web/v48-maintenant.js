@@ -19,15 +19,17 @@
   const client=()=>root.supabaseClient||null;
 
   /* ---------- Fonctions pures (testées sous Node) ---------- */
-  /** Prochaine séance du jour : en cours ou à venir, appel non saisi en priorité. */
+  /** Carte contextuelle : avant/pendant une séance → « Faire l'appel » ; après → appel oublié, ou notes à saisir. */
   function pickNow(items,now){
-    const list=(items||[]).filter(x=>hm(x.end)>=now).sort((a,b)=>hm(a.start).localeCompare(hm(b.start)));
-    const next=list.find(x=>!x.done)||list[0];
+    const all=(items||[]).slice().sort((a,b)=>hm(a.start).localeCompare(hm(b.start)));
+    const upcoming=all.filter(x=>hm(x.end)>=now),ended=all.filter(x=>hm(x.end)<now);
+    const next=upcoming.find(x=>!x.done)||upcoming[0]||[...ended].reverse().find(x=>!x.done)||[...ended].reverse().find(x=>x.needGrades);
     if(!next)return null;
-    const running=now>=hm(next.start);
+    const finished=hm(next.end)<now,running=!finished&&now>=hm(next.start);
     const [h1,m1]=now.split(':').map(Number),[h2,m2]=hm(next.start).split(':').map(Number);
     const mins=(h2*60+m2)-(h1*60+m1);
-    return {...next,when:running?'en cours':mins<120?`dans ${mins} min`:`à ${hm(next.start).replace(':','h')}`};
+    const action=!next.done?'Faire l\u2019appel':finished&&next.needGrades?'Saisir les notes':'Voir l\u2019appel';
+    return {...next,finished,action,when:finished?'terminée':running?'en cours':mins<120?`dans ${mins} min`:`à ${hm(next.start).replace(':','h')}`};
   }
   /** Étudiants avec au moins `min` absences non rattrapées ; créneau proposé = même manipulation, autre groupe, à partir d'aujourd'hui. */
   function makeupRows(absences,plan,today,min=2){
@@ -59,17 +61,18 @@
     const [s2,s1,ses,titles]=await Promise.all([
       c.from('v33_s2_slots').select('id,group_no,manipulation_code,room,attendance_session_id,space_id,session:v33_s2_sessions!inner(session_date,start_time,end_time,class_name)').eq('teacher_id',uid).eq('session.session_date',day0),
       c.from('session_plans').select('id,session_id,start_time,end_time,manipulation,room,status,classes(name)').eq('teacher_id',uid).eq('plan_date',day0).is('deleted_at',null),
-      c.from('sessions').select('id,start_time,end_time,classes(name),attendance(count)').eq('teacher_id',uid).eq('session_date',day0).is('deleted_at',null),
+      c.from('sessions').select('id,start_time,end_time,classes(name),attendance(count),ng:attendance(count)').eq('teacher_id',uid).eq('session_date',day0).is('deleted_at',null).is('ng.grade',null).in('ng.status',['present','retard']),
       c.from('v33_s2_manipulations').select('space_id,code,title')]);
     const title=(sp,code)=>(titles.data||[]).find(x=>x.space_id===sp&&x.code===code)?.title;
     const done=new Map((ses.data||[]).map(s=>[String(s.id),(s.attendance?.[0]?.count||0)>0]));
+    const needGrades=new Map((ses.data||[]).map(s=>[String(s.id),(s.ng?.[0]?.count||0)>0]));
     const items=[];const seen=new Set();
     for(const r of s2.data||[]){const sid=r.attendance_session_id?String(r.attendance_session_id):null;if(sid)seen.add(sid);
       items.push({title:`${r.session.class_name}-G${r.group_no}`,detail:[r.manipulation_code+(title(r.space_id,r.manipulation_code)?' — '+title(r.space_id,r.manipulation_code):''),r.room?'Salle '+r.room:''].filter(Boolean).join(' · '),
-        start:r.session.start_time,end:r.session.end_time,done:sid?!!done.get(sid):false,value:sid||`s2:${r.id}`});}
+        start:r.session.start_time,end:r.session.end_time,done:sid?!!done.get(sid):false,needGrades:sid?!!needGrades.get(sid):false,value:sid||`s2:${r.id}`});}
     for(const p of s1.data||[]){if(String(p.status||'').toLowerCase()==='cancelled')continue;const sid=p.session_id?String(p.session_id):null;if(sid)seen.add(sid);
-      items.push({title:p.classes?.name||'Séance',detail:[p.manipulation,p.room?'Salle '+p.room:''].filter(Boolean).join(' · '),start:p.start_time,end:p.end_time,done:sid?!!done.get(sid):false,value:sid||`plan:${p.id}`});}
-    for(const s of ses.data||[]){if(seen.has(String(s.id)))continue;items.push({title:s.classes?.name||'Séance',detail:done.get(String(s.id))?'Appel déjà saisi':'Appel non saisi',start:s.start_time,end:s.end_time,done:!!done.get(String(s.id)),value:String(s.id)});}
+      items.push({title:p.classes?.name||'Séance',detail:[p.manipulation,p.room?'Salle '+p.room:''].filter(Boolean).join(' · '),start:p.start_time,end:p.end_time,done:sid?!!done.get(sid):false,needGrades:sid?!!needGrades.get(sid):false,value:sid||`plan:${p.id}`});}
+    for(const s of ses.data||[]){if(seen.has(String(s.id)))continue;items.push({title:s.classes?.name||'Séance',detail:done.get(String(s.id))?'Appel déjà saisi':'Appel non saisi',start:s.start_time,end:s.end_time,done:!!done.get(String(s.id)),needGrades:!!needGrades.get(String(s.id)),value:String(s.id)});}
     return pickNow(items,nowHm());
   }
   async function loadMakeup(){
@@ -117,10 +120,11 @@
     busy=true;last=Date.now();
     try{
       const h=host();if(!h)return;
+      if(!h.children.length)h.innerHTML='<div class="v48-skel" aria-hidden="true"><i class="big"></i><i></i><i></i></div>';
       const [now,mk]=await Promise.all([loadNow().catch(()=>null),loadMakeup().catch(()=>[])]);
-      const nowHtml=now?`<section class="v48-now" aria-label="Séance maintenant"><div class="v48-now-top"><span class="v48-pill">MAINTENANT · ${esc(hm(now.start))} – ${esc(hm(now.end))}</span><span class="v48-when">${esc(now.when)}</span></div>
+      const nowHtml=now?`<section class="v48-now${now.finished&&!now.done?' v48-now-late':''}" aria-label="Séance maintenant"><div class="v48-now-top"><span class="v48-pill">MAINTENANT · ${esc(hm(now.start))} – ${esc(hm(now.end))}</span><span class="v48-when">${esc(now.when)}</span></div>
         <p class="v48-now-title">${esc(now.title)}</p><p class="v48-now-detail">${esc(now.detail)}</p>
-        <button type="button" class="v48-now-btn" data-v48-open="${esc(now.value)}"><i class="fas fa-clipboard-check"></i> ${now.done?'Voir l’appel':'Faire l’appel'}</button></section>`:'';
+        <button type="button" class="v48-now-btn" data-v48-open="${esc(now.value)}"><i class="fas fa-clipboard-check"></i> ${esc(now.action)}</button></section>`:'';
       const mkHtml=`<section class="v48-card"><div class="v48-card-head"><h3>À rattraper</h3><span class="v48-muted">2 absences non rattrapées ou plus</span></div>
         ${mk.length?mk.slice(0,6).map(r=>`<div class="v48-row"><div class="v48-grow"><b>${esc(r.name)}</b><small>${esc(r.class_name)} · manquées : ${r.missed.map(m=>esc(fr(m.date)+(m.manip?' ('+m.manip+')':''))).join(', ')}</small>${r.suggestion?`<small class="v48-sug"><i class="fas fa-rotate-right"></i> Proposé : ${esc(r.suggestion)}</small>`:''}</div><span class="v48-badge">${r.missed.length} abs.</span><button type="button" class="v48-link" data-v48-student="${esc(r.student_id)}">Fiche</button></div>`).join('')
           +(mk.length>6?`<p class="v48-muted">… et ${mk.length-6} autre(s).</p>`:''):'<p class="v48-muted">Aucun étudiant à rattraper pour l’instant.</p>'}</section>`;
@@ -153,6 +157,8 @@
         document.querySelector('#v48-home [data-v48-file]')?.scrollIntoView({behavior:'smooth',block:'nearest'});}
     });
     document.addEventListener('input',e=>{if(e.target.matches?.('#v48-home [data-v48-q]'))onInput(e);});
+    /* Retour tactile (téléphone) quand on choisit un statut pendant l'appel. */
+    document.addEventListener('change',e=>{if(e.target.matches?.('.presence-select,[name^="status"],select[data-status]'))try{navigator.vibrate?.(8);}catch(_){}});
   }
   if(root.document){
     wire();

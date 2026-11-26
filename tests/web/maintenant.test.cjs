@@ -7,7 +7,10 @@ test('Maintenant : la séance en cours, sinon la prochaine ; les séances finies
   assert.equal(pickNow(items,'09:15').title,'C');assert.equal(pickNow(items,'09:15').when,'en cours');
   assert.equal(pickNow(items,'12:30').title,'B');assert.equal(pickNow(items,'12:30').when,'dans 90 min');
   assert.equal(pickNow(items,'10:00').when,'en cours');
-  assert.equal(pickNow(items,'17:30'),null);
+  assert.equal(pickNow(items,'17:30').title,'B','après la journée : la dernière séance sans appel');
+  assert.equal(pickNow(items,'17:30').action,'Faire l\u2019appel');assert.equal(pickNow(items,'17:30').when,'terminée');
+  assert.equal(pickNow([{title:'A',start:'08:00',end:'11:00',done:true,needGrades:true}],'12:00').action,'Saisir les notes');
+  assert.equal(pickNow([{title:'A',start:'08:00',end:'11:00',done:true}],'12:00'),null,'tout est fait : pas de carte');
   assert.equal(pickNow([{title:'D',start:'14:00',end:'17:00'}],'08:00').when,'à 14h00');
 });
 test('À rattraper : 2 absences ou plus, créneau proposé dans un autre groupe',()=>{

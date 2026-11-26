@@ -926,3 +926,19 @@ body,#app-container,.content,#fst-main,#fst-main.content{background:var(--o-bg)!
 .v48-grade{width:30px;text-align:right;color:var(--o-title)}
 @media (prefers-color-scheme:dark){.v48-st.bad{background:#3A1F1C;color:#F09A8F}.v48-st.late{background:#3A2F1C;color:#E2C08A}.v48-pill{background:rgba(14,20,24,.18)}}
 #fst-main .v48-search input{border:0!important;outline:0!important;background:transparent!important;border-radius:0!important;box-shadow:none!important;padding:0!important}
+/* V49 — Interactions (style One UI 9) : retour visuel au toucher, ouverture douce des pages, squelette de chargement.
+   Tout s'arrête si l'appareil demande moins d'animations. */
+.btn,#fst-sidebar-nav .nav-tab,.v48-now-btn,.v48-link,.v48-result,#v33-sem-switch button{transition:transform .18s cubic-bezier(.34,1.56,.64,1),background-color .2s,box-shadow .2s,color .2s}
+.btn:active,#fst-sidebar-nav .nav-tab:active,.v48-now-btn:active,.v48-link:active,.v48-result:active,#v33-sem-switch button:active{transform:scale(.96)}
+#fst-main .card,#fst-main .stats-card,#fst-main .stat-card,#fst-main .v22-kpi,.v48-card,.v48-now{transition:transform .22s cubic-bezier(.34,1.56,.64,1),box-shadow .22s}
+@media (hover:hover){#fst-main :is(.stat-card,.stats-card,.v22-kpi):hover,.v48-card:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(28,61,94,.08)!important}}
+#fst-main>.tab-content.active{animation:v49-in .26s cubic-bezier(.2,.8,.2,1)}
+@keyframes v49-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.v48-now{animation:v49-pop .38s cubic-bezier(.34,1.56,.64,1)}
+@keyframes v49-pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.v48-now-late{background:var(--o-bad)!important}.v48-now-late .v48-now-btn{color:var(--o-bad)}
+.v48-skel{display:flex;flex-direction:column;gap:12px}.v48-skel i{display:block;height:84px;border-radius:24px;background:var(--o-surface-2);animation:v49-pulse 1s ease-in-out infinite alternate}
+.v48-skel i.big{height:150px;border-radius:28px;background:var(--o-teal-soft)}
+@keyframes v49-pulse{from{opacity:.55}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){#fst-main>.tab-content.active,.v48-now,.v48-skel i{animation:none!important}
+  .btn,#fst-sidebar-nav .nav-tab,.v48-now-btn,#fst-main .card,.v48-card{transition:none!important}.btn:active{transform:none}}
