@@ -345,6 +345,23 @@ class S2Admin(private val repository: PresenceRepository) {
         api.rows(session, "space_members", "role", mapOf("profile_id" to "eq.${session.userId}", "role" to "eq.admin"), "space_id").isNotEmpty() ||
             runCatching { api.rows(session, "space_permissions", "perm", mapOf("profile_id" to "eq.${session.userId}"), "perm").isNotEmpty() }.getOrDefault(false)
     }
+    /** Comptes enseignants d'un espace (administrateur d'espace ou permission « accounts.manage »). */
+    suspend fun createTeacherAccount(spaceId: String, fullName: String, username: String, email: String, pin: String): String = repository.online { api, session ->
+        require(fullName.isNotBlank() && username.isNotBlank()) { "Nom et identifiant obligatoires." }
+        require(Regex("^\\d{6}$").matches(pin)) { "Le PIN doit avoir 6 chiffres." }
+        val r = api.adminAction(session, buildJsonObject { put("action", "create"); put("space_id", spaceId); put("full_name", fullName.trim()); put("username", username.trim()); put("pin", pin); if (email.isNotBlank()) put("email", email.trim()) })
+        r.s("error")?.let { e -> throw IllegalStateException(when (r.s("code")) { "USERNAME_TAKEN" -> "Identifiant déjà utilisé."; "EMAIL_TAKEN" -> "E-mail déjà utilisé."; else -> e }) }
+        r.s("username") ?: username
+    }
+    suspend fun resetTeacherPin(profileId: String, pin: String) = repository.online { api, session ->
+        require(Regex("^\\d{6}$").matches(pin)) { "Le PIN doit avoir 6 chiffres." }
+        val r = api.adminAction(session, buildJsonObject { put("action", "set_teacher_pin"); put("user_id", profileId); put("pin", pin) })
+        r.s("error")?.let { throw IllegalStateException(it) }
+    }
+    /** Toutes mes permissions (tous espaces confondus). */
+    suspend fun myPermissions(): Set<String> = repository.online { api, session ->
+        runCatching { api.rows(session, "space_permissions", "perm", mapOf("profile_id" to "eq.${session.userId}"), "perm").mapNotNull { it.s("perm") }.toSet() }.getOrDefault(emptySet())
+    }
     /** Rôles et accès (super administrateur). */
     data class PermRow(val spaceId: String, val profileId: String, val perm: String)
     data class PermChange(val id: String, val spaceId: String, val profileId: String, val before: List<String>, val after: List<String>, val at: String)
