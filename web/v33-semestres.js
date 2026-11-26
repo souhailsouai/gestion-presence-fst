@@ -205,7 +205,7 @@
 
   /* ----- Planning ----- */
   function viewPlanning(v,d,admin){
-    const issues=d.sessions.length?C().checkPlan({settings:d.settings,excluded:d.excluded,sessions:d.sessions}):[];
+    const issues=d.sessions.length?C().checkPlan({settings:d.settings,classSlots:d.slots,excluded:d.excluded,sessions:d.sessions}):[];
     const errors=issues.filter(i=>i.level==='erreur'),warns=issues.filter(i=>i.level==='attention'),infos=issues.filter(i=>i.level==='info');
     const teachers=[...new Set(d.sessions.flatMap(s=>s.slots.map(g=>g.teacher_id)).filter(Boolean))].sort((a,b)=>tname(a).localeCompare(tname(b)));
     if(!teachers.includes(state.planTeacher))state.planTeacher=teachers[0]||'';
@@ -273,9 +273,11 @@
     }
   }
   function cell(g){return g?`<span class="v33-m">${esc(g.manipulation_code)}</span><span class="v33-room">${g.room?'Salle '+esc(g.room):''}</span><span class="v33-t">${esc(short(tname(g.teacher_id)))}</span>`:'—';}
+  /** Groupes (= manipulations) d'une classe : 4, 5 ou 6 selon le réglage de la classe, sinon celui de l'espace. */
+  function gcOf(d,cls){return C().classCounts?C().classCounts(cls,d.settings,d.slots).group_count:d.settings.group_count;}
   function planByClass(box,d,admin){
     const cls=state.planClass;const list=d.sessions.filter(s=>s.class_name===cls);
-    const slot=d.slots.find(s=>s.class_name===cls);const G=d.settings.group_count;
+    const slot=d.slots.find(s=>s.class_name===cls);const G=gcOf(d,cls);
     if(!list.length){box.innerHTML=`<div class="v33-empty small"><p>Aucune séance pour ${cls}.</p></div>`;return;}
     const ex=C().excludedMap(d.excluded);const rows=[];
     for(let x=list[0].session_date;x<=list[list.length-1].session_date;x=C().addDays(x,7))if(ex.has(x)&&!list.some(s=>s.session_date===x))rows.push({ex:ex.get(x),date:x});
@@ -369,7 +371,7 @@
       const names=pg.list.map(c=>c.class_name);
       const list=d.sessions.filter(s=>names.includes(s.class_name)).sort((a,b)=>a.session_date.localeCompare(b.session_date));if(!list.length)continue;
       if(!first)doc.addPage();first=false;
-      const slot=d.slots.find(s=>s.class_name===names[0]);const G=d.settings.group_count;const multi=names.length>1;
+      const slot=d.slots.find(s=>s.class_name===names[0]);const G=Math.max(...names.map(n=>gcOf(d,n)));const multi=names.length>1;
       const rows=[];const a=list[0].session_date,b=list[list.length-1].session_date;
       for(let x=a;x<=b;x=C().addDays(x,7))if(ex.has(x)&&!list.some(s=>s.session_date===x))rows.push({date:x,ex:exLabel(x)});
       for(const s of list)rows.push({date:s.session_date,s});rows.sort((p,q2)=>p.date.localeCompare(q2.date));
@@ -439,7 +441,7 @@
       band(M+12,y,IW-24,10,[215,215,215],day.toUpperCase(),16);y+=10;
       const cw=(IW-24)/names.length;names.forEach((n,i)=>band(M+12+i*cw,y,cw,10,CLASS_RGB[i%CLASS_RGB.length],n,14));y+=18;
       doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(30);doc.text(`Année universitaire ${d.settings.academic_year||''} — Semestre 2`,W/2,y,{align:'center'});y+=6;
-      doc.setFont('helvetica','normal');doc.text(`Horaire : ${hours} — ${G} groupes par classe`,W/2,y,{align:'center'});y+=4;
+      const Gs=names.map(n=>gcOf(d,n));doc.setFont('helvetica','normal');doc.text(`Horaire : ${hours} — `+(new Set(Gs).size===1?`${Gs[0]} groupes par classe`:names.map((n,i)=>`${n} : ${Gs[i]} groupes`).join(' · ')),W/2,y,{align:'center'});y+=4;
       for(const e of exList){if(!onDay(e,bk.weekday))continue;
         band(M+12,y,IW-24,7,[244,176,120],exText(e).toUpperCase(),9.5);y+=7.5;}
       y+=5;band(M+12,y,IW-24,7,[243,239,200],'LÉGENDE DES MANIPULATIONS',10.5);y+=11;
@@ -448,13 +450,13 @@
         doc.setFont('helvetica','bold');doc.text(m.code,M+16,y);doc.setFont('helvetica','normal');doc.text(m.title&&latin(m.title)?m.title:'.....................................................................................',M+30,y);
         doc.text(st?.room?String(st.room):'..................',W-M-28,y,{align:'center'});y+=1.8;doc.setLineWidth(0.2);doc.line(M+12,y,W-M-12,y);y+=6;}
       y+=4;doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Repérage des groupes',W/2,y,{align:'center'});y+=2.5;
-      const gw=(IW-24)/G;for(let g=0;g<G;g++){const c=GROUP_RGB[g%GROUP_RGB.length];band(M+12+g*gw,y,gw,7,c,'G'+(g+1),10,ink(c));}y+=15;
+      const Gm=Math.max(...Gs),gw=(IW-24)/Gm;for(let g=0;g<Gm;g++){const c=GROUP_RGB[g%GROUP_RGB.length];band(M+12+g*gw,y,gw,7,c,'G'+(g+1),10,ink(c));}y+=15;
       doc.setFont('helvetica','italic');doc.setFontSize(9.5);doc.setTextColor(40);doc.text('Présence / absence à renseigner dans les cases. Manipulations prévues indiquées sous chaque date (à corriger à la main si besoin).',W/2,y,{align:'center'});
       /* Une page par classe et par groupe */
       names.forEach((cls,ci)=>{
         const sess=d.sessions.filter(s=>s.class_name===cls).sort((a,b)=>a.session_date.localeCompare(b.session_date));
         const cols=Math.max(sess.length+1,6);
-        for(let g=1;g<=G;g++){
+        for(let g=1;g<=gcOf(d,cls);g++){
           const stu=d.members.filter(m=>m.class_name===cls&&m.group_no===g&&m.status==='actif').map(m=>d.studentById?.get(m.student_id)?.name||sname(m.student_id)).sort((a,b)=>a.localeCompare(b,'fr'));
           const nrows=Math.max(12,stu.length+2);
           page();let y=14;const X=M,Wt=IW;
@@ -495,11 +497,12 @@
     const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     const G=d.settings.group_count,W=297,H=210,M=10,IW=W-2*M,year=d.settings.academic_year||'2026/2027';
     const ink=c=>(c[0]*0.299+c[1]*0.587+c[2]*0.114)>165?[30,30,30]:[255,255,255];
-    const per=3,blocks=Math.ceil(G/per),nw=11;
+    const per=3,nw=11;
     let first=true;
     for(const cls of classes){
       const act=d.members.filter(m=>m.class_name===cls&&m.status==='actif');if(!act.length)continue;
       if(!first)doc.addPage();first=false;
+      const G=gcOf(d,cls),blocks=Math.ceil(G/per);
       const lists=Array.from({length:G},(_,g)=>act.filter(m=>m.group_no===g+1).map(m=>sname(m.student_id)).sort((a,b)=>a.localeCompare(b,'fr')));
       const R=Math.max(12,...lists.map(l=>l.length));
       // En-tête
@@ -545,7 +548,7 @@
       v.onclick=e=>{
       const gp=e.target.closest('[data-gpdf]');if(gp)return exportGroups(gp.dataset.gpdf==='one'?[cls]:classesOf(d),d);if(e.target.closest('#v33-init'))initGroups(d);};return;
     }
-    const G=d.settings.group_count,cls=state.groupClass;
+    const cls=state.groupClass,G=gcOf(d,cls);
     const ms=d.members.filter(m=>m.class_name===cls),act=ms.filter(m=>m.status==='actif'),exc=ms.filter(m=>m.status==='exclu');
     const sizes=Array.from({length:G},(_,i)=>act.filter(m=>m.group_no===i+1).length);
     const gap=Math.max(...sizes)-Math.min(...sizes);
@@ -554,7 +557,7 @@
         <div class="v33-balance ${gap<=1?'ok':'warn'}"><i class="fas ${gap<=1?'fa-scale-balanced':'fa-triangle-exclamation'}"></i><div><b>${gap<=1?'Groupes équilibrés':'Écart de '+gap+' étudiants'}</b><small>${act.length} présent(s) répartis · ${exc.length} mis de côté</small></div></div>
         <div class="v33-sizes">${sizes.map((n,i)=>`<div><span>G${i+1}</span><b>${n}</b></div>`).join('')}</div>
         ${canExport()?`<div class="v33-row tight"><button type="button" class="btn v33-btn ghost" data-gpdf="one"><i class="fas fa-file-pdf"></i> PDF des groupes de ${esc(cls)}</button><button type="button" class="btn v33-btn ghost" data-gpdf="all"><i class="fas fa-file-pdf"></i> Toutes les classes (une page par classe)</button></div>`:''}
-        ${admin?`<div class="v33-row tight"><button type="button" class="btn btn-primary v33-btn" data-bal ${gap<=1?'disabled':''}><i class="fas fa-scale-balanced"></i> Équilibrer</button><button type="button" class="btn v33-btn ghost" data-sync><i class="fas fa-user-plus"></i> Nouveaux</button></div>`:''}</section>
+        ${admin?`<div class="v33-row tight"><button type="button" class="btn btn-primary v33-btn" data-bal ${gap<=1&&!act.some(m=>!(m.group_no>=1&&m.group_no<=G))?'disabled':''}><i class="fas fa-scale-balanced"></i> Équilibrer</button><button type="button" class="btn v33-btn ghost" data-sync><i class="fas fa-user-plus"></i> Nouveaux</button></div>`:''}</section>
       <div class="v33-groups">${Array.from({length:G},(_,i)=>i+1).map(g=>{const list=act.filter(m=>m.group_no===g).sort((a,b)=>sname(a.student_id).localeCompare(sname(b.student_id)));
         return `<section class="v33-group" data-drop="${g}"><header><h4>G${g}</h4><span class="v33-count">${list.length}</span></header><ul>${list.map(m=>`<li ${admin?`draggable="true" data-drag="${m.student_id}"`:''}><span class="v33-sn">${esc(sname(m.student_id))}</span>${m.locked?'<i class="fas fa-lock v33-lk" title="Verrouillé dans ce groupe"></i>':''}${admin?`<button type="button" class="v33-icon" data-menu="${m.student_id}" aria-label="Actions pour ${esc(sname(m.student_id))}"><i class="fas fa-ellipsis-vertical"></i></button>`:''}</li>`).join('')||'<li class="v33-muted">—</li>'}</ul></section>`;}).join('')}</div>
       ${exc.length?`<section class="v33-card v33-excl"><h4><i class="fas fa-user-slash"></i> Mis de côté pour le S2 <span class="v33-count">${exc.length}</span></h4>${exc.map(m=>`<div class="v33-item"><div><b>${esc(sname(m.student_id))}</b><small>G${m.group_no} au S1 · ${esc(m.reason||'')}</small></div>${admin?`<button type="button" class="btn v33-btn ghost sm" data-in="${m.student_id}">Réintégrer</button>`:''}</div>`).join('')}</section>`:''}
@@ -590,7 +593,7 @@
   }
   function balance(d,cls){
     const members=d.members.filter(m=>m.class_name===cls).map(m=>Object.assign({},m,{name:sname(m.student_id)}));
-    const {moves}=C().balanceGroups(members,d.settings.group_count);
+    const {moves}=C().balanceGroups(members,c=>gcOf(d,c));
     if(!moves.length){toast('Déjà équilibré');return;}
     if(!confirm(`${moves.length} déplacement(s) dans ${cls} (présents seulement, verrouillés non déplacés) :\n\n${moves.map(m=>`${m.name} : G${m.from} → G${m.to}`).join('\n')}\n\nAppliquer ?`))return;
     mutate(`${cls} équilibrée (${moves.length} déplacement(s))`,()=>{for(const mv of moves)d.members.find(x=>x.student_id===mv.student_id).group_no=mv.to;},
@@ -600,7 +603,7 @@
     const known=new Set(d.members.map(m=>m.student_id));
     // MPI1 · PC1 : le groupe vient du S1 ; autres espaces : le plus petit groupe de la classe
     const add=d.students.filter(s=>!known.has(s.id)&&(s.group_no||!isDefaultSpace())).map(s=>{
-      if(s.group_no)return s;const G=d.settings.group_count;const cnt=Array.from({length:G},(_,i)=>d.members.filter(m=>m.class_name===s.class_name&&m.status==='actif'&&m.group_no===i+1).length);
+      if(s.group_no)return s;const G=gcOf(d,s.class_name);const cnt=Array.from({length:G},(_,i)=>d.members.filter(m=>m.class_name===s.class_name&&m.status==='actif'&&m.group_no===i+1).length);
       const g=cnt.indexOf(Math.min(...cnt))+1;d.members.push({student_id:s.id,class_name:s.class_name,group_no:g,status:'actif'});return Object.assign({},s,{group_no:g});});
     d.members=d.members.filter(m=>m.space_id!==undefined||known.has(m.student_id));
     if(!add.length){toast('Aucun nouvel étudiant');return;}
@@ -617,11 +620,11 @@
     state.busy++;
     try{
       const att=isDefaultSpace()?await allS1Attendance():[];
-      if(!isDefaultSpace()){const by=new Map();for(const s of d.students.slice().sort((a,b)=>a.name.localeCompare(b.name,'fr'))){const n=by.get(s.class_name)||0;by.set(s.class_name,n+1);s.group_no=(n%d.settings.group_count)+1;}}
+      if(!isDefaultSpace()){const by=new Map();for(const s of d.students.slice().sort((a,b)=>a.name.localeCompare(b.name,'fr'))){const n=by.get(s.class_name)||0;by.set(s.class_name,n+1);s.group_no=(n%gcOf(d,s.class_name))+1;}}
       const seen=new Map();for(const a of att){const s=seen.get(a.student_id)||{n:0,p:0};s.n++;if(a.status!=='absent')s.p++;seen.set(a.student_id,s);}
       let rows=d.students.filter(s=>s.group_no).map(s=>{const k=seen.get(s.id);const always=k&&k.n>=1&&k.p===0;
         return {space_id:state.space,student_id:s.id,class_name:s.class_name,group_no:s.group_no,s1_class_id:s.class_id,status:always?'exclu':'actif',reason:always?`Toujours absent au S1 (${k.n} séance${k.n>1?'s':''}) — réintégrable`:null,locked:false,name:s.name};});
-      const {members}=C().balanceGroups(rows,d.settings.group_count);
+      const {members}=C().balanceGroups(rows,c=>gcOf(d,c));
       rows=members.map(({name,...r})=>r);
       await q(client().from('v33_s2_group_members').insert(rows).select('student_id'));
       await audit('init_groups',{n:rows.length,excluded:rows.filter(r=>r.status==='exclu').length,balanced:true});
@@ -782,16 +785,22 @@
   /* ----- Paramètres ----- */
   function viewSettings(v,d){
     const s=d.settings;
-    v.innerHTML=`<section class="v33-card"><h4 class="v33-h">Semestre</h4><form id="v33-sform" class="v33-form"><label>Début du S2<input type="date" name="start" min="2027-01-11" value="${s.start_date}" required></label><label>Fin (facultatif)<input type="date" name="end" value="${s.end_date||''}"></label><label>Groupes<input type="number" name="g" min="1" max="12" value="${s.group_count}"></label><label>Manipulations<input type="number" name="m" min="1" max="9" value="${s.manip_count}"></label><button class="btn btn-primary v33-btn">Enregistrer</button></form></section>
+    v.innerHTML=`<section class="v33-card"><h4 class="v33-h">Semestre</h4><form id="v33-sform" class="v33-form"><label>Début du S2<input type="date" name="start" min="2027-01-11" value="${s.start_date}" required></label><label>Fin (facultatif)<input type="date" name="end" value="${s.end_date||''}"></label><label>Groupes (par défaut)<input type="number" name="g" min="1" max="12" value="${s.group_count}"></label><label>Manipulations (par défaut)<input type="number" name="m" min="1" max="9" value="${s.manip_count}"></label><button class="btn btn-primary v33-btn">Enregistrer</button></form></section>
       <section class="v33-card"><h4 class="v33-h">Créneaux des classes</h4><p class="v33-muted">Deux classes d'une même paire partagent le jour et les enseignants : « alternance » = une semaine chacune ; « bloc » = toutes les séances de la première puis de la seconde (comme le vendredi au S1).</p>
-      <div class="v33-slots">${d.slots.map(c=>`<div class="v33-slot" data-c="${c.class_name}"><b>${c.class_name}</b><label>Jour<select name="w">${[1,2,3,4,5,6].map(w=>`<option value="${w}" ${w===c.weekday?'selected':''}>${C().DAY_LABEL[w]}</option>`).join('')}</select></label><label>Début<input type="time" name="st" value="${c.start_time.slice(0,5)}"></label><label>Fin<input type="time" name="et" value="${c.end_time.slice(0,5)}"></label><label>Paire<input name="p" value="${esc(c.pair_key)}"></label><label>Ordre<input type="number" name="o" min="1" max="9" value="${c.pair_order}"></label><label>Mode<select name="mo"><option value="alternance" ${c.mode==='alternance'?'selected':''}>alternance</option><option value="bloc" ${c.mode==='bloc'?'selected':''}>bloc</option></select></label><label class="v33-check"><input type="checkbox" name="a" ${c.active?'checked':''}> active</label></div>`).join('')}</div>
+      <div class="v33-slots">${d.slots.map(c=>`<div class="v33-slot" data-c="${c.class_name}"><b>${c.class_name}</b><label>Jour<select name="w">${[1,2,3,4,5,6].map(w=>`<option value="${w}" ${w===c.weekday?'selected':''}>${C().DAY_LABEL[w]}</option>`).join('')}</select></label><label>Début<input type="time" name="st" value="${c.start_time.slice(0,5)}"></label><label>Fin<input type="time" name="et" value="${c.end_time.slice(0,5)}"></label><label>Paire<input name="p" value="${esc(c.pair_key)}"></label><label>Ordre<input type="number" name="o" min="1" max="9" value="${c.pair_order}"></label><label>Mode<select name="mo"><option value="alternance" ${c.mode==='alternance'?'selected':''}>alternance</option><option value="bloc" ${c.mode==='bloc'?'selected':''}>bloc</option></select></label><label title="Nombre de groupes de la classe = nombre de manipulations (une rotation complète)">Groupes / manips<select name="gc">${[4,5,6].map(n=>`<option value="${n}" ${n===gcOf(d,c.class_name)?'selected':''}>${n}</option>`).join('')}</select></label><label class="v33-check"><input type="checkbox" name="a" ${c.active?'checked':''}> active</label></div>`).join('')}</div>
       <div class="v33-row"><button type="button" class="btn btn-primary v33-btn" data-slots>Enregistrer les créneaux</button></div></section>`;
     v.onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const start=f.get('start');if(start<'2027-01-11'){toast('Le S2 ne peut pas commencer avant le 11/01/2027','err');return;}
       const patch={start_date:start,end_date:f.get('end')||null,group_count:Number(f.get('g')),manip_count:Number(f.get('m')),updated_at:new Date().toISOString()};
       mutate('Paramètres enregistrés',()=>Object.assign(d.settings,patch),async()=>{await q(client().from('v33_s2_settings').update(patch).eq('space_id',state.space).select('id'));audit('settings',patch);});};
     v.onclick=e=>{if(!e.target.closest('[data-slots]'))return;
-      const rows=[...v.querySelectorAll('.v33-slot')].map(tr=>({class_name:tr.dataset.c,weekday:Number(tr.querySelector('[name=w]').value),start_time:tr.querySelector('[name=st]').value,end_time:tr.querySelector('[name=et]').value,pair_key:tr.querySelector('[name=p]').value.trim()||tr.dataset.c,pair_order:Number(tr.querySelector('[name=o]').value)||1,mode:tr.querySelector('[name=mo]').value,active:tr.querySelector('[name=a]').checked,updated_at:new Date().toISOString()}));
+      const rows=[...v.querySelectorAll('.v33-slot')].map(tr=>({class_name:tr.dataset.c,weekday:Number(tr.querySelector('[name=w]').value),start_time:tr.querySelector('[name=st]').value,end_time:tr.querySelector('[name=et]').value,pair_key:tr.querySelector('[name=p]').value.trim()||tr.dataset.c,pair_order:Number(tr.querySelector('[name=o]').value)||1,mode:tr.querySelector('[name=mo]').value,group_count:Number(tr.querySelector('[name=gc]').value),active:tr.querySelector('[name=a]').checked,updated_at:new Date().toISOString()}));
       if(rows.some(r=>r.end_time<=r.start_time)){toast('Une heure de fin précède le début','err');return;}
+      // Une classe à 6 groupes a besoin de M1…M6 ; une classe réduite doit répartir les étudiants des groupes retirés.
+      const have=new Set((d.manips||[]).filter(m=>m.active!==false).map(m=>m.code)),maxN=Math.max(...rows.map(r=>r.group_count));
+      const lack=[];for(let k=1;k<=maxN;k++)if(!have.has('M'+k))lack.push('M'+k);
+      const shrink=rows.filter(r=>(d.members||[]).some(m=>m.class_name===r.class_name&&m.status==='actif'&&m.group_no>r.group_count)).map(r=>r.class_name);
+      const notes=[];if(lack.length)notes.push(`Ajoutez la manipulation ${lack.join(', ')} (onglet Manipulations).`);if(shrink.length)notes.push(`Puis « Équilibrer » les groupes de ${shrink.join(', ')}.`);
+      if(notes.length)setTimeout(()=>toast(notes.join(' '),'err'),1200);
       mutate('Créneaux enregistrés',()=>{d.slots=rows.map(r=>Object.assign({},r,{start_time:r.start_time+':00',end_time:r.end_time+':00'}));},async()=>{await q(client().from('v33_s2_class_slots').upsert(rows.map(r=>Object.assign({space_id:state.space},r)),{onConflict:'class_name'}).select('class_name'));audit('class_slots',{});});};
   }
 

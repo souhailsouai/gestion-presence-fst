@@ -1,5 +1,6 @@
 package tn.utm.fst.gestionpresence.nativeapp.ui
 
+import tn.utm.fst.gestionpresence.nativeapp.feature.s2.groupsOf
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -368,8 +369,23 @@ private fun SlotsEditor(s: S2Snapshot, onSave: (List<ClassSlot>) -> Unit) {
                     FilterChip(c.mode == "alternance", { rows[i] = c.copy(mode = "alternance") }, label = { Text("Alternance") })
                     FilterChip(c.mode == "bloc", { rows[i] = c.copy(mode = "bloc") }, label = { Text("Bloc") })
                 }
+                // Groupes de la classe = manipulations (rotation complète) : 4, 5 ou 6.
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Groupes / manips", color = Uphf.Text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    val cur = c.groupCount ?: s.settings.groupCount
+                    listOf(4, 5, 6).forEach { n ->
+                        FilterChip(cur == n, { rows[i] = c.copy(groupCount = n) }, label = { Text("$n") },
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal))
+                    }
+                }
             }
         }
+        // Une classe à 6 groupes a besoin des manipulations M1…M6.
+        val have = s.manips.filter { it.active }.map { it.code }.toSet()
+        val lack = (1..(rows.maxOfOrNull { it.groupCount ?: s.settings.groupCount } ?: 0)).map { "M$it" }.filter { it !in have }
+        if (lack.isNotEmpty()) Text("Ajoutez la manipulation ${lack.joinToString()} (onglet Manipulations).", color = Uphf.Bad)
+        val shrink = rows.filter { r -> s.members.any { it.className == r.className && it.status == "actif" && it.groupNo > (r.groupCount ?: s.settings.groupCount) } }.map { it.className }
+        if (shrink.isNotEmpty()) Text("Après l’enregistrement, « Équilibrer » les groupes de ${shrink.joinToString()}.", color = Uphf.Ochre)
         val clash = rows.filter { it.active }.groupBy { it.pairKey }.filter { (_, l) -> l.map { it.weekday }.distinct().size > 1 }.keys
         if (clash.isNotEmpty()) Text("Attention : « ${clash.joinToString()} » regroupe des classes de jours différents.", color = Uphf.Bad)
         Button(onClick = { onSave(rows.toList()) }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) {
@@ -648,7 +664,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.groupsTab(
                 Button(onClick = { ask = true }, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.fillMaxWidth()) { Text("Préparer les groupes S2") }
                 if (ask) AlertDialog(onDismissRequest = { ask = false }, title = { Text("Préparer les groupes S2 ?") },
                     text = { Text("Les groupes seront créés à partir du S1 puis équilibrés. Vous pourrez ensuite tout ajuster.") },
-                    confirmButton = { TextButton(onClick = { ask = false; run(null, false) { "${viewModel.s2.initGroups(s.settings.groupCount)} étudiant(s) répartis." } }) { Text("Préparer") } },
+                    confirmButton = { TextButton(onClick = { ask = false; run(null, false) { "${viewModel.s2.initGroups { s.groupsOf(it) }} étudiant(s) répartis." } }) { Text("Préparer") } },
                     dismissButton = { TextButton(onClick = { ask = false }) { Text("Annuler") } }, containerColor = Uphf.Surface)
             }
         }
@@ -665,7 +681,7 @@ private fun GroupsPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
     var edit by remember { mutableStateOf<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Member?>(null) }
     var preview by remember { mutableStateOf<List<tn.utm.fst.gestionpresence.nativeapp.feature.s2.Move>?>(null) }
     var applyAsk by remember { mutableStateOf(false) }
-    val G = s.settings.groupCount
+    val G = s.groupsOf(cls)
     val ms = s.members.filter { it.className == cls }
     val act = ms.filter { it.status == "actif" }; val exc = ms.filter { it.status == "exclu" }
     val sizes = (1..G).map { g -> act.count { it.groupNo == g } }
@@ -681,7 +697,7 @@ private fun GroupsPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> Str
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { preview = tn.utm.fst.gestionpresence.nativeapp.feature.s2.balanceMoves(ms, G) }, enabled = gap > 1, shape = RoundedCornerShape(50),
+                Button(onClick = { preview = tn.utm.fst.gestionpresence.nativeapp.feature.s2.balanceMoves(ms, G) }, enabled = gap > 1 || act.any { it.groupNo !in 1..G }, shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(containerColor = Uphf.Teal), modifier = Modifier.weight(1f)) { Text("Équilibrer") }
                 OutlinedButton(onClick = { run(null, false) { val n = viewModel.s2.addNewMembers(s.members.map { it.studentId }.toSet()); if (n == 0) "Aucun nouvel étudiant." else "$n étudiant(s) ajouté(s)." } },
                     shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Nouveaux") }
@@ -821,7 +837,7 @@ private fun PdfPanel(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.Ma
         val pagesOf = classes.map { c -> pairs.firstOrNull { p -> p.second.any { it.className == c } }?.let { p -> p.second.map { it.className } to p.second.first().mode } ?: (listOf(c) to "alternance") }
             .distinct().sortedBy { p -> s.slots.firstOrNull { it.className == p.first.first() }?.weekday ?: 9 }
         val names = s.teachers.associate { it.id to it.name }
-        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, pagesOf, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, s.settings.groupCount,
+        val file = tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.build(context, pagesOf, plan, excluded, times, { id -> id?.let { names[it] }.orEmpty() }, { s.groupsOf(it) },
             legend = s.manips.filter { it.active && !it.title.isNullOrBlank() }.joinToString("    ·    ") { "${it.code} : ${it.title}" },
             recapByDay = s.stations.filter { it.teacherId != null }.groupBy { it.weekday }.mapValues { (_, l) -> l.sortedBy { it.code }.joinToString("    ·    ") { "${it.code} : ${names[it.teacherId].orEmpty()}" } })
         if (file == null) msg = "Aucune séance à exporter." else tn.utm.fst.gestionpresence.nativeapp.feature.s2.PlanningPdf.share(context, file)

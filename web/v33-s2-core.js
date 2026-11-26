@@ -49,6 +49,15 @@
     return out;
   }
 
+  /* Nombre de groupes et de manipulations d'une classe : réglage de la classe (4, 5 ou 6 ; groupes = manipulations
+     pour garder une rotation complète), sinon les valeurs de l'espace. */
+  function classCounts(className,settings,classSlots){
+    const own=(classSlots||[]).find(c=>c.class_name===className);
+    const n=Number(own&&own.group_count);
+    if(n>=1)return {group_count:n,manip_count:n};
+    return {group_count:Number(settings&&settings.group_count)||5,manip_count:Number(settings&&settings.manip_count)||5};
+  }
+
   /* Génère (ou recalcule à partir de fromDate) le planning.
      kept : séances conservées (verrouillées, ou antérieures à fromDate) ; elles comptent
      dans la rotation et occupent leur date. */
@@ -75,20 +84,22 @@
       const lastKept=kept.filter(k=>list.some(c=>c.class_name===k.class_name)&&k.session_date<from).pop();
       let turn=lastKept?(list.findIndex(c=>c.class_name===lastKept.class_name)+1)%list.length:0;
       const mode=list[0].mode||'alternance';
+      const want=new Map(list.map(c=>[c.class_name,classCounts(c.class_name,settings,list)]));
+      const need=c=>want.get(c.class_name).manip_count;
       let d=from;while(weekdayOf(d)!==weekday)d=addDays(d,1);
       for(;d<=end;d=addDays(d,7)){
-        if(list.every(c=>done.get(c.class_name)>=settings.manip_count))break;
+        if(list.every(c=>done.get(c.class_name)>=need(c)))break;
         if(ex.has(d)||taken.has(d))continue;
         let pick=null;
-        if(mode==='bloc'){pick=list.find(c=>done.get(c.class_name)<settings.manip_count);}
+        if(mode==='bloc'){pick=list.find(c=>done.get(c.class_name)<need(c));}
         else{
-          for(let i=0;i<list.length;i++){const c=list[(turn+i)%list.length];if(done.get(c.class_name)<settings.manip_count){pick=c;turn=(turn+i+1)%list.length;break;}}
+          for(let i=0;i<list.length;i++){const c=list[(turn+i)%list.length];if(done.get(c.class_name)<need(c)){pick=c;turn=(turn+i+1)%list.length;break;}}
         }
         if(!pick)break;
         const occ=done.get(pick.class_name)+1;done.set(pick.class_name,occ);
-        sessions.push({class_name:pick.class_name,session_date:d,start_time:String(pick.start_time).slice(0,5),end_time:String(pick.end_time).slice(0,5),occurrence:occ,slots:buildSlots(weekday,occ,settings,st)});
+        sessions.push({class_name:pick.class_name,session_date:d,start_time:String(pick.start_time).slice(0,5),end_time:String(pick.end_time).slice(0,5),occurrence:occ,slots:buildSlots(weekday,occ,want.get(pick.class_name),st)});
       }
-      for(const c of list){const n=done.get(c.class_name);if(n<settings.manip_count)warnings.push(`${c.class_name} : seulement ${n} séance(s) sur ${settings.manip_count} avant le ${fmt(end)}.`);}
+      for(const c of list){const n=done.get(c.class_name),k=need(c);if(n<k)warnings.push(`${c.class_name} : seulement ${n} séance(s) sur ${k} avant le ${fmt(end)}.`);}
     }
     sessions.sort((a,b)=>a.session_date.localeCompare(b.session_date)||a.class_name.localeCompare(b.class_name));
     return {sessions,warnings};
@@ -119,9 +130,10 @@
       for(const [room,codes] of byRoom)if(codes.size>1)shared.add(`Salle ${room} : ${[...codes].sort().join(' et ')}`);
     }
     for(const [cls,list] of byClass){
-      for(let g=1;g<=settings.group_count;g++){
+      const cc=classCounts(cls,settings,input.classSlots);
+      for(let g=1;g<=cc.group_count;g++){
         const seen=list.map(s=>(s.slots||[]).find(x=>x.group_no===g)).filter(Boolean).map(x=>x.manipulation_code);
-        const missing=[];for(let m=1;m<=settings.manip_count;m++)if(!seen.includes('M'+m))missing.push('M'+m);
+        const missing=[];for(let m=1;m<=cc.manip_count;m++)if(!seen.includes('M'+m))missing.push('M'+m);
         const dups=[...new Set(seen.filter((m,i)=>seen.indexOf(m)!==i))];
         if(missing.length)issues.push({level:'attention',text:`${cls} G${g} : manque ${missing.join(', ')}.`});
         if(dups.length)issues.push({level:'erreur',text:`${cls} G${g} : ${dups.join(', ')} en double.`});
@@ -131,15 +143,25 @@
     return issues;
   }
 
-  /* Groupes équilibrés : seuls les étudiants actifs et non verrouillés bougent, le moins possible. */
+  /* Groupes équilibrés : seuls les étudiants actifs et non verrouillés bougent, le moins possible.
+     groupCount : un nombre, ou une fonction (classe → nombre de groupes de cette classe).
+     Si une classe passe à moins de groupes, les étudiants des groupes supprimés (même verrouillés)
+     rejoignent d'abord les plus petits groupes restants. */
   function balanceGroups(members,groupCount){
+    const countOf=typeof groupCount==='function'?groupCount:()=>groupCount;
     const out=members.map(m=>Object.assign({},m));
     const byClass=new Map();
     for(const m of out){if(m.status!=='actif')continue;if(!byClass.has(m.class_name))byClass.set(m.class_name,[]);byClass.get(m.class_name).push(m);}
     const moves=[];
     for(const [cls,list] of byClass){
+      const G=Math.max(1,Number(countOf(cls))||5);
+      for(const mv of list.filter(m=>!(m.group_no>=1&&m.group_no<=G)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')))){
+        const sizes=[];for(let g=1;g<=G;g++)sizes.push({g,n:list.filter(m=>m.group_no===g).length});
+        sizes.sort((a,b)=>a.n-b.n||a.g-b.g);
+        moves.push({student_id:mv.student_id,name:mv.name,class_name:cls,from:mv.group_no||null,to:sizes[0].g});mv.group_no=sizes[0].g;
+      }
       for(let guard=0;guard<500;guard++){
-        const sizes=[];for(let g=1;g<=groupCount;g++)sizes.push({g,n:list.filter(m=>m.group_no===g).length});
+        const sizes=[];for(let g=1;g<=G;g++)sizes.push({g,n:list.filter(m=>m.group_no===g).length});
         sizes.sort((a,b)=>b.n-a.n||a.g-b.g);
         const big=sizes[0],small=sizes[sizes.length-1];
         if(big.n-small.n<=1)break;
@@ -180,5 +202,5 @@
     return {total:keep.length,byClass:agg(r=>r.class_name),byGroup:agg(r=>r.group),byStudent:agg(r=>r.student),byDate:agg(r=>r.date)};
   }
 
-  return {S2_MIN_DATE,DAY_LABEL,addDays,weekdayOf,fmt,manipulationFor,excludedMap,generatePlan,checkPlan,balanceGroups,stationsFromS1,attendanceStats};
+  return {S2_MIN_DATE,DAY_LABEL,addDays,weekdayOf,fmt,manipulationFor,excludedMap,generatePlan,checkPlan,balanceGroups,classCounts,stationsFromS1,attendanceStats};
 });

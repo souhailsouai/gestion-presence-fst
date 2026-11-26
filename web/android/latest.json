@@ -1,6 +1,6 @@
 {
-  "version": "2.24.1",
-  "notes": "Ouverture plus rapide : les données se chargent toutes en même temps, sans lecture en double. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.25.0",
+  "notes": "S2 : chaque classe peut avoir 4, 5 ou 6 groupes (autant de manipulations), réglable dans Créneaux. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
   "size": 3349343
 }

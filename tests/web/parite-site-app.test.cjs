@@ -31,6 +31,7 @@ const FEATURES=[
   ['Saisir les notes','Saisir les notes'],
   ['Tout le monde est présent par défaut','Tout le monde est présent par défaut'],
   ['ANNULER','ANNULER'],
+  ['Groupes / manips','Groupes / manips'],
   ['Sans note','Sans note'],
   ['À rattraper','À rattraper'],
   ['Bilan S2','Bilan S2'],

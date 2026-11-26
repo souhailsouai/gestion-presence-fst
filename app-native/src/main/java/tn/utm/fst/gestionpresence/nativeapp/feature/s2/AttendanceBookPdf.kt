@@ -27,7 +27,6 @@ object AttendanceBookPdf {
         val books = classes.map { c -> pairs.firstOrNull { p -> p.any { it.className == c } } ?: listOfNotNull(active.firstOrNull { it.className == c }) }
             .filter { it.isNotEmpty() }.distinct().sortedBy { it.first().weekday }
         if (books.isEmpty()) return null
-        val G = s.settings.groupCount
         val start = s.settings.startDate; val end = s.settings.endDate
         val exList = s.excluded.filter { it.validated && it.endsOn >= start && (end == null || it.startsOn <= end) }.sortedBy { it.startsOn }
         fun onDay(e: Excluded, wd: Int): Boolean { var d = LocalDate.parse(e.startsOn); val last = LocalDate.parse(e.endsOn); while (!d.isAfter(last)) { if (d.dayOfWeek.value == wd) return true; d = d.plusDays(1) }; return false }
@@ -50,7 +49,8 @@ object AttendanceBookPdf {
                 val cw = (IW - 24) / names.size
                 names.forEachIndexed { i, c -> p.band(M + 12 + i * cw, y, cw, 10f, CLASS[i % CLASS.size], c, 14f) }; y += 18f
                 p.text("Année universitaire $academicYear — Semestre 2", W / 2, y, 11f); y += 6f
-                p.text("Horaire : $hours — $G groupes par classe", W / 2, y, 11f, bold = false); y += 4f
+                val gs = names.map { s.groupsOf(it) }
+                p.text("Horaire : $hours — " + (if (gs.distinct().size == 1) "${gs.first()} groupes par classe" else names.zip(gs).joinToString(" · ") { (n, g) -> "$n : $g groupes" }), W / 2, y, 11f, bold = false); y += 4f
                 exList.filter { onDay(it, wd) }.forEach { e ->
                     val t = "${label(e)} : ${if (e.startsOn == e.endsOn) "le ${f(e.startsOn)}" else "du ${f(e.startsOn)} au ${f(e.endsOn)}"} — aucun TP"
                     p.band(M + 12, y, IW - 24, 7f, Color.rgb(244, 176, 120), t.uppercase(), 9.5f); y += 7.5f
@@ -66,7 +66,7 @@ object AttendanceBookPdf {
                     p.line(M + 12, y, W - M - 12, y, 0.6f); y += 6f
                 }
                 y += 4f; p.text("Repérage des groupes", W / 2, y, 10f); y += 2.5f
-                val gw = (IW - 24) / G
+                val G = gs.max(); val gw = (IW - 24) / G
                 for (g in 0 until G) { val c = GROUP[g % GROUP.size]; p.band(M + 12 + g * gw, y, gw, 7f, c, "G${g + 1}", 10f, ink(c)) }
                 y += 15f
                 p.text("Présence / absence à renseigner dans les cases. Manipulations prévues indiquées sous chaque date (à corriger à la main si besoin).", W / 2, y, 9.5f, bold = false, italic = true)
@@ -77,7 +77,7 @@ object AttendanceBookPdf {
                 val sess = plan.filter { it.className == cls }.sortedBy { it.date }
                 val cols = maxOf(sess.size + 1, 6)
                 val exs = exList.filter { onDay(it, wd) }.map { e -> "${label(e)} ${if (e.startsOn == e.endsOn) f(e.startsOn) else f(e.startsOn).take(5) + " – " + f(e.endsOn)}" }
-                for (g in 1..G) {
+                for (g in 1..s.groupsOf(cls)) {
                     val stu = s.members.filter { it.className == cls && it.groupNo == g && it.status == "actif" }.map { it.name }.sortedWith(String.CASE_INSENSITIVE_ORDER)
                     val nrows = maxOf(12, stu.size + 2)
                     n++; val page = doc.startPage(PdfDocument.PageInfo.Builder((297 * MM).toInt(), (210 * MM).toInt(), n).create())

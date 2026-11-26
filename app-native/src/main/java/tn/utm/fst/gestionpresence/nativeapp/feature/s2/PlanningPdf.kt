@@ -23,7 +23,7 @@ object PlanningPdf {
         excluded: Map<String, String>,
         slotTimes: Map<String, Triple<Int, String, String>>,
         teacherName: (String?) -> String,
-        groupCount: Int,
+        groupsOf: (String) -> Int,
         academicYear: String = "2026/2027",
         legend: String = "",
         /** Intervenants par jour (jour ISO 1..7 → « M1 : Nom · M2 : Nom… »), ligne en bas de chaque page. */
@@ -34,6 +34,7 @@ object PlanningPdf {
         val tints = listOf(Color.rgb(255, 250, 214), Color.rgb(226, 239, 218), Color.rgb(222, 235, 247))
         pagesOf.forEach { (names, mode) ->
             val cls = names.first(); val multi = names.size > 1
+            val groupCount = names.maxOf(groupsOf)
             val list = plan.filter { it.className in names }.sortedBy { it.date }
             if (list.isEmpty()) return@forEach
             pages++
