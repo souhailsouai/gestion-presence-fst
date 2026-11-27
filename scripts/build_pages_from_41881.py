@@ -106,6 +106,7 @@ tags = [
     '<script src="./v48-maintenant.js"></script>',
     '<script src="./v49-pdf-lisible.js"></script>',
     '<script src="./v50-appel.js"></script>',
+    '<script src="./v54-espaces.js"></script>',
 ]
 for tag in tags:
     if tag not in html:
@@ -152,6 +153,7 @@ for marker in [
     'v48-maintenant.js',
     'v49-pdf-lisible.js',
     'v50-appel.js',
+    'v54-espaces.js',
     'data-fst-shell-css="inline"',
     'data-fst-shell-js="inline"',
     'data-fst-auth-compat="inline"',

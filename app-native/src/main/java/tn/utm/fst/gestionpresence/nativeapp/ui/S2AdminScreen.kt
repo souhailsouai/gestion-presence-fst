@@ -109,7 +109,9 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
             } finally { busy = false }
         }
     }
-    LaunchedEffect(Unit) { run(null, false) { null }; notice = null }
+    // Section choisie en haut de l'application : l'administration S2 s'ouvre sur cet espace, sans les autres.
+    val section = state.data?.mySpaces?.singleOrNull()
+    LaunchedEffect(section) { if (section != null && viewModel.s2.space != section) { viewModel.s2.openSection(section); snap = null }; run(null, false) { null }; notice = null }
 
     val s = snap
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -120,12 +122,12 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
         if (s != null && s.spaces.size > 1) item {
             // Mes espaces par défaut ; « Autres espaces » au choix (lecture seule).
             val mine = s.spaces.filter { it.id in s.myRoles || sup || (state.isAdmin && it.id == tn.utm.fst.gestionpresence.nativeapp.feature.s2.DEFAULT_SPACE) }.map { it.id }.toSet()
-            val shown = s.spaces.filter { othersOn || it.id in mine || it.id == s.space }
+            val shown = s.spaces.filter { if (section != null) (it.id == section || (othersOn && it.id !in mine)) else (othersOn || it.id in mine || it.id == s.space) }
             Text("Espace", color = Uphf.Muted, style = MaterialTheme.typography.labelMedium)
             if (shown.size > 1) AdminTabs(shown.map { it.id to (if (it.id in mine) it.name else "${it.name} · lecture") }, s.space) { id -> if (id != s.space) { viewModel.s2.space = id; snap = null; run(null, false) { null } } }
             if (s.spaces.any { it.id !in mine }) TextButton(onClick = {
                 othersOn = !othersOn
-                if (!othersOn && s.space !in mine) mine.firstOrNull()?.let { id -> viewModel.s2.space = id; snap = null; run(null, false) { null } }
+                if (!othersOn && (s.space !in mine || (section != null && s.space != section))) (section ?: mine.firstOrNull())?.let { id -> viewModel.s2.space = id; snap = null; run(null, false) { null } }
             }) { Text(if (othersOn) "Mes espaces seulement" else "Autres espaces") }
             if (!canAdmin && s.myPerms.isEmpty()) Text("Lecture seule : vous n’administrez pas cet espace.", color = Uphf.Ochre, style = MaterialTheme.typography.bodySmall)
         }

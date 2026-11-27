@@ -172,7 +172,8 @@ class OnlineApiClient(
                 startTime = row.string("start_time")?.take(5),
                 endTime = row.string("end_time")?.take(5),
                 room = row.string("room"),
-                revision = row.long("revision") ?: 1L
+                revision = row.long("revision") ?: 1L,
+                spaceId = row.string("space_id")
             )
         }.sortedBy { it.name }
 

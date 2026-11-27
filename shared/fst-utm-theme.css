@@ -1005,3 +1005,8 @@ body,#app-container,.content,#fst-main,#fst-main.content{background:var(--o-bg)!
   .v50-count b{font-size:21px}.v50-count span{font-size:11px}
 }
 @media (prefers-reduced-motion:reduce){.v50-seg button,#v50-snack,.v50-table tbody tr{transition:none}}
+
+/* ================= V54 — Sections par espace ================= */
+.v54-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 14px;padding:12px 16px;border-radius:18px;background:var(--o-teal-soft,#E3F1F5);color:var(--o-title,#1c3d5e);font-size:14px}
+.v54-banner span{flex:1;min-width:200px}
+.v54-banner .btn{border-radius:999px;background:var(--o-surface,#fff);color:var(--o-teal,#0A6E8C);border:1px solid var(--o-teal,#0A6E8C);font-weight:700}

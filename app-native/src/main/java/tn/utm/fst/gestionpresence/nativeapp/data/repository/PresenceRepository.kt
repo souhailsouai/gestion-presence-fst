@@ -533,25 +533,54 @@ data class RepositoryData(
     val attendanceByStudent: Map<String, List<AttendanceRecord>> by lazy { attendance.groupBy { it.studentId } }
     val studentsByClass: Map<String, List<Student>> by lazy { students.groupBy { it.classId } }
 
-    /** Filière : "PHY" = TP Physique (MPI1, PC1) ; "LPC" = LPC3 (Ondes et Vibrations). */
+    /**
+     * Sections : "PHY" = MPI1 · PC1 (espace historique), "LPC" = LPC3 (Ondes et Vibrations),
+     * "SP:<id>" = chaque autre espace (LPHE1, LPC1…), séparé comme LPC3.
+     */
     fun forModule(module: String): RepositoryData {
         val keep = classes.filter { moduleOf(it) == module }
         val ids = keep.map { it.id }.toSet()
         val keptSessions = sessions.filter { it.classId in ids }
         val sessionIds = keptSessions.map { it.id }.toSet()
+        val space = spaceOfModule(module)
+        // Planning S2 : celui de la section, plus (lecture seule, au choix) celui des espaces dont on n'est pas membre.
+        val readOnly = spaces.map { it.first }.filter { it !in mySpaces }.toSet()
         return copy(
             classes = keep,
             students = students.filter { it.classId in ids },
             sessions = keptSessions,
             attendance = attendance.filter { it.sessionId in sessionIds },
-            plan = if (module == "PHY") plan else emptyList(),
-            s1Plan = if (module == "PHY") s1Plan else emptyList()
+            plan = if (space == null) emptyList() else plan.filter { it.spaceId == space || it.spaceId in readOnly },
+            s1Plan = if (module == "PHY") s1Plan else emptyList(),
+            spaces = if (space == null) spaces else spaces.filter { it.first == space || it.first in readOnly },
+            mySpaces = if (space == null) mySpaces else setOf(space)
         )
     }
 
-    fun hasModule(module: String): Boolean = classes.any { moduleOf(it) == module }
+    fun hasModule(module: String): Boolean {
+        val space = spaceOfModule(module)
+        return classes.any { moduleOf(it) == module } || (space != null && space != DEFAULT_SPACE && space in mySpaces)
+    }
+
+    /** Sections visibles, dans l'ordre : MPI1 · PC1, LPC3, puis les autres espaces (nom de l'espace). */
+    fun modules(): List<Pair<String, String>> = buildList {
+        if (hasModule("PHY")) add("PHY" to "MPI1 · PC1")
+        if (hasModule("LPC")) add("LPC" to "LPC3")
+        spaces.filter { it.first != DEFAULT_SPACE && hasModule("SP:${it.first}") }.sortedBy { it.second }.forEach { add("SP:${it.first}" to it.second) }
+    }
 
     companion object {
-        fun moduleOf(c: AcademicClass): String = if (c.track.equals("LPC", true) || c.name.startsWith("LPC")) "LPC" else "PHY"
+        const val DEFAULT_SPACE = "00000000-0000-4000-8000-000000000001"
+        fun moduleOf(c: AcademicClass): String = when {
+            c.module.equals("TP Ondes et Vibrations", true) || c.name.startsWith("LPC3", true) -> "LPC"
+            c.spaceId != null && c.spaceId != DEFAULT_SPACE -> "SP:${c.spaceId}"
+            else -> "PHY"
+        }
+        /** Espace d'une section : "PHY" → espace historique, "SP:<id>" → <id>, "LPC" → aucun (pas de S2). */
+        fun spaceOfModule(module: String): String? = when {
+            module == "PHY" -> DEFAULT_SPACE
+            module.startsWith("SP:") -> module.removePrefix("SP:")
+            else -> null
+        }
     }
 }

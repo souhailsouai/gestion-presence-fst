@@ -86,7 +86,10 @@
     if(state.amSuper)spaces.forEach(x=>myIds.add(x.id)); /* le super administrateur supervise tous les espaces */
     state.mySpaces=spaces.filter(x=>myIds.has(x.id));if(!state.mySpaces.length)state.mySpaces=spaces.slice(0,1);
     try{state.showOthers=root.localStorage.getItem(OTHERS_KEY)==='1';}catch(_){}
-    const allowed=state.showOthers?spaces:state.mySpaces;
+    /* Section choisie dans le menu « Espaces » (V54) : Semestres n'affiche que cet espace. */
+    const lock=root.V54Espaces?.section?.();state.lockSpace=lock&&spaces.some(x=>x.id===lock)?lock:null;
+    if(state.lockSpace&&!state.showOthers)state.space=state.lockSpace;
+    const allowed=state.showOthers?spaces:state.lockSpace?spaces.filter(x=>x.id===state.lockSpace):state.mySpaces;
     if(!allowed.some(x=>x.id===state.space))state.space=allowed[0]?.id||DEFAULT_SPACE;
     const SP=state.space,def=SP===DEFAULT_SPACE;
     const [settings,manips,slots,stations,members,excluded,sessions,sslots,versions,profiles,students,audit,spaceMembers,spaceClasses]=await Promise.all([
@@ -100,7 +103,7 @@
          :q(c.from('students').select('id,last_name,first_name,class_id,deleted_at,classes!inner(name,space_id)').is('deleted_at',null).eq('classes.space_id',SP)),
       q(c.from('v33_s2_audit').select('*').eq('space_id',SP).order('created_at',{ascending:false}).limit(30)),
       q(c.from('space_members').select('profile_id,role').eq('space_id',SP)).catch(()=>[]),
-      def?Promise.resolve([]):q(c.from('classes').select('id,name').eq('space_id',SP).is('deleted_at',null).order('name')),
+      def?Promise.resolve([]):q(c.from('classes').select('id,name,space_id').eq('space_id',SP).is('deleted_at',null).order('name')),
     ]);
     const bySession=new Map();for(const g of sslots){if(!bySession.has(g.session_id))bySession.set(g.session_id,[]);bySession.get(g.session_id).push(g);}
     for(const s of sessions){s.start_time=String(s.start_time).slice(0,5);s.end_time=String(s.end_time).slice(0,5);s.slots=(bySession.get(s.id)||[]).sort((a,b)=>a.group_no-b.group_no);}
@@ -159,7 +162,7 @@
       .filter(v=>(v[0]!=='espaces'&&v[0]!=='acces'||isSuper())&&(v[0]!=='classes'||!isDefaultSpace())&&(v[0]!=='equipe'||(canView('equipe')&&!isDefaultSpace())));
     if(!visible.some(v=>v[0]===state.view))state.view='planning';
     const spaceName=state.spaces.find(x=>x.id===state.space)?.name||'MPI1 · PC1';
-    const mineIds=new Set((state.mySpaces||[]).map(x=>x.id));
+    const mineIds=new Set(state.lockSpace?[state.lockSpace]:(state.mySpaces||[]).map(x=>x.id));
     const shown=state.showOthers?state.spaces:state.spaces.filter(x=>mineIds.has(x.id));
     const others=state.spaces.length>shown.length||state.showOthers&&state.spaces.length>mineIds.size;
     const spaceChips=shown.length>1||others?`<div class="v33-spaces">${shown.length>1||state.showOthers?chips(shown.map(x=>[x.id,x.name,!mineIds.has(x.id)&&!isSuper()?'autre espace · planning seul':x.id===DEFAULT_SPACE?'MPI1 · PC1':(state.myRoles.get(x.id)==='admin'||isSuper()?'administration':'mon espace')]),state.space,'space','Espace'):''}${others?`<button type="button" class="btn v33-btn ghost sm" data-others aria-pressed="${!!state.showOthers}"><i class="fas ${state.showOthers?'fa-eye-slash':'fa-eye'}"></i> ${state.showOthers?'Mes espaces seulement':'Autres espaces'}</button>`:''}</div>`:'';
@@ -169,7 +172,7 @@
       <div id="v33-view" class="v33-view"></div>`;
     out.querySelector('.v33-spaces')?.addEventListener('click',e=>{
       if(e.target.closest('[data-others]')){state.showOthers=!state.showOthers;try{root.localStorage.setItem(OTHERS_KEY,state.showOthers?'1':'0');}catch(_){}
-        if(!state.showOthers&&!mineIds.has(state.space)){state.space=state.mySpaces[0]?.id||DEFAULT_SPACE;state.data=null;state.planClass=null;state.groupClass=null;}render();return;}
+        if(!state.showOthers&&!mineIds.has(state.space)){state.space=state.lockSpace||state.mySpaces[0]?.id||DEFAULT_SPACE;state.data=null;state.planClass=null;state.groupClass=null;}render();return;}
       const b=e.target.closest('[data-space]');if(!b||b.dataset.space===state.space)return;
       state.space=b.dataset.space;try{root.localStorage.setItem(SPACE_KEY,state.space);}catch(_){}state.data=null;state.planClass=null;state.groupClass=null;render();});
     out.querySelector('.v33-tabs').onclick=e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;out.querySelectorAll('.v33-tabs [data-view]').forEach(x=>x.setAttribute('aria-selected',String(x===b)));renderView();};
