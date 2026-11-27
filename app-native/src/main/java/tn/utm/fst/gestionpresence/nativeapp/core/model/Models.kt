@@ -38,7 +38,9 @@ data class AcademicClass(
     val startTime: String?,
     val endTime: String?,
     val room: String?,
-    val revision: Long
+    val revision: Long,
+    /** Espace de la classe (null = MPI1 · PC1, l'espace historique). */
+    val spaceId: String? = null
 )
 
 data class Student(

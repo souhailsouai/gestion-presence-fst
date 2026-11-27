@@ -1,6 +1,6 @@
 {
-  "version": "2.26.0",
-  "notes": "Horaires libres : choisissez l'heure de début et de fin de chaque classe (horloge ou 13.30 / 13h30) ; le nouvel horaire s'applique automatiquement aux séances à venir, à l'appel et aux PDF. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
+  "version": "2.27.0",
+  "notes": "Chaque espace a sa section en haut (MPI1 · PC1, LPC3, LPHE1, LPC1…) : les classes d'un espace n'apparaissent plus sous MPI1 · PC1. Si votre application est antérieure à la version 2.13.0, désinstallez-la d'abord une seule fois.",
   "apk": "Presence-FST.apk",
   "size": 3408243
 }

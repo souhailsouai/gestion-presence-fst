@@ -490,8 +490,9 @@ private fun backOf(screen: AppScreen): AppScreen? = when (screen) {
 private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
     var module by rememberSaveable { mutableStateOf("PHY") }
     val full = fullState.data
-    val bothModules = remember(full) { full != null && full.hasModule("PHY") && full.hasModule("LPC") }
-    if (full != null && !full.hasModule(module)) module = if (full.hasModule("PHY")) "PHY" else "LPC"
+    // Sections séparées : MPI1 · PC1, LPC3, et chaque autre espace (LPHE1, LPC1…).
+    val modules = remember(full) { full?.modules().orEmpty() }
+    if (full != null && modules.isNotEmpty() && modules.none { it.first == module }) module = modules.first().first
     val scoped = remember(full, module) { full?.forModule(module) }
     val state = remember(fullState, scoped) { fullState.copy(data = scoped) }
     val current = tabOf(state.screen)
@@ -499,7 +500,7 @@ private fun MainShell(fullState: MainUiState, viewModel: MainViewModel) {
     BackHandler(enabled = state.screen != AppScreen.HOME) { viewModel.navigate(backOf(state.screen) ?: AppScreen.HOME) }
     Scaffold(
         containerColor = Uphf.Background,
-        topBar = { TopBar(state, viewModel, module.takeIf { bothModules }) { module = it } },
+        topBar = { TopBar(state, viewModel, module, modules.takeIf { it.size > 1 }.orEmpty()) { module = it } },
         bottomBar = { FloatingTabBar(current) { viewModel.navigate(it) } }
     ) { padding ->
         if (state.offerBiometric) BiometricOffer(viewModel)
@@ -572,7 +573,7 @@ private fun FloatingTabBar(current: AppScreen, onSelect: (AppScreen) -> Unit) {
 }
 
 @Composable
-private fun TopBar(state: MainUiState, viewModel: MainViewModel, module: String?, onModule: (String) -> Unit) {
+private fun TopBar(state: MainUiState, viewModel: MainViewModel, module: String?, modules: List<Pair<String, String>>, onModule: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().background(Uphf.Background).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = if (backOf(state.screen) == null) 22.dp else 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             val back = backOf(state.screen)
@@ -586,12 +587,13 @@ private fun TopBar(state: MainUiState, viewModel: MainViewModel, module: String?
             Column(Modifier.weight(1f)) {
                 // Grand titre (One UI) sur les écrans principaux, titre moyen sur les écrans de détail.
                 Text(screenTitle(state.screen), style = if (back == null && state.screen != AppScreen.HOME) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge, color = Uphf.Title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${shortName(state.profile?.fullName)} · ${currentSemester()} · ${if (module == "LPC") "LPC3" else "2026/2027"}", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted, maxLines = 1)
+                Text("${shortName(state.profile?.fullName)} · ${currentSemester()} · ${modules.firstOrNull { it.first == module && it.first != "PHY" }?.second ?: "2026/2027"}", style = MaterialTheme.typography.bodySmall, color = Uphf.Muted, maxLines = 1)
             }
             IconButton(onClick = viewModel::refresh, enabled = state.online) { Icon(Icons.Default.Refresh, contentDescription = "Actualiser", tint = Uphf.Teal) }
         }
-        if (module != null && state.screen != AppScreen.ATTENDANCE && state.screen != AppScreen.STUDENT_DETAIL) {
-            Segmented(listOf("PHY" to "MPI1 · PC1", "LPC" to "LPC3"), module, Modifier.padding(horizontal = 14.dp, vertical = 4.dp), onModule)
+        if (module != null && modules.size > 1 && state.screen != AppScreen.ATTENDANCE && state.screen != AppScreen.STUDENT_DETAIL) {
+            if (modules.size <= 3) Segmented(modules, module, Modifier.padding(horizontal = 14.dp, vertical = 4.dp), onModule)
+            else Box(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) { ChipRow(modules, module, onModule) }
         }
     }
 }

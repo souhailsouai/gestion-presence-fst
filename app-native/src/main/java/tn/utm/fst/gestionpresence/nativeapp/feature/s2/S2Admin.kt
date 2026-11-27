@@ -98,6 +98,9 @@ class S2Admin(private val repository: PresenceRepository) {
     private var landed = false
     /** Espace S2 affiché (MPI1 · PC1 par défaut). */
     var space: String = DEFAULT_SPACE
+
+    /** Ouvre l'espace de la section choisie en haut de l'application (MPI1 · PC1, LPHE1…). */
+    fun openSection(id: String) { space = id; landed = true }
     private val sp get() = mapOf("space_id" to "eq.$space")
     private val isDefault get() = space == DEFAULT_SPACE
 

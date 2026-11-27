@@ -20,6 +20,7 @@
       const s=r.session||r.v33_s2_sessions||{};if(!s.session_date||s.session_date<S2_START)continue;
       const mine=r.teacher_id===ctx.userId;const admin=ctx.isSuper||(ctx.adminSpaces||new Set()).has(r.space_id)||(ctx.isAdmin&&r.space_id===DEFAULT_SPACE);
       if(!mine&&!admin)continue;
+      if(ctx.section&&(r.space_id||DEFAULT_SPACE)!==ctx.section)continue; /* V54 : seulement l'espace de la section */
       if(!r.attendance_session_id&&!admin&&s.session_date>now)continue; /* l'enseignant ouvre le jour même */
       const space=r.space_id!==DEFAULT_SPACE&&ctx.spaceNames?.get(r.space_id)?` [${ctx.spaceNames.get(r.space_id)}]`:'';
       out.push({value:r.attendance_session_id?String(r.attendance_session_id):`s2:${r.id}`,date:s.session_date,
@@ -39,7 +40,7 @@
     ]);
     if(slots.error)throw slots.error;
     /* Mode administrateur : tout MPI1 · PC1 ; ailleurs, les espaces dont on est administrateur (le serveur revérifie). */
-    return {rows:slots.data||[],ctx:{userId:uid,isAdmin:!!(t.isAdmin&&t.activeMode==='admin'),isSuper:false,today:today(),
+    return {rows:slots.data||[],ctx:{section:root.V54Espaces?.section?.()||DEFAULT_SPACE,userId:uid,isAdmin:!!(t.isAdmin&&t.activeMode==='admin'),isSuper:false,today:today(),
       adminSpaces:new Set([...(mine.data||[]).filter(m=>m.role==='admin').map(m=>m.space_id),...(perms.data||[]).map(p=>p.space_id)]),
       spaceNames:new Map((spaces.data||[]).map(s=>[s.id,s.name]))}};
   }
