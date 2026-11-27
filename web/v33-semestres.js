@@ -794,14 +794,22 @@
       mutate('Paramètres enregistrés',()=>Object.assign(d.settings,patch),async()=>{await q(client().from('v33_s2_settings').update(patch).eq('space_id',state.space).select('id'));audit('settings',patch);});};
     v.onclick=e=>{if(!e.target.closest('[data-slots]'))return;
       const rows=[...v.querySelectorAll('.v33-slot')].map(tr=>({class_name:tr.dataset.c,weekday:Number(tr.querySelector('[name=w]').value),start_time:tr.querySelector('[name=st]').value,end_time:tr.querySelector('[name=et]').value,pair_key:tr.querySelector('[name=p]').value.trim()||tr.dataset.c,pair_order:Number(tr.querySelector('[name=o]').value)||1,mode:tr.querySelector('[name=mo]').value,group_count:Number(tr.querySelector('[name=gc]').value),active:tr.querySelector('[name=a]').checked,updated_at:new Date().toISOString()}));
+      if(rows.some(r=>!/^\d\d:\d\d$/.test(r.start_time)||!/^\d\d:\d\d$/.test(r.end_time))){toast('Indiquez l’heure de début et de fin de chaque classe','err');return;}
       if(rows.some(r=>r.end_time<=r.start_time)){toast('Une heure de fin précède le début','err');return;}
+      const changedTimes=rows.filter(r=>{const o=d.slots.find(x=>x.class_name===r.class_name);return o&&(String(o.start_time).slice(0,5)!==r.start_time||String(o.end_time).slice(0,5)!==r.end_time);}).map(r=>r.class_name);
       // Une classe à 6 groupes a besoin de M1…M6 ; une classe réduite doit répartir les étudiants des groupes retirés.
       const have=new Set((d.manips||[]).filter(m=>m.active!==false).map(m=>m.code)),maxN=Math.max(...rows.map(r=>r.group_count));
       const lack=[];for(let k=1;k<=maxN;k++)if(!have.has('M'+k))lack.push('M'+k);
       const shrink=rows.filter(r=>(d.members||[]).some(m=>m.class_name===r.class_name&&m.status==='actif'&&m.group_no>r.group_count)).map(r=>r.class_name);
       const notes=[];if(lack.length)notes.push(`Ajoutez la manipulation ${lack.join(', ')} (onglet Manipulations).`);if(shrink.length)notes.push(`Puis « Équilibrer » les groupes de ${shrink.join(', ')}.`);
       if(notes.length)setTimeout(()=>toast(notes.join(' '),'err'),1200);
-      mutate('Créneaux enregistrés',()=>{d.slots=rows.map(r=>Object.assign({},r,{start_time:r.start_time+':00',end_time:r.end_time+':00'}));},async()=>{await q(client().from('v33_s2_class_slots').upsert(rows.map(r=>Object.assign({space_id:state.space},r)),{onConflict:'class_name'}).select('class_name'));audit('class_slots',{});});};
+      mutate(changedTimes.length?`Créneaux enregistrés — nouvel horaire appliqué aux séances à venir de ${changedTimes.join(', ')}`:'Créneaux enregistrés',()=>{
+        // Même règle que le serveur (V53) : les séances à venir qui avaient l'ancien horaire prennent le nouveau.
+        const today=new Date().toLocaleDateString('sv-SE',{timeZone:'Africa/Tunis'});
+        for(const r of rows){const o=d.slots.find(x=>x.class_name===r.class_name);if(!o)continue;
+          const os=String(o.start_time).slice(0,5),oe=String(o.end_time).slice(0,5);if(os===r.start_time&&oe===r.end_time)continue;
+          (d.sessions||[]).forEach(x=>{if(x.class_name===r.class_name&&x.session_date>=today&&String(x.start_time).slice(0,5)===os&&String(x.end_time).slice(0,5)===oe){x.start_time=r.start_time+':00';x.end_time=r.end_time+':00';}});}
+        d.slots=rows.map(r=>Object.assign({},r,{start_time:r.start_time+':00',end_time:r.end_time+':00'}));},async()=>{await q(client().from('v33_s2_class_slots').upsert(rows.map(r=>Object.assign({space_id:state.space},r)),{onConflict:'class_name'}).select('class_name'));audit('class_slots',{});});};
   }
 
   /* ----- Espaces (super administrateur) ----- */
