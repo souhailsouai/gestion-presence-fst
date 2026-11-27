@@ -168,7 +168,10 @@ fun S2AdminScreen(state: tn.utm.fst.gestionpresence.nativeapp.feature.main.MainU
         when (tab) {
             "dates" -> { item { ImportCalendarButton(::run, viewModel) }; datesTab(s, ::run, viewModel) }
             "groupes" -> groupsTab(s, ::run, viewModel)
-            "creneaux" -> item { SlotsEditor(s) { rows -> run("Créneaux enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveSlots(rows); null } } }
+            "creneaux" -> item { SlotsEditor(s) { rows ->
+                val moved = rows.filter { r -> s.slots.firstOrNull { it.className == r.className }?.let { it.start != r.start || it.end != r.end } == true }.map { it.className }
+                // Nouvel horaire : le serveur l'applique aux séances à venir (planning, appel, PDF) ; on recharge aussi l'accueil.
+                run(if (moved.isEmpty()) "Créneaux enregistrés." else "Créneaux enregistrés. Nouvel horaire appliqué aux séances à venir de ${moved.joinToString()}.", moved.isNotEmpty()) { viewModel.s2.saveSlots(rows); null } } }
             "postes" -> {
                 item { StationsEditor(s, { day -> viewModel.s2.stationsFromS1(day) }) { rows -> run("Enseignants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
                 item { RecapIntervenants(s) { rows -> run("Intervenants enregistrés. Pensez à recalculer le planning.", false) { viewModel.s2.saveStations(rows); null } } }
@@ -360,8 +363,8 @@ private fun SlotsEditor(s: S2Snapshot, onSave: (List<ClassSlot>) -> Unit) {
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(c.start, { rows[i] = c.copy(start = it.take(5)) }, label = { Text("Début") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(c.end, { rows[i] = c.copy(end = it.take(5)) }, label = { Text("Fin") }, singleLine = true, modifier = Modifier.weight(1f))
+                    TimeField("Début", c.start, { rows[i] = rows[i].copy(start = it) }, Modifier.weight(1f))
+                    TimeField("Fin", c.end, { rows[i] = rows[i].copy(end = it) }, Modifier.weight(1f))
                     OutlinedTextField(c.pairOrder.toString(), { v -> v.toIntOrNull()?.let { rows[i] = c.copy(pairOrder = it.coerceIn(1, 9)) } }, label = { Text("Ordre") }, singleLine = true, modifier = Modifier.weight(0.7f))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1089,8 +1092,8 @@ private fun ClassesPanel(s: S2Snapshot, run: (String?, Boolean, suspend () -> St
             DAY_LABEL.entries.forEach { (k, l) -> FilterChip(day == k, { day = k }, label = { Text(l) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Uphf.Teal, selectedLabelColor = Uphf.OnTeal)) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(st, { st = it.take(5) }, label = { Text("Début (HH:MM)") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedTextField(et, { et = it.take(5) }, label = { Text("Fin") }, singleLine = true, modifier = Modifier.weight(1f))
+            TimeField("Début", st, { st = it }, Modifier.weight(1f))
+            TimeField("Fin", et, { et = it }, Modifier.weight(1f))
         }
         if (s.slots.isNotEmpty()) {
             Text("Partage le jour avec :", color = Uphf.Muted, style = MaterialTheme.typography.bodySmall)

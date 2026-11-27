@@ -73,3 +73,8 @@ accès refusé à tous les utilisateurs de l'API ; seules les fonctions serveur 
 ## 2026-11-26 — V52 : groupes par classe (4, 5 ou 6) — aucune donnée modifiée
 - Nouvelle colonne `v33_s2_class_slots.group_count` (4 à 6, vide = réglage de l'espace). Une classe a autant de manipulations que de groupes (rotation complète M1…Mn).
 - `v37_s2_compute_plan` utilise le réglage de chaque classe ; l'heure d'une classe est lue dans son espace. Vérifié : sans réglage, le planning calculé est identique à avant (même empreinte pour les 3 espaces) ; essai annulé avec MPI1-A à 6 et MPI1-B à 4 : 6 et 4 séances, chaque groupe fait chaque manipulation une fois.
+
+## 2026-11-27 — V53 : l'horaire d'une classe s'applique partout (aucune donnée modifiée par la migration)
+- Déclencheur `v53_class_time_sync` sur `v33_s2_class_slots` : quand le début ou la fin d'une classe change, ses séances S2 à venir (à partir d'aujourd'hui, heure de Tunis) et les séances d'appel déjà ouvertes pour ces dates prennent le nouvel horaire, seulement si elles avaient l'ancien. Les séances passées ne bougent jamais. Chaque changement est noté dans `v33_s2_audit` (« class_time »).
+- `enforce_v5_session_identity` laisse passer ce seul changement d'horaire pour un responsable d'espace non administrateur.
+- Essai annulé : PC1-A 14:00–17:00 → 13:30–16:30 : ses 5 séances à venir passent à 13:30–16:30, MPI1-A inchangée.

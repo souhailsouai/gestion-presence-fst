@@ -1071,8 +1071,8 @@ private fun NewSessionForm(state: MainUiState, viewModel: MainViewModel) {
         ChipRow(data.classes.sortedBy { it.name }.map { it.id to it.name }, classId) { classId = it }
         OutlinedTextField(date, { date = it.trim() }, label = { Text("Date (AAAA-MM-JJ)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(start, { start = it.take(5) }, label = { Text("Début") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedTextField(end, { end = it.take(5) }, label = { Text("Fin") }, singleLine = true, modifier = Modifier.weight(1f))
+            TimeField("Début", start, { start = it }, Modifier.weight(1f))
+            TimeField("Fin", end, { end = it }, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { open = false }, shape = RoundedCornerShape(50), modifier = Modifier.weight(1f)) { Text("Fermer") }
