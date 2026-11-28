@@ -1,0 +1,176 @@
+(function(root,factory){
+  const api=factory(root);
+  if(typeof module==='object'&&module.exports)module.exports=api;
+  else root.V16TestMode=api;
+})(typeof globalThis!=='undefined'?globalThis:this,function(root){
+  'use strict';
+  const KEY='v16_context';
+  let context='real';
+  let admin=false;
+  let activeRole='teacher';
+  let client=null;
+
+  function valid(value){return value==='real'||value==='test';}
+  function persisted(){try{const v=root.localStorage?.getItem(KEY);return valid(v)?v:'real';}catch(_){return 'real';}}
+  function persist(value){try{root.localStorage?.setItem(KEY,value);}catch(_){/* noop */}}
+  function emit(){
+    try{if(typeof root.dispatchEvent==='function'&&typeof root.CustomEvent==='function')root.dispatchEvent(new root.CustomEvent('v16:context-changed',{detail:{context}}));}catch(_){/* noop */}
+  }
+  function configure(options={}){
+    admin=options.isAdmin===true;
+    activeRole=options.activeRole==='admin'?'admin':'teacher';
+    client=options.supabaseClient||client||null;
+    context=(admin&&activeRole==='admin')?(valid(options.context)?options.context:persisted()):'real';
+    persist(context);
+    return context;
+  }
+  function allowed(){return admin&&activeRole==='admin';}
+  function getContext(){return allowed()?context:'real';}
+  function setContext(value){
+    if(!allowed()||!valid(value))return false;
+    if(context===value)return true;
+    context=value;persist(context);emit();return true;
+  }
+  function runtimeClient(){
+    if(client)return client;
+    try{return typeof supabaseClient!=='undefined'?supabaseClient:(root.supabaseClient||null);}catch(_){return root.supabaseClient||null;}
+  }
+  async function clearTest(options={}){
+    if(!allowed())throw new Error('Accès Admin requis.');
+    const c=options.supabaseClient||runtimeClient();
+    if(!c)throw new Error('Connexion Supabase indisponible.');
+    const {data,error}=await c.rpc('v16_reset_test_context');
+    if(error)throw error;
+    if(data&&data.ok===false)throw new Error(data.message||data.code||'Réinitialisation refusée.');
+    return data||{ok:true};
+  }
+  async function cloneRealToTest(effectiveDate,options={}){
+    if(!allowed())throw new Error('Accès Admin requis.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDate||'')))throw new Error('Date d’effet requise.');
+    const c=options.supabaseClient||runtimeClient();
+    if(!c)throw new Error('Connexion Supabase indisponible.');
+    const {data,error}=await c.rpc('v16_clone_real_to_test',{p_effective_date:effectiveDate});
+    if(error)throw error;
+    if(data&&data.ok===false)throw new Error(data.message||data.code||'Clonage TEST refusé.');
+    emit();
+    return data||{ok:true};
+  }
+  async function resetTest(options={}){
+    const effectiveDate=options.effectiveDate||'';
+    if(!effectiveDate)return clearTest(options);
+    return cloneRealToTest(effectiveDate,options);
+  }
+  async function previewApply(effectiveDate,options={}){
+    if(!allowed())throw new Error('Accès Admin requis.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDate||'')))throw new Error('Date d’effet requise.');
+    const c=options.supabaseClient||runtimeClient();
+    if(!c)throw new Error('Connexion Supabase indisponible.');
+    const {data,error}=await c.rpc('v16_preview_test_apply',{p_effective_date:effectiveDate});
+    if(error)throw error;
+    if(!data)throw new Error('Prévisualisation TEST → RÉEL indisponible.');
+    return data;
+  }
+  async function applyToReal(effectiveDate,options={}){
+    if(!allowed())throw new Error('Accès Admin requis.');
+    const c=options.supabaseClient||runtimeClient();
+    if(!c)throw new Error('Connexion Supabase indisponible.');
+    const {data,error}=await c.rpc('v16_apply_test_teacher_plan',{p_effective_date:effectiveDate});
+    if(error)throw error;
+    if(data&&data.ok===false)throw new Error(data.message||data.code||'Application refusée.');
+    return data||{ok:true};
+  }
+  function render(options={}){
+    const isAdmin=options.isAdmin===true;
+    const role=options.activeRole==='admin'?'admin':'teacher';
+    if(!isAdmin||role!=='admin')return '';
+    const ctx=valid(options.context)?options.context:context;
+    const isTest=ctx==='test';
+    return `<section class="card" data-v16-test-mode="true" style="border:2px solid ${isTest?'#b91c1c':'#0a427e'};margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+        <div><strong>MODE RÉEL ⇄ MODE TEST</strong><div style="font-size:.85rem;color:var(--gray)">Le mode TEST est isolé et réservé à l’Admin.</div></div>
+        <span class="badge ${isTest?'badge-danger':'badge-present'}" data-v16-context-badge>${isTest?'MODE TEST':'MODE RÉEL'}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button type="button" class="btn btn-primary btn-sm" data-v16-context="real">MODE RÉEL</button>
+        <button type="button" class="btn btn-warning btn-sm" data-v16-context="test">MODE TEST</button>
+        <button type="button" class="btn btn-danger btn-sm" data-v16-test-reset>Réinitialiser TEST</button>
+      </div>
+      <div data-v16-test-confirmation style="margin-top:12px"></div>
+      <div class="card" style="margin-top:14px">
+        <h3 style="margin-top:0">Application TEST → RÉEL</h3>
+        <div class="form-row">
+          <div class="form-group"><label>Date d’effet</label><input type="date" class="form-control" data-v16-apply-date></div>
+          <div class="form-group"><label>Configuration actuelle</label><div class="form-control" data-v16-current-summary>—</div></div>
+          <div class="form-group"><label>Configuration proposée</label><div class="form-control" data-v16-proposed-summary>—</div></div>
+          <div class="form-group"><label>Semaines</label><div class="form-control" data-v16-weeks-summary>—</div></div>
+          <div class="form-group"><label>Anomalies</label><div class="form-control" data-v16-anomalies-summary>—</div></div>
+        </div>
+        <button type="button" class="btn btn-info btn-sm" data-v16-apply-preview>Prévisualiser</button>
+        <button type="button" class="btn btn-success btn-sm" data-v16-apply-confirm disabled>Appliquer au RÉEL</button>
+      </div>
+    </section>`;
+  }
+
+  function alertUser(message,type='info'){
+    try{if(typeof showAlert==='function')showAlert(message,type);else if(root.showAlert)root.showAlert(message,type);}catch(_){/* noop */}
+  }
+  function updateBadge(mount){
+    const badge=mount?.querySelector('[data-v16-context-badge]');
+    if(badge)badge.textContent=context==='test'?'MODE TEST':'MODE RÉEL';
+  }
+  function bind(mount){
+    if(!mount)return;
+    for(const button of mount.querySelectorAll('[data-v16-context]'))button.addEventListener('click',()=>{
+      const next=button.getAttribute('data-v16-context');
+      if(setContext(next)){updateBadge(mount);alertUser(next==='test'?'MODE TEST activé.':'MODE RÉEL activé.',next==='test'?'warning':'success');}
+    });
+    mount.querySelector('[data-v16-test-reset]')?.addEventListener('click',async()=>{
+      const box=mount.querySelector('[data-v16-test-confirmation]');
+      const date=mount.querySelector('[data-v16-apply-date]')?.value||'';
+      if(!date){alertUser('Choisissez une date d’effet pour recréer le TEST depuis le RÉEL.','warning');return;}
+      if(box)box.textContent='Réinitialisation et clonage TEST en cours…';
+      try{const r=await resetTest({effectiveDate:date});if(box)box.textContent=`TEST recréé : ${r.assignments??0} affectation(s).`;alertUser('Contexte TEST recréé depuis le RÉEL.','success');}
+      catch(error){if(box)box.textContent=error?.message||String(error);alertUser(error?.message||String(error),'danger');}
+    });
+    mount.querySelector('[data-v16-apply-preview]')?.addEventListener('click',async()=>{
+      const date=mount.querySelector('[data-v16-apply-date]')?.value||'';
+      if(!date){alertUser('Choisissez une date d’effet.','warning');return;}
+      try{
+        const p=await previewApply(date);
+        mount.querySelector('[data-v16-current-summary]').textContent=String(p.current_count??'—');
+        mount.querySelector('[data-v16-proposed-summary]').textContent=String(p.proposed_count??'—');
+        mount.querySelector('[data-v16-weeks-summary]').textContent=String(p.weeks??'—');
+        const blockers=p.blockers||[];
+        mount.querySelector('[data-v16-anomalies-summary]').textContent=blockers.length?`${blockers.length} blocage(s) serveur`:'Aucune anomalie détectée par le serveur.';
+        const confirm=mount.querySelector('[data-v16-apply-confirm]');if(confirm)confirm.disabled=!p.ok||Boolean(blockers.length);
+      }catch(error){
+        const confirm=mount.querySelector('[data-v16-apply-confirm]');if(confirm)confirm.disabled=true;
+        alertUser(error?.message||String(error),'danger');
+      }
+    });
+    mount.querySelector('[data-v16-apply-confirm]')?.addEventListener('click',async()=>{
+      const date=mount.querySelector('[data-v16-apply-date]')?.value||'';
+      if(!date)return;
+      try{const r=await applyToReal(date);alertUser(`Application vers RÉEL terminée : ${r.affected_sessions??0} séance(s).`,'success');}
+      catch(error){alertUser(error?.message||String(error),'danger');}
+    });
+  }
+  function mount(options={}){
+    if(typeof document==='undefined')return false;
+    const roleApi=options.activeRoleApi||root.V16ActiveRole;
+    const isAdmin=Boolean(options.isAdmin??roleApi?.isAdminAccount?.());
+    const role=options.activeRole||roleApi?.get?.()||'teacher';
+    configure({isAdmin,activeRole:role,supabaseClient:options.supabaseClient});
+    let host=document.getElementById('v16-test-mode-root');
+    if(!host){
+      const planning=document.getElementById('v16-planning-root');
+      if(!planning)return false;
+      host=document.createElement('div');host.id='v16-test-mode-root';planning.insertAdjacentElement('beforebegin',host);
+    }
+    host.innerHTML=render({isAdmin,activeRole:role,context});
+    bind(host);
+    return true;
+  }
+
+  return {configure,getContext,setContext,resetTest,cloneRealToTest,render,previewApply,applyToReal,mount};
+});
