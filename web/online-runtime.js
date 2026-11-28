@@ -43,20 +43,45 @@
   }
 
   function scheduleRefresh(){ clearTimeout(refreshTimer); refreshTimer=setTimeout(()=>void refreshAuthoritativeState(),150); }
-  function stopRealtime(){ if(retryTimer){clearTimeout(retryTimer);retryTimer=null;} if(channel){ try{supabaseClient.removeChannel(channel);}catch(_){} channel=null; } }
+  /* Temps réel. Correctif 28/11/2026 : quand le canal échouait, chaque nouvel essai fermait l'ancien canal,
+     dont l'événement « CLOSED » relançait un essai… une boucle toutes les 2 à 3 s, jour et nuit, avec un
+     rechargement complet des données à chaque tour (≈ 25 000 rechargements par jour depuis un seul ordinateur).
+     Désormais : on ignore les événements d'un canal déjà remplacé, et les essais s'espacent (2 s, 4 s… jusqu'à 5 min). */
+  let retryDelay=2000;
+  function stopRealtime(){ if(retryTimer){clearTimeout(retryTimer);retryTimer=null;} const old=channel; channel=null; if(old){ try{supabaseClient.removeChannel(old);}catch(_){} } }
   function startRealtime(){
     stopRealtime();
     if(!currentTeacher || !navigator.onLine) return;
-    channel=supabaseClient.channel('presence-live-'+currentTeacher.id);
-    for(const table of TABLES) channel=channel.on('postgres_changes',{event:'*',schema:'public',table},scheduleRefresh);
-    channel.subscribe(status=>{
-      if(status==='SUBSCRIBED'){ if(typeof setSyncStatus==='function') setSyncStatus('Temps réel actif','success'); return; }
+    let ch=supabaseClient.channel('presence-live-'+currentTeacher.id);
+    for(const table of TABLES) ch=ch.on('postgres_changes',{event:'*',schema:'public',table},scheduleRefresh);
+    channel=ch;
+    ch.subscribe(status=>{
+      if(ch!==channel) return;                       // canal remplacé ou fermé par nous : on ne relance rien
+      if(status==='SUBSCRIBED'){ retryDelay=2000; if(typeof setSyncStatus==='function') setSyncStatus('Temps réel actif','success'); return; }
       if(['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status)){
         if(typeof setSyncStatus==='function') setSyncStatus('Reconnexion temps réel…','warning');
-        clearTimeout(retryTimer); retryTimer=setTimeout(async()=>{ if(await refreshAuthoritativeState()) startRealtime(); },2000);
+        const wait=retryDelay; retryDelay=Math.min(retryDelay*2,300000);
+        clearTimeout(retryTimer); retryTimer=setTimeout(async()=>{ if(ch!==channel) return; if(await refreshAuthoritativeState()) startRealtime(); },wait);
       }
     });
   }
+
+  /* Les droits d'administration (fonction admin-teacher, « capabilities ») ne changent pas d'un rafraîchissement
+     à l'autre : demandés une fois par compte connecté, au lieu d'à chaque rechargement des données. */
+  (function cacheCapabilities(){
+    const fx=typeof supabaseClient!=='undefined'?supabaseClient?.functions:null;if(!fx||fx.__capCache)return;
+    const invoke=fx.invoke.bind(fx);let cache=null;
+    fx.invoke=async function(name,opts){
+      const action=opts?.body?.action;const who=typeof currentTeacher!=='undefined'?currentTeacher?.id:null;
+      if(name==='admin-teacher'&&action==='capabilities'&&who){
+        if(cache&&cache.who===who)return cache.res;
+        const res=await invoke(name,opts);if(!res.error)cache={who,res};return res;
+      }
+      if(name==='admin-teacher'&&action&&action!=='capabilities')cache=null;   // un changement de rôle se voit tout de suite
+      return invoke(name,opts);
+    };
+    fx.__capCache=true;
+  })();
 
   function stateFor(date){
     const rows=(data?.sessions||[]).filter(s=>s.date===date);
